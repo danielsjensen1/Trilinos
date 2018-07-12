@@ -130,7 +130,7 @@ int OrientationQuad(const bool verbose) {
   *outStream << "\n";
 
   int errorFlag = 0;
-  const ValueType tol = tolerence();
+  const ValueType tol = tolerance();
 
   struct Fun {
     ValueType

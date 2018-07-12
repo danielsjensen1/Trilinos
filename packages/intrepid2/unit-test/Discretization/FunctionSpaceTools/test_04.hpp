@@ -117,7 +117,7 @@ namespace Intrepid2 {
       typedef FunctionSpaceTools<DeviceSpaceType> fst;
       typedef Kokkos::DynRankView<ValueType,DeviceSpaceType> DynRankView;
 
-      const auto tol = tolerence();
+      const auto tol = tolerance();
 
       int errorFlag = 0;
 

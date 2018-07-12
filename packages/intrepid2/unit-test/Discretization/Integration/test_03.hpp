@@ -126,7 +126,7 @@ namespace Intrepid2 {
       typedef CubatureDirectLineGauss<DeviceSpaceType,pointValueType,weightValueType> CubatureLineType;
       typedef CubatureTensor<DeviceSpaceType,pointValueType,weightValueType> CubatureTensorType;
 
-      const auto tol = 10.0 * tolerence();
+      const auto tol = 10.0 * tolerance();
 
       int errorFlag = 0;
       

@@ -538,7 +538,7 @@ namespace Intrepid2 {
           // set initial guess
           for (ordinal_type j=0;j<D;++j) xold(j) = 0;
        
-          const double tol = tolerence();
+          const double tol = tolerance();
           for (ordinal_type iter=0;iter<Parameters::MaxNewton;++iter) {
             // xtmp := F(xold);
             implBasisType::template Serial<OPERATOR_VALUE>::getValues(vals, xold);

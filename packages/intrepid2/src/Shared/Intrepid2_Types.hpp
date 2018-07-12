@@ -99,7 +99,7 @@ namespace Intrepid2 {
   }
 
   KOKKOS_FORCEINLINE_FUNCTION
-  double tolerence() {
+  double tolerance() {
     return 100.0*epsilon();
   }
 
@@ -138,14 +138,14 @@ namespace Intrepid2 {
     /// Maximum order of derivatives allowed in intrepid.
     static constexpr ordinal_type MaxDerivative        = 10;     
 
-    // we do not want to use hard-wired epsilon, threshold and tolerence. 
+    // we do not want to use hard-wired epsilon, threshold and tolerance. 
     // static constexpr double Epsilon   = 1.0e-16; 
     // static constexpr double Threshold = 1.0e-15;
-    // static constexpr double Tolerence = 1.0e-14;
+    // static constexpr double Tolerance = 1.0e-14;
   };
   //  const double Parameters::Epsilon   =       epsilon<double>();   // Platform-dependent machine epsilon.
   //  const double Parameters::Threshold =  10.0*epsilon<double>();   // Tolerance for various cell inclusion tests
-  //  const double Parameters::Tolerence = 100.0*epsilon<double>();   // General purpose tolerance in, e.g., internal Newton's method to invert ref to phys maps
+  //  const double Parameters::Tolerance = 100.0*epsilon<double>();   // General purpose tolerance in, e.g., internal Newton's method to invert ref to phys maps
 
   // ===================================================================
   // Enum classes

@@ -123,7 +123,7 @@ int HCURL_TRI_In_FEM_Test01(const bool verbose) {
 
 #define ConstructWithLabelScalar(obj, ...) obj(#obj, __VA_ARGS__)
 
-  const scalar_type tol = tolerence();
+  const scalar_type tol = tolerance();
   int errorFlag = 0;
   constexpr ordinal_type dim =2;
 

@@ -123,7 +123,7 @@ int HDIV_TET_In_FEM_Test01(const bool verbose) {
 
 #define ConstructWithLabelScalar(obj, ...) obj(#obj, __VA_ARGS__)
 
-  const scalar_type tol = tolerence();
+  const scalar_type tol = tolerance();
   int errorFlag = 0;
 
   // for virtual function, value and point types are declared in the class

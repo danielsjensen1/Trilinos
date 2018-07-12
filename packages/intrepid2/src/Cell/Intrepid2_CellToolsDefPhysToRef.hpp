@@ -129,7 +129,7 @@ namespace Intrepid2 {
     const auto numPoints = physPoints.extent(1);
 
     typedef RealSpaceTools<SpT> rst;
-    const auto tol = tolerence();
+    const auto tol = tolerance();
 
     using result_layout = typename DeduceLayout< decltype(refPoints) >::result_layout;
     using device_type = typename decltype(refPoints)::device_type;

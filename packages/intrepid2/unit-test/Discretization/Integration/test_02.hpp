@@ -123,7 +123,7 @@ namespace Intrepid2 {
       typedef ValueType weightValueType;
       typedef CubatureDirectLineGauss<DeviceSpaceType,pointValueType,weightValueType> CubatureLineType;
 
-      const auto tol = 10.0 * tolerence();
+      const auto tol = 10.0 * tolerance();
 
       int errorFlag = 0;
 

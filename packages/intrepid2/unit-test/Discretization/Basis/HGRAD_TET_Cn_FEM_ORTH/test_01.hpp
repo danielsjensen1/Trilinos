@@ -116,7 +116,7 @@ int HGRAD_TET_Cn_FEM_ORTH_Test01(const bool verbose) {
   typedef Kokkos::DynRankView<ValueType, DeviceSpaceType> DynRankView;
 #define ConstructWithLabel(obj, ...) obj(#obj, __VA_ARGS__)
 
-  const ValueType tol = tolerence();
+  const ValueType tol = tolerance();
   int errorFlag = 0;
 
   // for virtual function, value and point types are declared in the class

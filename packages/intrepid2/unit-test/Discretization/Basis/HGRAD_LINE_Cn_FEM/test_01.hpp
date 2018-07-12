@@ -123,7 +123,7 @@ namespace Test {
 #define ConstructWithLabelScalar(obj, ...) obj(#obj, __VA_ARGS__)
 
       constexpr int spaceDim = 1;
-      const scalar_type tol = tolerence();
+      const scalar_type tol = tolerance();
       int errorFlag = 0;
 
       // for virtual function, value and point types are declared in the class

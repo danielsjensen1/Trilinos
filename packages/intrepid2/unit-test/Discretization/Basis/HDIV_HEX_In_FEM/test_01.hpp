@@ -119,7 +119,7 @@ int HDIV_HEX_In_FEM_Test01(const bool verbose) {
 
 #define ConstructWithLabelScalar(obj, ...) obj(#obj, __VA_ARGS__)
 
-  const scalar_type tol = tolerence();
+  const scalar_type tol = tolerance();
   int errorFlag = 0;
 
   typedef Basis_HDIV_HEX_In_FEM<DeviceSpaceType,OutValueType,PointValueType> HexBasisType;

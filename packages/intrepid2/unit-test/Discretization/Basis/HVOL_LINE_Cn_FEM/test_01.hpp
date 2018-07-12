@@ -120,7 +120,7 @@ namespace Intrepid2 {
 
 #define ConstructWithLabelScalar(obj, ...) obj(#obj, __VA_ARGS__)
 
-      const scalar_type tol = tolerence();
+      const scalar_type tol = tolerance();
       int errorFlag = 0;
 
       typedef Basis_HVOL_LINE_Cn_FEM<DeviceSpaceType,OutValueType,PointValueType> LineBasisType;
