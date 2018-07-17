@@ -85,10 +85,10 @@ ADD_SUBDIRECTORY(HVOL_HEX_Cn_FEM)
 ADD_SUBDIRECTORY(HVOL_TRI_Cn_FEM)
 ADD_SUBDIRECTORY(HVOL_TET_Cn_FEM)
 
-## HGrad composite element
+## HGrad composite element and compatible wedge (for surface elements)
 
 ADD_SUBDIRECTORY(HGRAD_TET_COMP12_FEM)
-
+ADD_SUBDIRECTORY(HGRAD_WEDGE_COMP12_FEM)
 
 ## DeRham complex
 
