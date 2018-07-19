@@ -1816,13 +1816,13 @@ void deep_copy
          dst.extent(6) == src.extent(6) &&
          dst.extent(7) == src.extent(7) &&
          dst.stride_0() == src.stride_0() &&
-         (dst.stride_1() == src.stride_1() || src.rank() <= 1) &&
-         (dst.stride_2() == src.stride_2() || src.rank() <= 2) &&
-         (dst.stride_3() == src.stride_3() || src.rank() <= 3) &&
-         (dst.stride_4() == src.stride_4() || src.rank() <= 4) &&
-         (dst.stride_5() == src.stride_5() || src.rank() <= 5) &&
-         (dst.stride_6() == src.stride_6() || src.rank() <= 6) &&
-         (dst.stride_7() == src.stride_7() || src.rank() <= 7)
+         dst.stride_1() == src.stride_1() &&
+         dst.stride_2() == src.stride_2() &&
+         dst.stride_3() == src.stride_3() &&
+         dst.stride_4() == src.stride_4() &&
+         dst.stride_5() == src.stride_5() &&
+         dst.stride_6() == src.stride_6() &&
+         dst.stride_7() == src.stride_7()
          ) {
 
       const size_t nbytes = sizeof(typename dst_type::value_type) * dst.span();
