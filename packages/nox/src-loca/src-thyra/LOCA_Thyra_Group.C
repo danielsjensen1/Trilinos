@@ -1,52 +1,11 @@
-// $Id$
-// $Source$
-
-//@HEADER
-// ************************************************************************
-//
+// @HEADER
+// *****************************************************************************
 //            LOCA: Library of Continuation Algorithms Package
-//                 Copyright (2005) Sandia Corporation
 //
-// Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
-// license for use of this work by or on behalf of the U.S. Government.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Roger Pawlowski (rppawlo@sandia.gov) or
-// Eric Phipps (etphipp@sandia.gov), Sandia National Laboratories.
-// ************************************************************************
-//  CVS Information
-//  $Source$
-//  $Author$
-//  $Date$
-//  $Revision$
-// ************************************************************************
-//@HEADER
+// Copyright 2001-2005 NTESS and the LOCA contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
 
 #include "LOCA_Thyra_Group.H"              // class definition
 #include "NOX_Thyra_MultiVector.H"
@@ -71,15 +30,15 @@ LOCA::Thyra::Group::Group(
   NOX::Thyra::Group(initial_guess, model, weight_vector),
   LOCA::Abstract::Group(global_data),
   globalData(global_data),
-  params(p),
   param_index(1,p_index),
   saveDataStrategy(),
   implement_dfdp(impl_dfdp),
   weight_vec_(weight_vector),
   paramsInSeparatePVecs(false),
-  set_transient_in_args_(set_transient_in_args)
+  set_transient_in_args_(set_transient_in_args),
+  params(p)
 {
-  updateThyraParamView();
+  updateThyraParam();
   updateThyraXDot();
 }
 
@@ -94,15 +53,15 @@ LOCA::Thyra::Group::Group(
   NOX::Thyra::Group(nox_group, NOX::DeepCopy),
   LOCA::Abstract::Group(global_data),
   globalData(global_data),
-  params(p),
   param_index(p_index),
   saveDataStrategy(),
   implement_dfdp(impl_dfdp),
   weight_vec_(weight_vector),
   paramsInSeparatePVecs(true),
-  set_transient_in_args_(set_transient_in_args)
+  set_transient_in_args_(set_transient_in_args),
+  params(p)
 {
-  updateThyraParamView();
+  updateThyraParam();
   updateThyraXDot();
 }
 
@@ -111,14 +70,14 @@ LOCA::Thyra::Group::Group(const LOCA::Thyra::Group& source,
   NOX::Thyra::Group(source, type),
   LOCA::Abstract::Group(source, type),
   globalData(source.globalData),
-  params(source.params),
   param_index(source.param_index),
   saveDataStrategy(source.saveDataStrategy),
   implement_dfdp(source.implement_dfdp),
   paramsInSeparatePVecs(source.paramsInSeparatePVecs),
-  set_transient_in_args_(source.set_transient_in_args_)
+  set_transient_in_args_(source.set_transient_in_args_),
+  params(source.params)
 {
-  updateThyraParamView();
+  updateThyraParam();
   updateThyraXDot();
 }
 
@@ -138,7 +97,7 @@ LOCA::Thyra::Group::operator=(const LOCA::Thyra::Group& source)
     implement_dfdp = source.implement_dfdp;
     paramsInSeparatePVecs = source.paramsInSeparatePVecs;
     set_transient_in_args_ = source.set_transient_in_args_;
-    updateThyraParamView();
+    updateThyraParam();
   }
   return *this;
 }
@@ -215,7 +174,7 @@ LOCA::Thyra::Group::computeJacobian()
     if (in_args.supports(::Thyra::ModelEvaluatorBase::IN_ARG_beta))
       in_args.set_beta(1.0);
   }
-  for (size_t i=0; i < param_index.size(); ++i)
+  for (size_t i=0; i < param_index.size(); ++i) 
     in_args.set_p(param_index[i], param_thyra_vec[i]);
   out_args.set_W_op(lop_);
 
@@ -240,7 +199,7 @@ LOCA::Thyra::Group::setParams(const LOCA::ParameterVector& p)
 {
   this->resetIsValidFlags();
   params = p;
-  updateThyraParamView();
+  updateThyraParam();
 }
 
 void
@@ -248,7 +207,7 @@ LOCA::Thyra::Group::setParam(int paramID, double val)
 {
   this->resetIsValidFlags();
   params.setValue(paramID, val);
-  updateThyraParamView();
+  updateThyraParam();
 }
 
 void
@@ -256,7 +215,7 @@ LOCA::Thyra::Group::setParam(std::string paramID, double val)
 {
   this->resetIsValidFlags();
   params.setValue(paramID, val);
-  updateThyraParamView();
+  updateThyraParam();
 }
 
 const LOCA::ParameterVector&
@@ -521,25 +480,35 @@ LOCA::Thyra::Group::setSaveDataStrategy(
 }
 
 void
-LOCA::Thyra::Group::updateThyraParamView()
+LOCA::Thyra::Group::updateThyraParam()
 {
   if (paramsInSeparatePVecs) {
+    // Create thyra vector to store LOCA parameters
     param_thyra_vec.resize(param_index.size());
     for (size_t i=0; i < param_thyra_vec.size(); ++i) {
-      const RTOpPack::ConstSubVectorView<double> pv(Teuchos::ArrayRCP<const double>(params.getDoubleArrayPointer()+i,0,1,false));
-      Teuchos::RCP<const ::Thyra::VectorSpaceBase<double> > ps =
-        model_->get_p_space(param_index[i]);
-      param_thyra_vec[i] = ::Thyra::createMemberView(ps,pv);
+      Teuchos::RCP<const ::Thyra::VectorSpaceBase<double> > ps = model_->get_p_space(param_index[i]);
+      if(ps->dim() != 1)
+        globalData->locaErrorCheck->throwError(
+           "LOCA::Thyra::Group::updateThyraParam()",
+           "Thyra parameter space should have dimension 1. Each scalar parameter is stored in a separate vector");
+      const Teuchos::RCP< ::Thyra::VectorBase<double> > param_thyra_vec_setup = ::Thyra::createMember(ps);
+      ::Thyra::put_scalar(params.getValue(i), param_thyra_vec_setup.ptr());
+      param_thyra_vec[i] = param_thyra_vec_setup;
     }
   }
   else {
-    // Create thyra vector to store parameters that is a view of LOCA
-    // parameter vector
+    // Create thyra vector to store LOCA parameter
     param_thyra_vec.resize(1);
-    const RTOpPack::ConstSubVectorView<double> pv(Teuchos::ArrayRCP<const double>(params.getDoubleArrayPointer(),0,params.length(),false));
-    Teuchos::RCP<const ::Thyra::VectorSpaceBase<double> > ps =
-      model_->get_p_space(param_index[0]);
-    param_thyra_vec[0] = ::Thyra::createMemberView(ps,pv);
+    Teuchos::RCP<const ::Thyra::VectorSpaceBase<double> > ps = model_->get_p_space(param_index[0]);
+    if(ps->dim() != params.length())
+        globalData->locaErrorCheck->throwError(
+           "LOCA::Thyra::Group::updateThyraParam()",
+           "Thyra parameter space should have the same dimension of the LOCA parameter vector");
+    const Teuchos::RCP< ::Thyra::VectorBase<double> > param_thyra_vec_setup = ::Thyra::createMember(ps);
+    for(int i=0; i<ps->dim(); ++i) {
+      ::Thyra::set_ele(i, *(params.getDoubleArrayPointer()+i), param_thyra_vec_setup.ptr());
+    }
+    param_thyra_vec[0] = param_thyra_vec_setup;
   }
 }
 

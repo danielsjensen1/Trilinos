@@ -12,8 +12,8 @@
 #include <Akri_Element.hpp>
 #include <Akri_SubElement.hpp>
 #include <Akri_DiagWriter.hpp>
-#include <Akri_Element.hpp>
 #include <Akri_MeshHelpers.hpp>
+#include <Akri_RefinementManager.hpp>
 #include <stk_balance/balanceUtils.hpp>
 #include <stk_mesh/base/BulkData.hpp>
 #include <stk_mesh/base/Entity.hpp>
@@ -25,13 +25,12 @@
 #include <utility>
 #include <vector>
 
-#include <Akri_RefinementInterface.hpp>
 
 namespace krino {
 namespace rebalance_utils {
 namespace impl {
 
-void set_family_tree_destinations(stk::balance::DecompositionChangeList & decomp_changes, const RefinementInterface& refinement, const stk::mesh::BulkData & bulk_data)
+void set_family_tree_destinations(stk::balance::DecompositionChangeList & decomp_changes, const RefinementManager& refinement, const stk::mesh::BulkData & bulk_data)
 {
   // At this point decomp_changes has all adaptivity parent + child elements that are moving
   // and their dest procs match.
@@ -97,7 +96,7 @@ void set_family_tree_destinations(stk::balance::DecompositionChangeList & decomp
 
 void
 update_rebalance_for_adaptivity(stk::balance::DecompositionChangeList & decomp_changes,
-    const RefinementInterface& refinement,
+    const RefinementManager& refinement,
     const stk::mesh::BulkData & bulk_data)
 {
   auto all_changes = decomp_changes.get_all_partition_changes();
@@ -208,24 +207,24 @@ accumulate_cdfem_child_weights_to_parents(const stk::mesh::BulkData & bulk_data,
       stk::mesh::selectField(element_weights_field) & cdmesh.get_child_part() &
       bulk_data.mesh_meta_data().locally_owned_part();
   const auto & buckets = bulk_data.get_buckets(stk::topology::ELEMENT_RANK, selector);
+  auto weightData = element_weights_field.data<stk::mesh::ReadWrite>();
   for(auto && b_ptr : buckets)
   {
-    double * weight_data = stk::mesh::field_data(element_weights_field, *b_ptr);
-    const int b_size = b_ptr->size();
-    for(int i=0; i < b_size; ++i)
+    auto weight_data = weightData.bucket_values(*b_ptr);
+    for(stk::mesh::EntityIdx i : b_ptr->entities())
     {
       const auto child_elem = (*b_ptr)[i];
       const auto parent = cdmesh.get_parent_element(child_elem);
-      double * parent_weight_data = stk::mesh::field_data(element_weights_field, parent);
-      STK_ThrowRequire(parent_weight_data);
-      *parent_weight_data += weight_data[i];
-      weight_data[i] = 0.;
+      STK_ThrowRequire(has_field_data(element_weights_field, parent));
+      auto parent_weight_data = weightData.entity_values(parent);
+      parent_weight_data() += weight_data(i);
+      weight_data(i) = 0.;
     }
   }
 }
 
 void accumulate_adaptivity_child_weights_to_parents(
-    const stk::mesh::BulkData & bulk_data, const RefinementInterface& refinement, stk::mesh::Field<double> & element_weights_field)
+    const stk::mesh::BulkData & /*bulk_data*/, const RefinementManager& refinement, stk::mesh::Field<double> & element_weights_field)
 {
   refinement.update_element_rebalance_weights_incorporating_parallel_owner_constraints(element_weights_field);
 }

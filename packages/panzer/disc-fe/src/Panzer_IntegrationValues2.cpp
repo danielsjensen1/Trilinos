@@ -1,43 +1,11 @@
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //           Panzer: A partial differential equation assembly
 //       engine for strongly coupled complex multiphysics systems
-//                 Copyright (2011) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Roger P. Pawlowski (rppawlo@sandia.gov) and
-// Eric C. Cyr (eccyr@sandia.gov)
-// ***********************************************************************
+// Copyright 2011 NTESS and the Panzer contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #include "Panzer_IntegrationValues2.hpp"
@@ -66,25 +34,25 @@ namespace panzer {
 
 namespace {
 
-Teuchos::RCP<Intrepid2::Cubature<PHX::Device::execution_space,double,double>>
+Teuchos::RCP<Intrepid2::Cubature<PHX::Device,double,double>>
 getIntrepidCubature(const panzer::IntegrationRule & ir)
 {
   typedef panzer::IntegrationDescriptor ID;
-  Teuchos::RCP<Intrepid2::Cubature<PHX::Device::execution_space,double,double> > ic;
+  Teuchos::RCP<Intrepid2::Cubature<PHX::Device,double,double> > ic;
 
   Intrepid2::DefaultCubatureFactory cubature_factory;
 
   if(ir.getType() == ID::CV_SIDE){
-    ic = Teuchos::rcp(new Intrepid2::CubatureControlVolumeSide<PHX::Device::execution_space,double,double>(*ir.topology));
+    ic = Teuchos::rcp(new Intrepid2::CubatureControlVolumeSide<PHX::Device,double,double>(*ir.topology));
   } else if(ir.getType() == ID::CV_VOLUME){
-    ic = Teuchos::rcp(new Intrepid2::CubatureControlVolume<PHX::Device::execution_space,double,double>(*ir.topology));
+    ic = Teuchos::rcp(new Intrepid2::CubatureControlVolume<PHX::Device,double,double>(*ir.topology));
   } else if(ir.getType() == ID::CV_BOUNDARY){
     TEUCHOS_ASSERT(ir.isSide());
-    ic = Teuchos::rcp(new Intrepid2::CubatureControlVolumeBoundary<PHX::Device::execution_space,double,double>(*ir.topology,ir.getSide()));
+    ic = Teuchos::rcp(new Intrepid2::CubatureControlVolumeBoundary<PHX::Device,double,double>(*ir.topology,ir.getSide()));
   } else if(ir.getType() == ID::VOLUME){
-    ic = cubature_factory.create<PHX::Device::execution_space,double,double>(*(ir.topology),ir.getOrder());
+    ic = cubature_factory.create<PHX::Device,double,double>(*(ir.topology),ir.getOrder());
   } else if(ir.getType() == ID::SIDE){
-    ic = cubature_factory.create<PHX::Device::execution_space,double,double>(*(ir.side_topology),ir.getOrder());
+    ic = cubature_factory.create<PHX::Device,double,double>(*(ir.side_topology),ir.getOrder());
   } else if(ir.getType() == ID::SURFACE){
     // closed surface integrals don't exist in intrepid.
   } else {
@@ -117,7 +85,7 @@ correctVirtualNormals(PHX::MDField<Scalar,Cell,IP,Dim> normals,
 
     // Find the face and local face ids for the given virtual cell
     // Note that virtual cells only connect to the owned cells through a single face
-    int face, virtual_lidx;
+    int face = -1, virtual_lidx = -1;
     for (int local_face_id=0; local_face_id<faces_per_cell; local_face_id++){
       // Faces that exist have positive indexes
       face = face_connectivity.subcellForCell(virtual_cell, local_face_id);
@@ -158,7 +126,7 @@ correctVirtualNormals(PHX::MDField<Scalar,Cell,IP,Dim> normals,
       }
     }
   });
-  PHX::Device::execution_space().fence();
+  PHX::ExecutionSpace().fence();
 }
 
 
@@ -185,7 +153,7 @@ correctVirtualRotationMatrices(PHX::MDField<Scalar,Cell,IP,Dim,Dim> rotation_mat
 
     // Find the face and local face ids for the given virtual cell
     // Note that virtual cells only connect to the owned cells through a single face
-    int face, virtual_lidx;
+    int face = -1, virtual_lidx = -1;
     for (int local_face_id=0; local_face_id<faces_per_cell; local_face_id++){
       // Faces that exist have positive indexes
       face = face_connectivity.subcellForCell(virtual_cell, local_face_id);
@@ -210,7 +178,7 @@ correctVirtualRotationMatrices(PHX::MDField<Scalar,Cell,IP,Dim,Dim> rotation_mat
       }
     }
   });
-  PHX::Device::execution_space().fence();
+  PHX::ExecutionSpace().fence();
 }
 
 template<typename Scalar>
@@ -230,7 +198,7 @@ applyBasePermutation(PHX::MDField<Scalar,IP> field,
       if (ip != permutations(0,ip))
         field(ip) = scratch(permutations(0,ip));
   });
-  PHX::Device::execution_space().fence();
+  PHX::ExecutionSpace().fence();
 }
 
 template<typename Scalar>
@@ -252,7 +220,7 @@ applyBasePermutation(PHX::MDField<Scalar,IP,Dim> field,
         for(int dim=0; dim<num_dim; ++dim)
         field(ip,dim) = scratch(permutations(0,ip),dim);
   });
-  PHX::Device::execution_space().fence();
+  PHX::ExecutionSpace().fence();
 }
 
 template<typename Scalar>
@@ -273,7 +241,7 @@ applyPermutation(PHX::MDField<Scalar,Cell,IP> field,
       if (ip != permutations(cell,ip))
         field(cell,ip) = scratch(cell,permutations(cell,ip));
   });
-  PHX::Device::execution_space().fence();
+  PHX::ExecutionSpace().fence();
 }
 
 template<typename Scalar>
@@ -296,7 +264,7 @@ applyPermutation(PHX::MDField<Scalar,Cell,IP,Dim> field,
         for(int dim=0; dim<num_dim; ++dim)
           field(cell,ip,dim) = scratch(cell,permutations(cell,ip),dim);
   });
-  PHX::Device::execution_space().fence();
+  PHX::ExecutionSpace().fence();
 }
 
 template<typename Scalar>
@@ -321,7 +289,7 @@ applyPermutation(PHX::MDField<Scalar,Cell,IP,Dim,Dim> field,
           for(int dim2=0; dim2<num_dim2; ++dim2)
             field(cell,ip,dim,dim2) = scratch(cell,permutations(cell,ip),dim,dim2);
   });
-  PHX::Device::execution_space().fence();
+  PHX::ExecutionSpace().fence();
 }
 
 
@@ -375,7 +343,7 @@ generatePermutations(const int num_cells,
       taken(cell,i_min) = 1;
     }
   });
-  PHX::Device::execution_space().fence();
+  PHX::ExecutionSpace().fence();
 
   return permutation;
 
@@ -568,7 +536,7 @@ generateSurfacePermutations(const int num_cells,
         }
       }
     });
-    PHX::Device::execution_space().fence();
+    PHX::ExecutionSpace().fence();
   }
 
 #undef PANZER_DOT
@@ -786,11 +754,11 @@ setup(const Teuchos::RCP<const panzer::IntegrationRule>& ir,
     TEUCHOS_ASSERT(static_cast<int>(cell_node_coordinates.extent(1)) == num_nodes);
 
     auto aux = af.template buildStaticArray<Scalar,Cell,NODE,Dim>("node_coordinates",num_cells_,num_nodes, num_space_dim);
-    Kokkos::MDRangePolicy<PHX::Device,Kokkos::Rank<3>> policy({0,0,0},{num_evaluate_cells_,num_nodes,num_space_dim});
+    Kokkos::MDRangePolicy<PHX::ExecutionSpace,Kokkos::Rank<3>> policy({0,0,0},{num_evaluate_cells_,num_nodes,num_space_dim});
     Kokkos::parallel_for(policy,KOKKOS_LAMBDA(const int & cell, const int & point, const int & dim){
       aux(cell,point,dim) = cell_node_coordinates(cell,point,dim);
     });
-    PHX::Device::execution_space().fence();
+    PHX::ExecutionSpace().fence();
     node_coordinates = aux;
   }
 
@@ -803,13 +771,13 @@ getUniformCubaturePointsRef(const bool cache,
                             const bool force,
                             const bool apply_permutation) const
 {
-  if(cub_points_evaluated_ and not force)
+  if(cub_points_evaluated_ and (apply_permutation == requires_permutation_) and not force)
     return cub_points;
 
   // Only log time if values computed (i.e. don't log if values are already cached)
   PANZER_FUNC_TIME_MONITOR_DIFF("panzer::integrationValues2::getUniformCubaturePointsRef()",get_uniform_cub_pts_ref);
 
-  Intrepid2::CellTools<PHX::Device::execution_space> cell_tools;
+  Intrepid2::CellTools<PHX::Device> cell_tools;
   MDFieldArrayFactory af(prefix_,true);
 
   int num_space_dim = int_rule->topology->getDimension();
@@ -840,12 +808,12 @@ getUniformCubaturePointsRef(const bool cache,
     cell_tools.mapToReferenceSubcell(aux.get_view(), s_cub_points.get_view(), num_space_dim-1, int_rule->getSide(), *(int_rule->topology));
   }
 
-  PHX::Device::execution_space().fence();
+  PHX::ExecutionSpace().fence();
 
   if(apply_permutation and requires_permutation_)
     applyBasePermutation(aux, permutations_);
 
-  if(cache){
+  if(cache and (apply_permutation == requires_permutation_)){
     cub_points = aux;
     cub_points_evaluated_ = true;
   }
@@ -861,7 +829,7 @@ getUniformSideCubaturePointsRef(const bool cache,
                                 const bool force,
                                 const bool apply_permutation) const
 {
-  if(side_cub_points_evaluated_ and not force)
+  if(side_cub_points_evaluated_ and (apply_permutation == requires_permutation_) and not force)
     return side_cub_points;
 
   // Only log time if values computed (i.e. don't log if values are already cached)
@@ -893,12 +861,12 @@ getUniformSideCubaturePointsRef(const bool cache,
 
   intrepid_cubature->getCubature(aux.get_view(), weights.get_view());
 
-  PHX::Device::execution_space().fence();
+  PHX::ExecutionSpace().fence();
 
   if(apply_permutation and requires_permutation_)
     applyBasePermutation(aux, permutations_);
 
-  if(cache){
+  if(cache and (apply_permutation == requires_permutation_)){
     side_cub_points = aux;
     side_cub_points_evaluated_ = true;
   }
@@ -913,7 +881,7 @@ getUniformCubatureWeightsRef(const bool cache,
                              const bool force,
                              const bool apply_permutation) const
 {
-  if(cub_weights_evaluated_ and not force)
+  if(cub_weights_evaluated_ and (apply_permutation == requires_permutation_) and not force)
     return cub_weights;
 
   // Only log time if values computed (i.e. don't log if values are already cached)
@@ -942,12 +910,12 @@ getUniformCubatureWeightsRef(const bool cache,
 
   intrepid_cubature->getCubature(points.get_view(), aux.get_view());
 
-  PHX::Device::execution_space().fence();
+  PHX::ExecutionSpace().fence();
 
   if(apply_permutation and requires_permutation_)
     applyBasePermutation(aux, permutations_);
 
-  if(cache){
+  if(cache and (apply_permutation == requires_permutation_)){
     cub_weights = aux;
     cub_weights_evaluated_ = true;
   }
@@ -976,26 +944,51 @@ getJacobian(const bool cache,
   // Only log time if values computed (i.e. don't log if values are already cached)
   PANZER_FUNC_TIME_MONITOR_DIFF("panzer::integrationValues2::getJacobian()",get_jacobian);
 
-  Intrepid2::CellTools<PHX::Device::execution_space> cell_tools;
+  Intrepid2::CellTools<PHX::Device> cell_tools;
   MDFieldArrayFactory af(prefix_,true);
 
   int num_space_dim = int_rule->topology->getDimension();
   int num_ip = int_rule->num_points;
 
-  // Don't forget that since we are not caching this, we have to make sure the managed view remains alive while we use the non-const wrapper
-  auto const_ref_coord = getCubaturePointsRef(false,force);
-  auto ref_coord = PHX::getNonConstDynRankViewFromConstMDField(const_ref_coord);
-  auto node_coord = PHX::getNonConstDynRankViewFromConstMDField(getNodeCoordinates());
+  using ID=panzer::IntegrationDescriptor;
+  const bool is_cv = (int_rule->getType() == ID::CV_VOLUME) or (int_rule->getType() == ID::CV_SIDE) or (int_rule->getType() == ID::CV_BOUNDARY);
+  const bool is_surface = int_rule->getType() == ID::SURFACE;
+
   auto aux = af.template buildStaticArray<Scalar,Cell,IP,Dim,Dim>("jac",num_cells_, num_ip, num_space_dim,num_space_dim);
 
-  const auto cell_range = std::make_pair(0,num_evaluate_cells_);
-  auto s_ref_coord  = Kokkos::subview(ref_coord,     cell_range,Kokkos::ALL(),Kokkos::ALL());
-  auto s_node_coord = Kokkos::subview(node_coord,    cell_range,Kokkos::ALL(),Kokkos::ALL());
-  auto s_jac        = Kokkos::subview(aux.get_view(),cell_range,Kokkos::ALL(),Kokkos::ALL(),Kokkos::ALL());
+  if(is_cv or is_surface){
 
-  cell_tools.setJacobian(s_jac, s_ref_coord, s_node_coord,*(int_rule->topology));
+    // Don't forget that since we are not caching this, we have to make sure the managed view remains alive while we use the non-const wrapper
+    auto const_ref_coord = getCubaturePointsRef(false,force);
+    auto ref_coord = PHX::getNonConstDynRankViewFromConstMDField(const_ref_coord);
+    auto node_coord = PHX::getNonConstDynRankViewFromConstMDField(getNodeCoordinates());
 
-  PHX::Device::execution_space().fence();
+    const auto cell_range = std::make_pair(0,num_evaluate_cells_);
+    auto s_ref_coord  = Kokkos::subview(ref_coord,     cell_range,Kokkos::ALL(),Kokkos::ALL());
+    auto s_node_coord = Kokkos::subview(node_coord,    cell_range,Kokkos::ALL(),Kokkos::ALL());
+    auto s_jac        = Kokkos::subview(aux.get_view(),cell_range,Kokkos::ALL(),Kokkos::ALL(),Kokkos::ALL());
+
+    cell_tools.setJacobian(s_jac, s_ref_coord, s_node_coord,*(int_rule->topology));
+
+  } else {
+
+    // Don't forget that since we are not caching this, we have to make sure the managed view remains alive while we use the non-const wrapper
+    auto const_ref_coord = getUniformCubaturePointsRef(false,force,false);
+    auto ref_coord = PHX::getNonConstDynRankViewFromConstMDField(const_ref_coord);
+    auto node_coord = PHX::getNonConstDynRankViewFromConstMDField(getNodeCoordinates());
+
+    const auto cell_range = std::make_pair(0,num_evaluate_cells_);
+    auto s_node_coord = Kokkos::subview(node_coord,    cell_range,Kokkos::ALL(),Kokkos::ALL());
+    auto s_jac        = Kokkos::subview(aux.get_view(),cell_range,Kokkos::ALL(),Kokkos::ALL(),Kokkos::ALL());
+
+    cell_tools.setJacobian(s_jac, ref_coord, s_node_coord,*(int_rule->topology));
+
+    if(requires_permutation_)
+      applyPermutation(aux, permutations_);
+
+  }
+
+  PHX::ExecutionSpace().fence();
 
   if(cache){
     jac = aux;
@@ -1017,7 +1010,7 @@ getJacobianInverse(const bool cache,
   // Only log time if values computed (i.e. don't log if values are already cached)
   PANZER_FUNC_TIME_MONITOR_DIFF("panzer::integrationValues2::getJacobianInverse()",get_jacobian_inv);
 
-  Intrepid2::CellTools<PHX::Device::execution_space> cell_tools;
+  Intrepid2::CellTools<PHX::Device> cell_tools;
   MDFieldArrayFactory af(prefix_,true);
 
   const int num_space_dim = int_rule->topology->getDimension();
@@ -1032,7 +1025,7 @@ getJacobianInverse(const bool cache,
 
   cell_tools.setJacobianInv(s_jac_inv, s_jac);
 
-  PHX::Device::execution_space().fence();
+  PHX::ExecutionSpace().fence();
 
   if(cache){
     jac_inv = aux;
@@ -1054,7 +1047,7 @@ getJacobianDeterminant(const bool cache,
   // Only log time if values computed (i.e. don't log if values are already cached)
   PANZER_FUNC_TIME_MONITOR_DIFF("panzer::integrationValues2::getJacobianDeterminant()",get_jacobian_det);
 
-  Intrepid2::CellTools<PHX::Device::execution_space> cell_tools;
+  Intrepid2::CellTools<PHX::Device> cell_tools;
   MDFieldArrayFactory af(prefix_,true);
 
   const int num_ip = int_rule->num_points;
@@ -1068,7 +1061,7 @@ getJacobianDeterminant(const bool cache,
 
   cell_tools.setJacobianDet(s_jac_det, s_jac);
 
-  PHX::Device::execution_space().fence();
+  PHX::ExecutionSpace().fence();
 
   if(cache){
     jac_det = aux;
@@ -1141,7 +1134,7 @@ getWeightedMeasure(const bool cache,
         // Get the face topology from the cell topology
         const shards::CellTopology face_topology(cell_topology.getCellTopologyData(cell_dim-1,side));
 
-        auto ic = cubature_factory.create<PHX::Device::execution_space,double,double>(face_topology,cubature_order);
+        auto ic = cubature_factory.create<PHX::Device,double,double>(face_topology,cubature_order);
 
         side_cub_weights = Kokkos::DynRankView<double,PHX::Device>("side_cub_weights",num_points_on_side);
         auto subcell_cub_points = Kokkos::DynRankView<double,PHX::Device>("subcell_cub_points",num_points_on_side,cell_dim-1);
@@ -1150,10 +1143,10 @@ getWeightedMeasure(const bool cache,
         ic->getCubature(subcell_cub_points, side_cub_weights);
       }
 
-      PHX::Device::execution_space().fence();
+      PHX::ExecutionSpace().fence();
 
       // Iterating over face points
-      Kokkos::MDRangePolicy<PHX::Device::execution_space,Kokkos::Rank<2>> policy({0,0},{num_evaluate_cells_,num_points_on_side});
+      Kokkos::MDRangePolicy<PHX::ExecutionSpace,Kokkos::Rank<2>> policy({0,0},{num_evaluate_cells_,num_points_on_side});
 
       // Calculate measures (quadrature weights in physical space) for this side
       auto side_weighted_measure = Kokkos::DynRankView<Scalar,PHX::Device>("side_weighted_measure",num_evaluate_cells_,num_points_on_side);
@@ -1174,17 +1167,17 @@ getWeightedMeasure(const bool cache,
         auto scratch = af.template buildStaticArray<Scalar,Point>("scratch_for_compute_measure", num_evaluate_cells_*num_points_on_side*num_space_dim*num_space_dim);
 
         if(cell_dim == 2){
-          Intrepid2::FunctionSpaceTools<PHX::Device::execution_space>::
+          Intrepid2::FunctionSpaceTools<PHX::Device>::
             computeEdgeMeasure(side_weighted_measure, side_jacobian, side_cub_weights,
                                side,cell_topology,
                                scratch.get_view());
-          PHX::Device::execution_space().fence();
+          PHX::ExecutionSpace().fence();
         } else if(cell_dim == 3){
-          Intrepid2::FunctionSpaceTools<PHX::Device::execution_space>::
+          Intrepid2::FunctionSpaceTools<PHX::Device>::
             computeFaceMeasure(side_weighted_measure, side_jacobian, side_cub_weights,
                                side,cell_topology,
                                scratch.get_view());
-          PHX::Device::execution_space().fence();
+          PHX::ExecutionSpace().fence();
         }
       }
 
@@ -1193,7 +1186,7 @@ getWeightedMeasure(const bool cache,
       Kokkos::parallel_for("copy surface weighted measure values",policy,KOKKOS_LAMBDA (const int cell,const int point) {
         aux(cell,point_offset + point) = side_weighted_measure(cell,point);
       });
-      PHX::Device::execution_space().fence();
+      PHX::ExecutionSpace().fence();
     }
 
   } else {
@@ -1205,14 +1198,14 @@ getWeightedMeasure(const bool cache,
     if (!int_rule->isSide()) {
 
       auto s_jac_det = Kokkos::subview(getJacobianDeterminant(false,force).get_view(),cell_range,Kokkos::ALL());
-      Intrepid2::FunctionSpaceTools<PHX::Device::execution_space>::
+      Intrepid2::FunctionSpaceTools<PHX::Device>::
       computeCellMeasure(s_weighted_measure, s_jac_det, cubature_weights.get_view());
 
     } else if(int_rule->spatial_dimension==3) {
 
       auto s_jac = Kokkos::subview(getJacobian(false,force).get_view(),cell_range,Kokkos::ALL(),Kokkos::ALL(),Kokkos::ALL());
       auto scratch = af.template buildStaticArray<Scalar,Point>("scratch_for_compute_measure", num_evaluate_cells_*num_ip*num_space_dim*num_space_dim);
-      Intrepid2::FunctionSpaceTools<PHX::Device::execution_space>::
+      Intrepid2::FunctionSpaceTools<PHX::Device>::
       computeFaceMeasure(s_weighted_measure, s_jac, cubature_weights.get_view(),
                          int_rule->side, *int_rule->topology,
                          scratch.get_view());
@@ -1221,7 +1214,7 @@ getWeightedMeasure(const bool cache,
 
       auto s_jac = Kokkos::subview(getJacobian(false,force).get_view(),cell_range,Kokkos::ALL(),Kokkos::ALL(),Kokkos::ALL());
       auto scratch = af.template buildStaticArray<Scalar,Point>("scratch_for_compute_measure", num_evaluate_cells_*num_ip*num_space_dim*num_space_dim);
-      Intrepid2::FunctionSpaceTools<PHX::Device::execution_space>::
+      Intrepid2::FunctionSpaceTools<PHX::Device>::
       computeEdgeMeasure(s_weighted_measure, s_jac, cubature_weights.get_view(),
                          int_rule->side,*int_rule->topology,
                          scratch.get_view());
@@ -1232,7 +1225,7 @@ getWeightedMeasure(const bool cache,
 
   }
 
-  PHX::Device::execution_space().fence();
+  PHX::ExecutionSpace().fence();
 
   // Apply permutations if necessary
   if(requires_permutation_)
@@ -1279,7 +1272,7 @@ getWeightedNormals(const bool cache,
 
   intrepid_cubature->getCubature(s_cub_points,s_weighted_normals,s_node_coord);
 
-  PHX::Device::execution_space().fence();
+  PHX::ExecutionSpace().fence();
 
   // Apply permutations if necessary
   if(requires_permutation_)
@@ -1314,7 +1307,7 @@ getSurfaceNormals(const bool cache,
   TEUCHOS_TEST_FOR_EXCEPT_MSG(int_rule->getType() != IntegrationDescriptor::SURFACE,
                               "IntegrationValues2::getSurfaceNormals : Can only build for surface integrators.");
 
-  Intrepid2::CellTools<PHX::Device::execution_space> cell_tools;
+  Intrepid2::CellTools<PHX::Device> cell_tools;
   MDFieldArrayFactory af(prefix_,true);
 
   const shards::CellTopology & cell_topology = *(int_rule->topology);
@@ -1353,7 +1346,7 @@ getSurfaceNormals(const bool cache,
     } else {
 
       // Iterating over side points
-      Kokkos::MDRangePolicy<PHX::Device::execution_space,Kokkos::Rank<2>> policy({0,0},{num_evaluate_cells_,num_points_on_face});
+      Kokkos::MDRangePolicy<PHX::ExecutionSpace,Kokkos::Rank<2>> policy({0,0},{num_evaluate_cells_,num_points_on_face});
 
       auto side_jacobian = Kokkos::DynRankView<Scalar,PHX::Device>("side_jac",num_evaluate_cells_,num_points_on_face,cell_dim,cell_dim);
       Kokkos::parallel_for("Copy jacobian to side jacobian",policy,KOKKOS_LAMBDA (const int cell,const int point) {
@@ -1380,14 +1373,14 @@ getSurfaceNormals(const bool cache,
       });
     }
 
-    PHX::Device::execution_space().fence();
+    PHX::ExecutionSpace().fence();
 
-    Kokkos::MDRangePolicy<PHX::Device::execution_space,Kokkos::Rank<2>> policy({0,0},{num_evaluate_cells_,num_points_on_face});
+    Kokkos::MDRangePolicy<PHX::ExecutionSpace,Kokkos::Rank<2>> policy({0,0},{num_evaluate_cells_,num_points_on_face});
     Kokkos::parallel_for("copy surface normals", policy,KOKKOS_LAMBDA (const int cell,const int point) {
       for(int dim=0;dim<cell_dim;++dim)
         aux(cell,point_offset + point,dim) = side_normals(cell,point,dim);
     });
-    PHX::Device::execution_space().fence();
+    PHX::ExecutionSpace().fence();
   }
 
   // Need to correct the virtual cells
@@ -1432,7 +1425,7 @@ getSurfaceRotationMatrices(const bool cache,
   auto normals = getSurfaceNormals(false,force).get_static_view();
   auto aux = af.template buildStaticArray<Scalar,Cell,IP,Dim,Dim>("surface_rotation_matrices",num_cells_, num_ip, 3, 3);
 
-  Kokkos::MDRangePolicy<PHX::Device::execution_space,Kokkos::Rank<2>> policy({0,0},{num_evaluate_cells_,num_ip});
+  Kokkos::MDRangePolicy<PHX::ExecutionSpace,Kokkos::Rank<2>> policy({0,0},{num_evaluate_cells_,num_ip});
   Kokkos::parallel_for("create surface rotation matrices",policy,KOKKOS_LAMBDA (const int cell,const int point) {
     Scalar normal[3];
     for(int i=0;i<3;i++)
@@ -1450,7 +1443,7 @@ getSurfaceRotationMatrices(const bool cache,
       aux(cell,point,2,dim) = binormal[dim];
     }
   });
-  PHX::Device::execution_space().fence();
+  PHX::ExecutionSpace().fence();
 
   // Need to correct the virtual cells
   {
@@ -1492,7 +1485,7 @@ getCovarientMatrix(const bool cache,
   auto jacobian = getJacobian(false,force).get_static_view();
   auto aux = af.template buildStaticArray<Scalar,Cell,IP,Dim,Dim>("covarient",num_cells_, num_ip, num_space_dim,num_space_dim);
 
-  Kokkos::MDRangePolicy<PHX::Device,Kokkos::Rank<2>> policy({0,0},{num_evaluate_cells_,num_ip});
+  Kokkos::MDRangePolicy<PHX::ExecutionSpace,Kokkos::Rank<2>> policy({0,0},{num_evaluate_cells_,num_ip});
   Kokkos::parallel_for("evalaute covarient metric tensor",policy,KOKKOS_LAMBDA (const int cell,const int ip) {
     // g^{ij} = \frac{\parital x_i}{\partial \chi_\alpha}\frac{\parital x_j}{\partial \chi_\alpha}
     for (int i = 0; i < num_space_dim; ++i) {
@@ -1504,7 +1497,7 @@ getCovarientMatrix(const bool cache,
       }
     }
   });
-  PHX::Device::execution_space().fence();
+  PHX::ExecutionSpace().fence();
 
   if(cache){
     covarient = aux;
@@ -1538,8 +1531,8 @@ getContravarientMatrix(const bool cache,
   auto s_contravarient = Kokkos::subview(aux.get_view(), cell_range,Kokkos::ALL,Kokkos::ALL,Kokkos::ALL);
   auto s_covarient = Kokkos::subview(cov.get_view(), cell_range,Kokkos::ALL,Kokkos::ALL,Kokkos::ALL);
 
-  Intrepid2::RealSpaceTools<PHX::Device::execution_space>::inverse(s_contravarient, s_covarient);
-  PHX::Device::execution_space().fence();
+  Intrepid2::RealSpaceTools<PHX::Device>::inverse(s_contravarient, s_covarient);
+  PHX::ExecutionSpace().fence();
 
   if(cache){
     contravarient = aux;
@@ -1570,7 +1563,7 @@ getNormContravarientMatrix(const bool cache,
   auto aux = af.template buildStaticArray<Scalar,Cell,IP>("norm_contravarient",num_cells_, num_ip);
 
   // norm of g_ij
-  Kokkos::MDRangePolicy<PHX::Device,Kokkos::Rank<2>> policy({0,0},{num_evaluate_cells_,num_ip});
+  Kokkos::MDRangePolicy<PHX::ExecutionSpace,Kokkos::Rank<2>> policy({0,0},{num_evaluate_cells_,num_ip});
   Kokkos::parallel_for("evaluate norm_contravarient",policy,KOKKOS_LAMBDA (const int cell,const int ip) {
     aux(cell,ip) = 0.0;
     for (int i = 0; i < num_space_dim; ++i) {
@@ -1580,7 +1573,7 @@ getNormContravarientMatrix(const bool cache,
     }
     aux(cell,ip) = Kokkos::sqrt(aux(cell,ip));
   });
-  PHX::Device::execution_space().fence();
+  PHX::ExecutionSpace().fence();
 
   if(cache){
     norm_contravarient = aux;
@@ -1611,6 +1604,7 @@ getCubaturePoints(const bool cache,
 
   using ID=panzer::IntegrationDescriptor;
   const bool is_cv = (int_rule->getType() == ID::CV_VOLUME) or (int_rule->getType() == ID::CV_SIDE) or (int_rule->getType() == ID::CV_BOUNDARY);
+  const bool is_surface = int_rule->getType() == ID::SURFACE;
 
   auto node_coord = PHX::getNonConstDynRankViewFromConstMDField(getNodeCoordinates());
 
@@ -1632,7 +1626,7 @@ getCubaturePoints(const bool cache,
       intrepid_cubature->getCubature(s_cub_points,scratch.get_view(),s_node_coord);
     }
 
-  } else {
+  } else if(is_surface){
 
     // Don't forget that since we are not caching this, we have to make sure the managed view remains alive while we use the non-const wrapper
     auto const_ref_coord = getCubaturePointsRef(false,force);
@@ -1643,12 +1637,28 @@ getCubaturePoints(const bool cache,
     auto s_coord      = Kokkos::subview(aux.get_view(),cell_range,Kokkos::ALL(),Kokkos::ALL());
     auto s_node_coord = Kokkos::subview(node_coord,    cell_range,Kokkos::ALL(),Kokkos::ALL());
 
-    Intrepid2::CellTools<PHX::Device::execution_space> cell_tools;
+    Intrepid2::CellTools<PHX::Device> cell_tools;
     cell_tools.mapToPhysicalFrame(s_coord, s_ref_coord, s_node_coord, *(int_rule->topology));
+
+  } else {
+
+    // Don't forget that since we are not caching this, we have to make sure the managed view remains alive while we use the non-const wrapper
+    auto const_ref_coord = getUniformCubaturePointsRef(false,force,false);
+    auto ref_coord = PHX::getNonConstDynRankViewFromConstMDField(const_ref_coord);
+
+    const auto cell_range = std::make_pair(0,num_evaluate_cells_);
+    auto s_coord      = Kokkos::subview(aux.get_view(),cell_range,Kokkos::ALL(),Kokkos::ALL());
+    auto s_node_coord = Kokkos::subview(node_coord,    cell_range,Kokkos::ALL(),Kokkos::ALL());
+
+    Intrepid2::CellTools<PHX::Device> cell_tools;
+    cell_tools.mapToPhysicalFrame(s_coord, ref_coord, s_node_coord, *(int_rule->topology));
+
+    if(requires_permutation_)
+      applyPermutation(aux, permutations_);
 
   }
 
-  PHX::Device::execution_space().fence();
+  PHX::ExecutionSpace().fence();
 
   if(cache){
     ip_coordinates = aux;
@@ -1665,7 +1675,7 @@ IntegrationValues2<Scalar>::
 getCubaturePointsRef(const bool cache,
                      const bool force) const
 {
-  if(ref_ip_coordinates_evaluated_)
+  if(ref_ip_coordinates_evaluated_ and not force)
     return ref_ip_coordinates;
 
   // Only log time if values computed (i.e. don't log if values are already cached)
@@ -1680,7 +1690,7 @@ getCubaturePointsRef(const bool cache,
 
   MDFieldArrayFactory af(prefix_,true);
 
-  Intrepid2::CellTools<PHX::Device::execution_space> cell_tools;
+  Intrepid2::CellTools<PHX::Device> cell_tools;
 
   auto aux = af.template buildStaticArray<Scalar,Cell,IP,Dim>("ref_ip_coordinates",num_cells_, num_ip, num_space_dim);
 
@@ -1711,7 +1721,7 @@ getCubaturePointsRef(const bool cache,
     const int order = int_rule->getOrder();
 
     // Scratch space for storing the points for each side of the cell
-    auto side_cub_points = af.template buildStaticArray<Scalar,IP,Dim>("side_cub_points",num_points_on_face,cell_dim);
+    auto side_cub_points2 = af.template buildStaticArray<Scalar,IP,Dim>("side_cub_points",num_points_on_face,cell_dim);
 
     Intrepid2::DefaultCubatureFactory cubature_factory;
 
@@ -1723,16 +1733,16 @@ getCubaturePointsRef(const bool cache,
       // Get the cubature for the side
       if(cell_dim==1){
         // In 1D the surface point is either on the left side of the cell, or the right side
-        auto side_cub_points_host = Kokkos::create_mirror_view(side_cub_points.get_view());
+        auto side_cub_points_host = Kokkos::create_mirror_view(side_cub_points2.get_view());
         side_cub_points_host(0,0) = (side==0)? -1. : 1.;
-        Kokkos::deep_copy(side_cub_points.get_view(),side_cub_points_host);
+        Kokkos::deep_copy(side_cub_points2.get_view(),side_cub_points_host);
       } else {
 
         // Get the face topology from the cell topology
         const shards::CellTopology face_topology(cell_topology.getCellTopologyData(subcell_dim,side));
 
         // Create a cubature for the face of the cell
-        auto ic = cubature_factory.create<PHX::Device::execution_space,double,double>(face_topology,order);
+        auto ic = cubature_factory.create<PHX::Device,double,double>(face_topology,order);
         auto tmp_side_cub_weights = Kokkos::DynRankView<double,PHX::Device>("tmp_side_cub_weights",num_points_on_face);
         auto tmp_side_cub_points = Kokkos::DynRankView<double,PHX::Device>("tmp_side_cub_points",num_points_on_face,subcell_dim);
 
@@ -1740,17 +1750,17 @@ getCubaturePointsRef(const bool cache,
         ic->getCubature(tmp_side_cub_points, tmp_side_cub_weights);
 
         // Convert from reference face points to reference cell points
-        cell_tools.mapToReferenceSubcell(side_cub_points.get_view(), tmp_side_cub_points, subcell_dim, side, cell_topology);
+        cell_tools.mapToReferenceSubcell(side_cub_points2.get_view(), tmp_side_cub_points, subcell_dim, side, cell_topology);
       }
 
-      PHX::Device::execution_space().fence();
+      PHX::ExecutionSpace().fence();
 
       // Copy from the side allocation to the surface allocation
-      Kokkos::MDRangePolicy<PHX::Device::execution_space,Kokkos::Rank<3>> policy({0,0,0},{num_evaluate_cells_,num_points_on_face, num_space_dim});
+      Kokkos::MDRangePolicy<PHX::ExecutionSpace,Kokkos::Rank<3>> policy({0,0,0},{num_evaluate_cells_,num_points_on_face, num_space_dim});
       Kokkos::parallel_for("copy values",policy,KOKKOS_LAMBDA (const int cell,const int point, const int dim) {
-        aux(cell,point_offset + point,dim) = side_cub_points(point,dim);
+        aux(cell,point_offset + point,dim) = side_cub_points2(point,dim);
       });
-      PHX::Device::execution_space().fence();
+      PHX::ExecutionSpace().fence();
     }
 
   } else {
@@ -1760,15 +1770,15 @@ getCubaturePointsRef(const bool cache,
                                 "ERROR: 0-D quadrature rule infrastructure does not exist!!! Will not be able to do "
                                  << "non-natural integration rules.");
 
-    auto cub_points = getUniformCubaturePointsRef(false,force,false);
+    auto cub_points2 = getUniformCubaturePointsRef(false,force,false);
 
-    Kokkos::MDRangePolicy<PHX::Device,Kokkos::Rank<3>> policy({0,0,0},{num_evaluate_cells_,num_ip,num_space_dim});
+    Kokkos::MDRangePolicy<PHX::ExecutionSpace,Kokkos::Rank<3>> policy({0,0,0},{num_evaluate_cells_,num_ip,num_space_dim});
     Kokkos::parallel_for(policy, KOKKOS_LAMBDA(const int & cell, const int & ip, const int & dim){
-      aux(cell,ip,dim) = cub_points(ip,dim);
+      aux(cell,ip,dim) = cub_points2(ip,dim);
     });
   }
 
-  PHX::Device::execution_space().fence();
+  PHX::ExecutionSpace().fence();
 
   if(requires_permutation_)
     applyPermutation(aux, permutations_);
@@ -1793,43 +1803,44 @@ evaluateEverything()
   const bool is_cv = (int_rule->getType() == ID::CV_VOLUME) or (int_rule->getType() == ID::CV_SIDE) or (int_rule->getType() == ID::CV_BOUNDARY);
   const bool is_side = int_rule->isSide();
 
+  // This will force all values to be re-evaluated
   resetArrays();
 
   // Base cubature stuff
   if(is_cv){
-    getCubaturePoints(true,true);
-    getCubaturePointsRef(true,true);
+    getCubaturePoints(true);
+    getCubaturePointsRef(true);
   } else {
     if(not is_surface){
-      getUniformCubaturePointsRef(true,true);
-      getUniformCubatureWeightsRef(true,true);
+      getUniformCubaturePointsRef(true,true,requires_permutation_);
+      getUniformCubatureWeightsRef(true,true,requires_permutation_);
       if(is_side)
-        getUniformSideCubaturePointsRef(true,true);
+        getUniformSideCubaturePointsRef(true,true,requires_permutation_);
     }
-    getCubaturePointsRef(true,true);
-    getCubaturePoints(true,true);
+    getCubaturePointsRef(true);
+    getCubaturePoints(true);
   }
 
   // Measure stuff
-  getJacobian(true,true);
-  getJacobianDeterminant(true,true);
-  getJacobianInverse(true,true);
+  getJacobian(true);
+  getJacobianDeterminant(true);
+  getJacobianInverse(true);
   if(int_rule->cv_type == "side")
-    getWeightedNormals(true,true);
+    getWeightedNormals(true);
   else
-    getWeightedMeasure(true,true);
+    getWeightedMeasure(true);
 
   // Surface stuff
   if(is_surface){
-    getSurfaceNormals(true,true);
-    getSurfaceRotationMatrices(true,true);
+    getSurfaceNormals(true);
+    getSurfaceRotationMatrices(true);
   }
 
   // Stabilization stuff
   if(not (is_surface or is_cv)){
-    getContravarientMatrix(true,true);
-    getCovarientMatrix(true,true);
-    getNormContravarientMatrix(true,true);
+    getContravarientMatrix(true);
+    getCovarientMatrix(true);
+    getNormContravarientMatrix(true);
   }
 }
 

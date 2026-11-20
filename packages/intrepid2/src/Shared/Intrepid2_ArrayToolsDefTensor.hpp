@@ -1,43 +1,10 @@
 // @HEADER
-// ************************************************************************
+// *****************************************************************************
+//                           Intrepid2 Package
 //
-//                           Intrepid Package
-//                 Copyright (2007) Sandia Corporation
-//
-// Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
-// license for use of this work by or on behalf of the U.S. Government.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Kyungjoo Kim  (kyukim@sandia.gov), or
-//                    Mauro Perego  (mperego@sandia.gov)
-//
-// ************************************************************************
+// Copyright 2007 NTESS and the Intrepid2 contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 /** \file   Intrepid2_ArrayToolsDefTensor.hpp
@@ -88,8 +55,6 @@ namespace Intrepid2 {
                              _output.extent(1), 
                              iter );
 
-        auto result = ( _hasField ? Kokkos::subview(_output, cell, field, point, Kokkos::ALL()) :
-                                    Kokkos::subview(_output, cell,        point, Kokkos::ALL()));
 
         auto left   = Kokkos::subview(_leftInput, cell, point, Kokkos::ALL());
 
@@ -101,11 +66,14 @@ namespace Intrepid2 {
 
         // branch prediction is possible
         if (_isCrossProd3D) {
+          auto result = ( _hasField ? Kokkos::subview(_output, cell, field, point, Kokkos::ALL()) :
+                                      Kokkos::subview(_output, cell,        point, Kokkos::ALL()));
           result(0) = left(1)*right(2) - left(2)*right(1);
           result(1) = left(2)*right(0) - left(0)*right(2);
           result(2) = left(0)*right(1) - left(1)*right(0);
         } else {
-          result(0) = left(0)*right(1) - left(1)*right(0);
+          typename OutputViewType::reference_type result = _hasField ? _output(cell, field, point) : _output(cell, point);
+          result = left(0)*right(1) - left(1)*right(0);
         }
       }
     };

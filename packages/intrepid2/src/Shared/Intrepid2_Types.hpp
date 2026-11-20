@@ -1,43 +1,10 @@
 // @HEADER
-// ************************************************************************
-//
+// *****************************************************************************
 //                           Intrepid2 Package
-//                 Copyright (2007) Sandia Corporation
 //
-// Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
-// license for use of this work by or on behalf of the U.S. Government.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Kyungjoo Kim  (kyukim@sandia.gov), or
-//                    Mauro Perego  (mperego@sandia.gov)
-//
-// ************************************************************************
+// Copyright 2007 NTESS and the Intrepid2 contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 /** \file Intrepid2_Types.hpp
@@ -89,7 +56,7 @@ namespace Intrepid2 {
 
     flt_32 s;
     s.f32 = 1;
-    s.f32++;
+    s.i32++;
     return (s.i32 < 0 ? 1 - s.f32 : s.f32 - 1);
   }
 
@@ -98,14 +65,26 @@ namespace Intrepid2 {
     return epsilon<double>();
   }
 
+  template<typename ValueType>
   KOKKOS_FORCEINLINE_FUNCTION
-  double tolerence() {
-    return 100.0*epsilon();
+  ValueType tolerance() {
+    return 100.0*epsilon<ValueType>();
+  }
+
+  KOKKOS_FORCEINLINE_FUNCTION
+  double tolerance() {
+    return tolerance<double>();
+  }
+
+  template<typename ValueType>
+  KOKKOS_FORCEINLINE_FUNCTION
+  ValueType threshold() {
+    return 10.0*epsilon<ValueType>();
   }
 
   KOKKOS_FORCEINLINE_FUNCTION
   double threshold() {
-    return 10.0*epsilon();
+    return threshold<double>();
   }
 
   /// Define constants
@@ -120,11 +99,11 @@ namespace Intrepid2 {
     /// The maximum number of points to eval in serial mode.
     static constexpr ordinal_type MaxNumPtsPerBasisEval= 1;
     /// The maximum reconstruction order.
-    static constexpr ordinal_type MaxOrder             = 8;
+    static constexpr ordinal_type MaxOrder             = 20;
     /// The maximum number of integration points for direct cubature rules.
     static constexpr ordinal_type MaxIntegrationPoints = 4893;    
     /// The maximum degree of the polynomial that can be integrated exactly by a direct edge rule.
-    static constexpr ordinal_type MaxCubatureDegreeEdge= 20;      
+    static constexpr ordinal_type MaxCubatureDegreeEdge= 61;
     /// The maximum degree of the polynomial that can be integrated exactly by a direct triangle rule.
     static constexpr ordinal_type MaxCubatureDegreeTri = 50;      
     /// The maximum degree of the polynomial that can be integrated exactly by a direct tetrahedron rule.
@@ -141,8 +120,10 @@ namespace Intrepid2 {
     static constexpr ordinal_type MaxTensorComponents  = 7;
     /// Maximum number of components that a VectorData object will store -- 66 corresponds to OPERATOR_D10 on an H^1 hexahedral basis.  For now, we limit to 7, matching MaxTensorComponents.
     static constexpr ordinal_type MaxVectorComponents  = 7;
+    /// Maximum number of families that a VectorData object will store -- 3 corresponds to H(div) and H(curl) on a hexahedron.
+    static constexpr ordinal_type MaxBasisFamilies = 3;
 
-    // we do not want to use hard-wired epsilon, threshold and tolerence. 
+    // we do not want to use hard-wired epsilon, threshold and tolerance. 
     // static constexpr double Epsilon   = 1.0e-16; 
     // static constexpr double Threshold = 1.0e-15;
     // static constexpr double Tolerence = 1.0e-14;

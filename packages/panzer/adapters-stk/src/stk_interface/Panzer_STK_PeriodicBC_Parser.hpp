@@ -1,43 +1,11 @@
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //           Panzer: A partial differential equation assembly
 //       engine for strongly coupled complex multiphysics systems
-//                 Copyright (2011) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Roger P. Pawlowski (rppawlo@sandia.gov) and
-// Eric C. Cyr (eccyr@sandia.gov)
-// ***********************************************************************
+// Copyright 2011 NTESS and the Panzer contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #ifndef __Panzer_STK_PeriodicBC_Parser_hpp__
@@ -60,6 +28,7 @@ namespace panzer_stk {
   */
 class PeriodicBC_Parser : Teuchos::ParameterListAcceptor {
 public:
+   /// \brief Construct with no parameter list set; call setParameterList() to parse the periodic boundary conditions.
    PeriodicBC_Parser();
 
    /** Return a vector containing all the periodic boundary conditions.
@@ -73,12 +42,16 @@ public:
 
    // parameterlistacceptor required functions
    /////////////////////////////////////
+   /// \brief Sets the parameter list, validates it, and parses it into the matcher vectors returned by getMatchers().
    void setParameterList(const Teuchos::RCP<Teuchos::ParameterList> & pl);
 
+   /// \brief Returns the currently stored parameter list, retaining ownership.
    Teuchos::RCP<Teuchos::ParameterList>  getNonconstParameterList();
 
+   /// \brief Releases and returns the currently stored parameter list.
    Teuchos::RCP<Teuchos::ParameterList>  unsetParameterList();
 
+   /// \brief Returns the valid parameters for a single periodic boundary condition entry (see the count overload below for multiple entries).
    Teuchos::RCP<const Teuchos::ParameterList> getValidParameters() const;
 
    // specific to this class
@@ -102,16 +75,25 @@ public:
    /** Return the string for the type of matcher: coord, edge, face, or all
      *    and the dimension: 2 or 3
      *
+     * \param[in] buildStr the periodic BC specification string to parse (see buildMatcher()).
      * */
-   std::pair<std::string, unsigned int> getMatcherTypeAndDim(const std::string & buildStr) const; 
+   std::pair<std::string, unsigned int> getMatcherTypeAndDim(const std::string & buildStr) const;
 
    /** Replace "all" with specific type in matcher string:
      *    coord, edge, or face
+     *
+     * \param[in] buildStr the periodic BC specification string containing "all" as its type.
+     * \param[in] matcherType the concrete type ("coord", "edge", or "face") to substitute for "all".
      * */
-   std::string replaceMatcherType(const std::string & buildStr, const std::string & matcherType) const; 
+   std::string replaceMatcherType(const std::string & buildStr, const std::string & matcherType) const;
 
    /** Parse a string describing the periodic boundary condition
      * Format: "MatchCondition bndry1;bndry2"
+     *
+     * \param[in] buildStr the periodic BC specification string to tokenize.
+     * \param[out] matcher set to the match condition token.
+     * \param[out] bndry1 set to the first boundary (sideset) name token.
+     * \param[out] bndry2 set to the second boundary (sideset) name token.
      */
    void buildMatcher_Tokenize(const std::string & buildStr,
                              std::string & matcher,
@@ -120,6 +102,12 @@ public:
 
    /** Parse a string describing the periodic boundary condition
      * Format: "MatchCondition paramA, paramB, paraC, ... : bndry1;bndry2"
+     *
+     * \param[in] buildStr the periodic BC specification string to tokenize.
+     * \param[out] matcher set to the match condition token.
+     * \param[out] params set to the parsed parameter tokens (paramA, paramB, ...).
+     * \param[out] bndry1 set to the first boundary (sideset) name token.
+     * \param[out] bndry2 set to the second boundary (sideset) name token.
      *
      * \returns False if no parameters are found (defaults to old style of
      *          periodic BC input)

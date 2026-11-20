@@ -1,43 +1,11 @@
-//@HEADER
-// ************************************************************************
-//
+// @HEADER
+// *****************************************************************************
 //                 Belos: Block Linear Solvers Package
-//                  Copyright 2004 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
-//
-// ************************************************************************
-//@HEADER
+// Copyright 2004-2016 NTESS and the Belos contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
 //
 //  This test uses the MVOPTester.hpp functions to test the Belos adapters
 //  to Kokkos.
@@ -84,10 +52,10 @@ int main(int argc, char *argv[])
   }
     typedef double ScalarType;
     typedef float ScalarType2;
-    typedef Belos::MultiVec<ScalarType> KMV;
-    typedef Belos::Operator<ScalarType> KOP; 
-    typedef Belos::MultiVec<ScalarType2> KMV2;
-    typedef Belos::Operator<ScalarType2> KOP2; 
+    typedef Belos::MultiVec<ScalarType, Teuchos::SerialDenseMatrix<int, ScalarType>> KMV;
+    typedef Belos::Operator<ScalarType, Teuchos::SerialDenseMatrix<int, ScalarType>> KOP;
+    typedef Belos::MultiVec<ScalarType2, Teuchos::SerialDenseMatrix<int, ScalarType2>> KMV2;
+    typedef Belos::Operator<ScalarType2, Teuchos::SerialDenseMatrix<int, ScalarType2>> KOP2;
     typedef Kokkos::DefaultExecutionSpace     EXSP;
 
     // Create an output manager to handle the I/O from the solver (defaults to std::cout).
@@ -346,7 +314,7 @@ bool TestKokkosMultiVecOneScalar(const Teuchos::RCP<OutputManager<ScalarType> > 
   int numCols2 = 4;
   int numRows2 = 60;
   Kokkos::View<ScalarType**, Kokkos::LayoutLeft> myView("View2MV", numRows2, numCols2);
-  typename Kokkos::View<ScalarType**>::HostMirror myView_h("View2MV_host", numRows2, numCols2);
+  typename Kokkos::View<ScalarType**>::host_mirror_type myView_h("View2MV_host", numRows2, numCols2);
   Kokkos::deep_copy(myView, 42);
   Belos::KokkosMultiVec<ScalarType> myVec4( myView );
   if ( myVec4.GetNumberVecs() != (int)myView.extent(1) ) {
@@ -414,7 +382,7 @@ bool TestKokkosMultiVecTwoScalar(const Teuchos::RCP<OutputManager<ScalarType1> >
   int numCols = 4;
   int numRows = 60;
   Kokkos::View<ScalarType1**, Kokkos::LayoutLeft, Kokkos::DefaultExecutionSpace> myViewST1("View2MV1", numRows, numCols);
-  typename Kokkos::View<ScalarType2**>::HostMirror myViewST2_h("View2MV1_host", numRows, numCols);
+  typename Kokkos::View<ScalarType2**>::host_mirror_type myViewST2_h("View2MV1_host", numRows, numCols);
   Kokkos::deep_copy(myViewST1, 42);
   Belos::KokkosMultiVec<ScalarType2> myVecST2A( myViewST1 );
   if ( myVecST2A.GetNumberVecs() != (int)myViewST1.extent(1) ) {
@@ -439,7 +407,7 @@ bool TestKokkosMultiVecTwoScalar(const Teuchos::RCP<OutputManager<ScalarType1> >
   }
   // Test view to multivec ST2 to ST1:
   Kokkos::View<ScalarType2**, Kokkos::LayoutLeft, Kokkos::DefaultExecutionSpace> myViewST2("View2MV2", numRows, numCols);
-  typename Kokkos::View<ScalarType1**>::HostMirror myViewST1_h("View2MV2_host", numRows, numCols);
+  typename Kokkos::View<ScalarType1**>::host_mirror_type myViewST1_h("View2MV2_host", numRows, numCols);
   Kokkos::deep_copy(myViewST2, 56);
   Belos::KokkosMultiVec<ScalarType1> myVecST1A( myViewST2 );
   if ( myVecST1A.GetNumberVecs() != (int)myViewST2.extent(1) ) {

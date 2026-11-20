@@ -13,11 +13,14 @@
 #include <Akri_Faceted_Surface.hpp>
 #include <Akri_Transformation.hpp>
 
+#include <memory>
+
 #include <stk_math/StkVector.hpp>
 #include <Akri_String_Function_Expression.hpp>
+#include <Akri_ML_Models.hpp>
 
 namespace stk { namespace mesh { class BulkData; } }
-namespace stk { namespace mesh { class Entity; } }
+namespace stk { namespace mesh { struct Entity; } }
 namespace stk { namespace mesh { class MetaData; } }
 namespace stk { namespace mesh { class Selector; } }
 
@@ -25,32 +28,36 @@ namespace krino {
 
 class Cylinder: public SurfaceThatDoesntTakeAdvantageOfNarrowBandAndThereforeHasCorrectSign {
 public:
-  Cylinder(const double e1[3],  // first endpoint of axis
-           const double e2[3],  // second endpoint of axis
-           const double r,      // radius of cylinder
-           const int sign);
+  Cylinder(const stk::math::Vector3d endPt1,  // first endpoint of axis
+           const stk::math::Vector3d endPt2,  // second endpoint of axis
+           const double radius,
+           const int sign=1);
 
   virtual ~Cylinder() {}
- 
+
   virtual Surface_Type type() const override { return CYLINDER; }
   virtual size_t storage_size() const override { return sizeof(Cylinder); }
-  
+
   virtual void prepare_to_compute(const double time, const BoundingBox & point_bbox, const double truncation_length) override;
   virtual double point_signed_distance(const stk::math::Vector3d &x) const override;
+  virtual bool can_approximate_closest_point_normal() const override { return true; }
+  virtual stk::math::Vector3d closest_point_normal(const stk::math::Vector3d &x) const override;
   void insert_into(BoundingBox & bbox) const override { bbox.accommodate(myBoundingBox); }
   bool does_intersect(const BoundingBox & bbox) const override { return bbox.intersects(myBoundingBox); }
+  virtual bool has_edges() const override { return true; }
 
 private:
   void set_axis_and_bounding_box();
-  int dist_sign;
-  double radius;
-  double length;
 
-  // two end points
-  stk::math::Vector3d p1, p2;
+  stk::math::Vector3d myEndPt1;
+  stk::math::Vector3d myEndPt2;
+  double myRadius;
+  int myDistSign;
+
+  double myLength;
 
   // unit vector in direction of axis.
-  stk::math::Vector3d xi;
+  stk::math::Vector3d myAxis;
   BoundingBox myBoundingBox;
 };
 
@@ -64,11 +71,14 @@ public:
 
   virtual Surface_Type type() const override { return SPHERE; }
   virtual size_t storage_size() const override { return sizeof(Sphere); }
-  
+
   virtual void prepare_to_compute(const double time, const BoundingBox & point_bbox, const double truncation_length) override;
   virtual double point_signed_distance(const stk::math::Vector3d &x) const override;
+  virtual bool can_approximate_closest_point_normal() const override { return true; }
+  virtual stk::math::Vector3d closest_point_normal(const stk::math::Vector3d &x) const override;
   void insert_into(BoundingBox & bbox) const override;
   bool does_intersect(const BoundingBox & bbox) const override;
+  std::string output() const override;
 
 private:
   int myDistSign;
@@ -101,7 +111,42 @@ private:
   stk::math::Vector3d myCenter;
 
   stk::math::Vector3d mySemiAxes;
-  double mySemiAxesNorm;
+  double myCharacteristicRadius;
+  std::unique_ptr<Quaternion> myRotation;
+  BoundingBox myBoundingBox;
+};
+
+class Cuboid: public SurfaceThatDoesntTakeAdvantageOfNarrowBandAndThereforeHasCorrectSign {
+public:
+  Cuboid(const stk::math::Vector3d & center,
+      const stk::math::Vector3d & dimensions,
+      const int sign = 1) : Cuboid(center, dimensions, stk::math::Vector3d::ZERO, sign) {}
+  Cuboid(const stk::math::Vector3d & center,
+    const stk::math::Vector3d & dimensions,
+    const stk::math::Vector3d & rotationVec,
+    const int sign = 1);
+
+  virtual ~Cuboid() {}
+
+  virtual Surface_Type type() const override { return CUBOID; }
+  virtual size_t storage_size() const override { return sizeof(Cuboid); }
+
+  virtual double point_signed_distance(const stk::math::Vector3d &x) const override;
+  virtual void insert_into(BoundingBox & bbox) const override { bbox.accommodate(myBoundingBox); }
+  virtual bool does_intersect(const BoundingBox & bbox) const override { return bbox.intersects(myBoundingBox); }
+  void fill_triangle_intersection_parametric_coordinates(const std::array<stk::math::Vector3d,3> & faceNodes, std::vector<stk::math::Vector3d> & intParamCoords) const override;
+  void fill_tetrahedon_intersection_parametric_coordinates(const std::array<stk::math::Vector3d,4> & tetNodes, std::vector<stk::math::Vector3d> & intParamCoords) const override;
+
+  virtual bool has_corners() const override { return true; }
+  virtual bool has_edges() const override { return true; }
+
+  stk::math::Vector3d vertex_location(const unsigned i) const;
+
+private:
+  void set_bounding_box();
+  int mySign;
+  stk::math::Vector3d myCenter;
+  stk::math::Vector3d myHalfDimensions;
   std::unique_ptr<Quaternion> myRotation;
   BoundingBox myBoundingBox;
 };
@@ -113,8 +158,24 @@ public:
   Plane(const stk::math::Vector3d & normal,
     const double offset,
     const double multiplier);
+  Plane(const stk::math::Vector3d & normal,
+      const stk::math::Vector3d & point,
+      const double multiplier);
+  // Plane placed at a fraction of the extent of the mesh along its normal, which is not known until
+  // the mesh is read: its offset is set later by set_offset_from_extent().
+  static std::shared_ptr<Plane> at_fraction_of_extent(const stk::math::Vector3d & normal,
+      const double fractionOfExtent,
+      const double multiplier);
 
   virtual ~Plane() {}
+
+  const stk::math::Vector3d & normal() const { return myNormal; }
+  bool needs_offset_from_extent() const { return myNeedsOffsetFromExtent; }
+  double fraction_of_extent() const { return myFractionOfExtent; }
+  // Set the offset so the plane is at fraction_of_extent() between minDot and maxDot, the minimum and
+  // maximum of normal().x over the mesh.
+  void set_offset_from_extent(const double minDot, const double maxDot);
+  double offset() const { return myOffset; }
 
   virtual Surface_Type type() const override { return PLANE; }
   virtual size_t storage_size() const override { return sizeof(Plane); }
@@ -128,6 +189,8 @@ private:
 
   stk::math::Vector3d myNormal;       //unit normal to plane
   double myOffset;       //eq of plane is 0 = offset + normal \dot x
+  bool myNeedsOffsetFromExtent{false};
+  double myFractionOfExtent{0.};
 };
 
 class Point: public SurfaceThatDoesntTakeAdvantageOfNarrowBandAndThereforeHasCorrectSign {
@@ -138,7 +201,7 @@ public:
 
   virtual Surface_Type type() const override { return POINT; }
   virtual size_t storage_size() const override { return sizeof(Point); }
-  
+
   virtual double point_signed_distance(const stk::math::Vector3d &x) const override;
   void insert_into(BoundingBox & bbox) const override;
   bool does_intersect(const BoundingBox & bbox) const override;
@@ -155,7 +218,7 @@ public:
 
   virtual Surface_Type type() const override { return RANDOM; }
   virtual size_t storage_size() const override { return sizeof(Random); }
-  virtual void prepare_to_compute(const double time, const BoundingBox & point_bbox, const double truncation_length) override
+  virtual void prepare_to_compute(const double /*time*/, const BoundingBox & /*point_bbox*/, const double truncation_length) override
   {
     if (truncation_length > 0.0) my_amplitude = truncation_length;
   }
@@ -163,6 +226,7 @@ public:
   virtual double point_signed_distance(const stk::math::Vector3d &x) const override;
   void insert_into(BoundingBox & bbox) const override;
   bool does_intersect(const BoundingBox & bbox) const override;
+  unsigned long get_seed() const { return iseed; }
 
 private:
   mutable unsigned long iseed;
@@ -192,6 +256,26 @@ private:
   String_Function_Expression myExpression;
   BoundingBox myBoundingBox;
 };
+
+class Implicit_Neural_Representation: public SurfaceThatDoesntTakeAdvantageOfNarrowBandAndThereforeHasCorrectSign {
+public:
+  Implicit_Neural_Representation(const std::string & modelBaseName);
+
+  virtual ~Implicit_Neural_Representation() {}
+
+  virtual Surface_Type type() const override { return INR; }
+  virtual size_t storage_size() const override { return sizeof(Implicit_Neural_Representation); }
+
+  virtual double point_signed_distance(const stk::math::Vector3d &x) const override;
+
+  virtual bool can_approximate_closest_point_normal() const override { return myModelWithGradient.is_enabled(); }
+  stk::math::Vector3d closest_point_normal(const stk::math::Vector3d &coord) const override;
+
+private:
+  ML_Model myModel;
+  ML_Model_with_Gradient<3> myModelWithGradient;
+};
+
 
 } // namespace krino
 

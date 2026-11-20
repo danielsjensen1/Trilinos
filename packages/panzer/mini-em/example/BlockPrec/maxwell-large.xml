@@ -20,8 +20,7 @@
     </ParameterList>
 
     <ParameterList name="Inline Mesh">
-      <Parameter name="Mesh Dimension" type="int" value="3"/>
-      <!-- Parameter name="Mesh Type" type="string" value="quad"/-->
+      <!-- Parameter name="Mesh Type" type="string" value="hex"/-->
       <Parameter name="Mesh Type" type="string" value="tet"/>
       <Parameter name="CFL" type="double" value="4.0"/>
       <ParameterList name="Mesh Factory Parameter List">
@@ -56,7 +55,6 @@
 
    <ParameterList name="Assembly">
      <Parameter name="Field Order"           type="string" value="blocked: B_face E_edge"/>
-     <Parameter name="Workset Size" type="int" value="2000"/>
    </ParameterList>
 
   <ParameterList name="Physics Blocks">

@@ -1,9 +1,20 @@
+// @HEADER
+// *****************************************************************************
+//           Panzer: A partial differential equation assembly
+//       engine for strongly coupled complex multiphysics systems
+//
+// Copyright 2011 NTESS and the Panzer contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
+
 #ifndef __Panzer_Relations_hpp__
 #define __Panzer_Relations_hpp__
 
 #include <Teuchos_ConfigDefs.hpp>
 #include <Teuchos_UnitTestHarness.hpp>
 #include <Teuchos_RCP.hpp>
+#include "Panzer_NodeType.hpp"
 #include <Teuchos_TimeMonitor.hpp>
 #include <Teuchos_CommHelpers.hpp>
 
@@ -58,7 +69,7 @@ protected:
 
 
 
-  typedef Tpetra::KokkosCompat::KokkosDeviceWrapperNode<PHX::Device> NodeType;
+  typedef panzer::TpetraNodeType NodeType;
   typedef Tpetra::Map<LocalOrdinal, GlobalOrdinal, NodeType> Map;
   typedef Tpetra::CrsGraph<LocalOrdinal, GlobalOrdinal, NodeType> Graph;
   typedef Tpetra::Export<LocalOrdinal, GlobalOrdinal, NodeType> Export;

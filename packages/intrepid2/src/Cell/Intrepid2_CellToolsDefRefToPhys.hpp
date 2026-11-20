@@ -1,43 +1,10 @@
 // @HEADER
-// ************************************************************************
-//
+// *****************************************************************************
 //                           Intrepid2 Package
-//                 Copyright (2007) Sandia Corporation
 //
-// Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
-// license for use of this work by or on behalf of the U.S. Government.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Kyungjoo Kim  (kyukim@sandia.gov), or
-//                    Mauro Perego  (mperego@sandia.gov)
-//
-// ************************************************************************
+// Copyright 2007 NTESS and the Intrepid2 contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 
@@ -172,13 +139,10 @@ namespace Intrepid2 {
                      const RefPointViewType  refPoints,
                      const WorksetType       worksetCell,
                      const HGradBasisPtrType basis ) {
-#ifdef HAVE_INTREPID2_DEBUG
-    CellTools_mapToPhysicalFrameArgs( physPoints, refPoints, worksetCell, basis->getBaseCellTopology() );
-#endif
     constexpr bool are_accessible =
-        Kokkos::Impl::MemorySpaceAccess<MemSpaceType,
+        Kokkos::SpaceAccessibility<MemSpaceType,
         typename decltype(physPoints)::memory_space>::accessible &&
-        Kokkos::Impl::MemorySpaceAccess<MemSpaceType,
+        Kokkos::SpaceAccessibility<MemSpaceType,
         typename decltype(refPoints)::memory_space>::accessible;
 
     static_assert(are_accessible, "CellTools<DeviceType>::mapToPhysicalFrame(..): input/output views' memory spaces are not compatible with DeviceType");
@@ -190,7 +154,7 @@ namespace Intrepid2 {
     const auto refPointRank = refPoints.rank();
     const auto numPoints = (refPointRank == 2 ? refPoints.extent(0) : refPoints.extent(1));
     const auto basisCardinality = basis->getCardinality();
-    auto vcprop = Kokkos::common_view_alloc_prop(physPoints);
+    const auto basisDimRange = Kokkos::pair<ordinal_type,ordinal_type>(0, basis->getDomainDimension());
 
     using valViewType = Kokkos::DynRankView<decltype(basis->getDummyOutputValue()),DeviceType>;
 
@@ -199,20 +163,16 @@ namespace Intrepid2 {
     switch (refPointRank) {
     case 2: {
       // refPoints is (P,D): single set of ref. points is mapped to one or multiple physical cells
-      vals = valViewType(Kokkos::view_alloc("CellTools::mapToPhysicalFrame::vals", vcprop), basisCardinality, numPoints);
-      basis->getValues(vals,
-                       refPoints,
-                       OPERATOR_VALUE);
+      vals = Impl::createMatchingView<valViewType>(physPoints, "CellTools::mapToPhysicalFrame::vals", basisCardinality, numPoints);
+      const auto refPts = Kokkos::subdynrankview(refPoints, Kokkos::ALL(), basisDimRange); //needed for shell topologies
+      basis->getValues(vals, refPts, OPERATOR_VALUE);
       break;
     }
     case 3: {
       // refPoints is (C,P,D): multiple sets of ref. points are mapped to matching number of physical cells.
-      //vals = valViewType("CellTools::mapToPhysicalFrame::vals", numCells, basisCardinality, numPoints);
-      vals = valViewType(Kokkos::view_alloc("CellTools::mapToPhysicalFrame::vals", vcprop), numCells, basisCardinality, numPoints);
-      for (size_type cell=0;cell<numCells;++cell)
-        basis->getValues(Kokkos::subdynrankview( vals,      cell, Kokkos::ALL(), Kokkos::ALL() ),
-                         Kokkos::subdynrankview( refPoints, cell, Kokkos::ALL(), Kokkos::ALL() ),
-                         OPERATOR_VALUE);
+      vals = Impl::createMatchingView<valViewType>(physPoints, "CellTools::mapToPhysicalFrame::vals", numCells, basisCardinality, numPoints);
+      const auto refPts = Kokkos::subdynrankview(refPoints, Kokkos::ALL(), Kokkos::ALL(), basisDimRange);  //needed for shell topologies
+      getHGradValues<OPERATOR_VALUE>(vals, refPts, basis.get());
       break;
     }
     }
@@ -222,6 +182,28 @@ namespace Intrepid2 {
     const auto loopSize = physPoints.extent(0)*physPoints.extent(1);
     Kokkos::RangePolicy<ExecSpaceType,Kokkos::Schedule<Kokkos::Static> > policy(0, loopSize);
     Kokkos::parallel_for( policy, FunctorType(physPoints, worksetCell, vals) );
+  }
+
+  template<typename DeviceType>
+  template<typename PhysPointViewType,
+             typename RefPointViewType,
+             typename WorksetCellViewType>
+    void
+    CellTools<DeviceType>::
+    mapToPhysicalFrame(       PhysPointViewType    physPoints,
+                        const RefPointViewType     refPoints,
+                        const WorksetCellViewType  worksetCell,
+                        const shards::CellTopology cellTopo ) {
+    
+    #ifdef HAVE_INTREPID2_DEBUG
+      CellTools_mapToPhysicalFrameArgs( physPoints, refPoints, worksetCell, cellTopo );
+    #endif
+      using nonConstRefPointValueType = typename RefPointViewType::non_const_value_type;
+      auto basis = createHGradBasis<nonConstRefPointValueType,nonConstRefPointValueType>(cellTopo);
+      mapToPhysicalFrame(physPoints,
+                         refPoints,
+                         worksetCell,
+                         basis);
   }
 
   template<typename DeviceType>
@@ -279,9 +261,9 @@ namespace Intrepid2 {
                          const ordinal_type subcellOrd) {
 
     constexpr bool are_accessible =
-        Kokkos::Impl::MemorySpaceAccess<MemSpaceType,
+        Kokkos::SpaceAccessibility<MemSpaceType,
         typename decltype(refSubcellPoints)::memory_space>::accessible &&
-        Kokkos::Impl::MemorySpaceAccess<MemSpaceType,
+        Kokkos::SpaceAccessibility<MemSpaceType,
         typename decltype(paramPoints)::memory_space>::accessible;
     static_assert(are_accessible, "CellTools<DeviceType>::mapToReferenceSubcell(..): input/output views' memory spaces are not compatible with DeviceType");
 
@@ -317,11 +299,11 @@ namespace Intrepid2 {
                          const ordViewType                                                   subcellOrd) {
 
     constexpr bool are_accessible =
-        Kokkos::Impl::MemorySpaceAccess<MemSpaceType,
+        Kokkos::SpaceAccessibility<MemSpaceType,
         typename decltype(refSubcellPoints)::memory_space>::accessible &&
-        Kokkos::Impl::MemorySpaceAccess<MemSpaceType,
+        Kokkos::SpaceAccessibility<MemSpaceType,
         typename decltype(paramPoints)::memory_space>::accessible && 
-        Kokkos::Impl::MemorySpaceAccess<MemSpaceType,
+        Kokkos::SpaceAccessibility<MemSpaceType,
         typename decltype(subcellOrd)::memory_space>::accessible;
     static_assert(are_accessible, "CellTools<DeviceType>::mapToReferenceSubcell(..): input/output views' memory spaces are not compatible with DeviceType");
     

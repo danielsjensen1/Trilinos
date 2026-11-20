@@ -1,4 +1,4 @@
-// Copyright(C) 1999-2022, 2024 National Technology & Engineering Solutions
+// Copyright(C) 1999-2022, 2024, 2025 National Technology & Engineering Solutions
 // of Sandia, LLC (NTESS).  Under the terms of Contract DE-NA0003525 with
 // NTESS, the U.S. Government retains certain rights in this software.
 //
@@ -11,17 +11,14 @@
 #include "Ioss_CodeTypes.h"       // for IntVector
 #include "Ioss_ElementTopology.h" // for ElementTopology
 
-// STL Includes
-
 namespace Ioss {
-  class IOSS_EXPORT Node : public Ioss::ElementTopology
+  class IOSS_EXPORT Node final : public Ioss::ElementTopology
   {
 
   public:
     static const char *name;
 
     static void factory();
-    Node(const Node &) = delete;
 
     IOSS_NODISCARD ElementShape shape() const override { return ElementShape::POINT; }
     IOSS_NODISCARD int          spatial_dimension() const override;
@@ -46,6 +43,6 @@ namespace Ioss {
 
   protected:
     Node();
-    bool validate_permutation_nodes() const override { return false; }
+    IOSS_NODISCARD bool validate_permutation_nodes() const override { return false; }
   };
 } // namespace Ioss

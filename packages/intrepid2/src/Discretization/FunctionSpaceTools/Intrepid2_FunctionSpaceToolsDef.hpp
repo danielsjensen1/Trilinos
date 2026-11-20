@@ -1,43 +1,10 @@
 // @HEADER
-// ************************************************************************
-//
+// *****************************************************************************
 //                           Intrepid2 Package
-//                 Copyright (2007) Sandia Corporation
 //
-// Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
-// license for use of this work by or on behalf of the U.S. Government.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Kyungjoo Kim  (kyukim@sandia.gov), or
-//                    Mauro Perego  (mperego@sandia.gov)
-//
-// ************************************************************************
+// Copyright 2007 NTESS and the Intrepid2 contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 /** \file   Intrepid2_FunctionSpaceToolsDef.hpp
@@ -584,11 +551,11 @@ namespace Intrepid2 {
     }
 #endif
     constexpr bool are_accessible =
-        Kokkos::Impl::MemorySpaceAccess<MemSpaceType,
+        Kokkos::SpaceAccessibility<MemSpaceType,
         typename decltype(outputVals)::memory_space>::accessible &&
-        Kokkos::Impl::MemorySpaceAccess<MemSpaceType,
+        Kokkos::SpaceAccessibility<MemSpaceType,
         typename decltype(inputDet)::memory_space>::accessible &&
-        Kokkos::Impl::MemorySpaceAccess<MemSpaceType,
+        Kokkos::SpaceAccessibility<MemSpaceType,
         typename decltype(inputWeights)::memory_space>::accessible;
     static_assert(are_accessible, "FunctionSpaceTools<DeviceType>::computeCellMeasure(..): input/output views' memory spaces are not compatible with DeviceType");
 
@@ -629,17 +596,7 @@ namespace Intrepid2 {
 #endif
 
     // face normals (reshape scratch)
-    // Kokkos::DynRankView<scratchValueType,scratchProperties...> faceNormals(scratch.data(), 
-    //                                                                        inputJac.extent(0), 
-    //                                                                        inputJac.extent(1), 
-    //                                                                        inputJac.extent(2));
-    auto vcprop = Kokkos::common_view_alloc_prop(scratch);
-    //typedef Kokkos::DynRankView<scratchValueType, typename decltype(scratch)::memory_space> viewType;
-    typedef Kokkos::DynRankView<scratchValueType, DeviceType> viewType;
-    viewType faceNormals(Kokkos::view_wrap(scratch.data(), vcprop),
-                         inputJac.extent(0),
-                         inputJac.extent(1),
-                         inputJac.extent(2));
+    auto faceNormals = Impl::createMatchingUnmanagedDynRankView(inputJac, scratch.data(), inputJac.extent(0), inputJac.extent(1), inputJac.extent(2));
 
     // compute normals
     CellTools<DeviceType>::getPhysicalFaceNormals(faceNormals, inputJac, whichFace, parentCell);
@@ -676,17 +633,7 @@ namespace Intrepid2 {
 #endif
 
     // edge tangents (reshape scratch)
-    // Kokkos::DynRankView<scratchValueType,scratchProperties...> edgeTangents(scratch.data(), 
-    //                                                                         inputJac.extent(0), 
-    //                                                                         inputJac.extent(1), 
-    //                                                                         inputJac.extent(2));
-    auto vcprop = Kokkos::common_view_alloc_prop(scratch);
-    //typedef Kokkos::DynRankView<scratchValueType, typename decltype(scratch)::memory_space> viewType;
-    typedef Kokkos::DynRankView<scratchValueType, DeviceType> viewType;
-    viewType edgeTangents(Kokkos::view_wrap(scratch.data(), vcprop),
-                         inputJac.extent(0),
-                         inputJac.extent(1),
-                         inputJac.extent(2));
+    auto edgeTangents = Impl::createMatchingUnmanagedDynRankView(inputJac, scratch.data(), inputJac.extent(0), inputJac.extent(1), inputJac.extent(2));
 
     // compute normals
     CellTools<DeviceType>::getPhysicalEdgeTangents(edgeTangents, inputJac, whichEdge, parentCell);
@@ -709,9 +656,10 @@ namespace Intrepid2 {
   multiplyMeasure(       Kokkos::DynRankView<outputValValueType,   outputValProperties...>    outputVals,
                    const Kokkos::DynRankView<inputMeasureValueType,inputMeasureProperties...> inputMeasure,
                    const Kokkos::DynRankView<inputValValueType,    inputValProperties...>     inputVals ) {
-    scalarMultiplyDataField( outputVals, 
+    ArrayTools<DeviceType>::scalarMultiplyDataField( outputVals, 
                              inputMeasure, 
-                             inputVals );
+                             inputVals,
+                             false );
   }
 
   // ------------------------------------------------------------------------------------
@@ -961,9 +909,9 @@ namespace Intrepid2 {
 #endif
 
     constexpr bool are_accessible =
-        Kokkos::Impl::MemorySpaceAccess<MemSpaceType,
+        Kokkos::SpaceAccessibility<MemSpaceType,
         typename decltype(inoutOperator)::memory_space>::accessible &&
-        Kokkos::Impl::MemorySpaceAccess<MemSpaceType,
+        Kokkos::SpaceAccessibility<MemSpaceType,
         typename decltype(fieldSigns)::memory_space>::accessible;
     static_assert(are_accessible, "FunctionSpaceTools<DeviceType>::applyLeftFieldSigns(..): input/output views' memory spaces are not compatible with DeviceType");
 
@@ -1024,9 +972,9 @@ namespace Intrepid2 {
 #endif
 
     constexpr bool are_accessible =
-        Kokkos::Impl::MemorySpaceAccess<MemSpaceType,
+        Kokkos::SpaceAccessibility<MemSpaceType,
         typename decltype(inoutOperator)::memory_space>::accessible &&
-        Kokkos::Impl::MemorySpaceAccess<MemSpaceType,
+        Kokkos::SpaceAccessibility<MemSpaceType,
         typename decltype(fieldSigns)::memory_space>::accessible;
     static_assert(are_accessible, "FunctionSpaceTools<DeviceType>::applyRightFieldSigns(..): input/output views' memory spaces are not compatible with DeviceType");
 
@@ -1092,9 +1040,9 @@ namespace Intrepid2 {
 #endif
 
     constexpr bool are_accessible =
-        Kokkos::Impl::MemorySpaceAccess<MemSpaceType,
+        Kokkos::SpaceAccessibility<MemSpaceType,
         typename decltype(inoutFunction)::memory_space>::accessible &&
-        Kokkos::Impl::MemorySpaceAccess<MemSpaceType,
+        Kokkos::SpaceAccessibility<MemSpaceType,
         typename decltype(fieldSigns)::memory_space>::accessible;
     static_assert(are_accessible, "FunctionSpaceTools<DeviceType>::applyFieldSigns(..): input/output views' memory spaces are not compatible with DeviceType");
 
@@ -1116,30 +1064,75 @@ namespace Intrepid2 {
     template<typename outputPointViewType,
              typename inputCoeffViewType,
              typename inputFieldViewType>
-    struct F_evaluate {
+    struct F_evaluateScalar {
             outputPointViewType _outputPointVals;
       const inputCoeffViewType  _inputCoeffs;
       const inputFieldViewType  _inputFields;
       
       KOKKOS_INLINE_FUNCTION
-      F_evaluate( outputPointViewType outputPointVals_,
+      F_evaluateScalar( outputPointViewType outputPointVals_,
                   inputCoeffViewType  inputCoeffs_,
                   inputFieldViewType  inputFields_ )
         : _outputPointVals(outputPointVals_), _inputCoeffs(inputCoeffs_), _inputFields(inputFields_) {}
       
       KOKKOS_INLINE_FUNCTION
-      void operator()(const ordinal_type cl) const {
+      void operator()(const ordinal_type cl, const ordinal_type pt) const {
         const ordinal_type nbfs = _inputFields.extent(1);
-        const ordinal_type npts = _inputFields.extent(2);
+        
+        for (ordinal_type bf=0;bf<nbfs;++bf) 
+          _outputPointVals(cl, pt) += _inputCoeffs(cl, bf) * _inputFields(cl, bf, pt);
+      }
+    };
 
+    template<typename outputPointViewType,
+             typename inputCoeffViewType,
+             typename inputFieldViewType>
+    struct F_evaluateVector{
+            outputPointViewType _outputPointVals;
+      const inputCoeffViewType  _inputCoeffs;
+      const inputFieldViewType  _inputFields;
+      
+      KOKKOS_INLINE_FUNCTION
+      F_evaluateVector( outputPointViewType outputPointVals_,
+                  inputCoeffViewType  inputCoeffs_,
+                  inputFieldViewType  inputFields_ )
+        : _outputPointVals(outputPointVals_), _inputCoeffs(inputCoeffs_), _inputFields(inputFields_) {}
+      
+      KOKKOS_INLINE_FUNCTION
+      void operator()(const ordinal_type cl, const ordinal_type pt) const {
+        const ordinal_type nbfs = _inputFields.extent(1);
+        const ordinal_type iend = _inputFields.extent(3);
+
+        for (ordinal_type bf=0;bf<nbfs;++bf) 
+          for (ordinal_type i=0;i<iend;++i) 
+            _outputPointVals(cl, pt, i) += _inputCoeffs(cl, bf) * _inputFields(cl, bf, pt, i);
+      }
+    };
+
+    template<typename outputPointViewType,
+             typename inputCoeffViewType,
+             typename inputFieldViewType>
+    struct F_evaluateTensor {
+            outputPointViewType _outputPointVals;
+      const inputCoeffViewType  _inputCoeffs;
+      const inputFieldViewType  _inputFields;
+      
+      KOKKOS_INLINE_FUNCTION
+      F_evaluateTensor( outputPointViewType outputPointVals_,
+                  inputCoeffViewType  inputCoeffs_,
+                  inputFieldViewType  inputFields_ )
+        : _outputPointVals(outputPointVals_), _inputCoeffs(inputCoeffs_), _inputFields(inputFields_) {}
+      
+      KOKKOS_INLINE_FUNCTION
+      void operator()(const ordinal_type cl, const ordinal_type pt) const {
+        const ordinal_type nbfs = _inputFields.extent(1);
         const ordinal_type iend = _inputFields.extent(3);
         const ordinal_type jend = _inputFields.extent(4);
         
         for (ordinal_type bf=0;bf<nbfs;++bf) 
-          for (ordinal_type pt=0;pt<npts;++pt)
-            for (ordinal_type i=0;i<iend;++i) 
-              for (ordinal_type j=0;j<jend;++j) 
-                _outputPointVals(cl, pt, i, j) += _inputCoeffs(cl, bf) * _inputFields(cl, bf, pt, i, j);
+          for (ordinal_type i=0;i<iend;++i) 
+            for (ordinal_type j=0;j<jend;++j) 
+              _outputPointVals(cl, pt, i, j) += _inputCoeffs(cl, bf) * _inputFields(cl, bf, pt, i, j);
       }
     };
   }
@@ -1173,20 +1166,31 @@ namespace Intrepid2 {
 #endif
 
     constexpr bool are_accessible =
-        Kokkos::Impl::MemorySpaceAccess<MemSpaceType,
+        Kokkos::SpaceAccessibility<MemSpaceType,
         typename decltype(outputPointVals)::memory_space>::accessible &&
-        Kokkos::Impl::MemorySpaceAccess<MemSpaceType,
+        Kokkos::SpaceAccessibility<MemSpaceType,
         typename decltype(inputCoeffs)::memory_space>::accessible &&
-        Kokkos::Impl::MemorySpaceAccess<MemSpaceType,
+        Kokkos::SpaceAccessibility<MemSpaceType,
         typename decltype(inputFields)::memory_space>::accessible;
     static_assert(are_accessible, "FunctionSpaceTools<DeviceType>::evaluate(..): input/output views' memory spaces are not compatible with DeviceType");
 
-    using FunctorType = FunctorFunctionSpaceTools::F_evaluate
-                     <decltype(outputPointVals),decltype(inputCoeffs),decltype(inputFields)>;
-    
-    const ordinal_type C = inputFields.extent(0);
-    Kokkos::RangePolicy<ExecSpaceType,Kokkos::Schedule<Kokkos::Static> > policy(0, C);
-    Kokkos::parallel_for( policy, FunctorType(outputPointVals, inputCoeffs, inputFields) );
+    using range_policy_type = Kokkos::MDRangePolicy< ExecSpaceType, Kokkos::Rank<2>, Kokkos::IndexType<ordinal_type> >;
+
+    const range_policy_type policy( { 0, 0 },
+                                    { /*C*/ inputFields.extent(0), /*P*/ inputFields.extent(2)} );
+
+    if (inputFields.rank() == 3) {
+      using FunctorType = FunctorFunctionSpaceTools::F_evaluateScalar<decltype(outputPointVals),decltype(inputCoeffs),decltype(inputFields)>;
+      Kokkos::parallel_for( policy, FunctorType(outputPointVals, inputCoeffs, inputFields) );
+    }
+    else if (inputFields.rank() == 4) {
+      using FunctorType = FunctorFunctionSpaceTools::F_evaluateVector<decltype(outputPointVals),decltype(inputCoeffs),decltype(inputFields)>;
+      Kokkos::parallel_for( policy, FunctorType(outputPointVals, inputCoeffs, inputFields) );
+    }
+    else {
+      using FunctorType = FunctorFunctionSpaceTools::F_evaluateTensor<decltype(outputPointVals),decltype(inputCoeffs),decltype(inputFields)>;
+      Kokkos::parallel_for( policy, FunctorType(outputPointVals, inputCoeffs, inputFields) );
+    }
   }
   
   // ------------------------------------------------------------------------------------

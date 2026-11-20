@@ -1,43 +1,11 @@
-//@HEADER
-// ************************************************************************
-//
+// @HEADER
+// *****************************************************************************
 //                 Belos: Block Linear Solvers Package
-//                  Copyright 2004 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
-//
-// ************************************************************************
-//@HEADER
+// Copyright 2004-2016 NTESS and the Belos contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
 
 #ifndef BELOS_FIXEDPOINT_ITER_HPP
 #define BELOS_FIXEDPOINT_ITER_HPP
@@ -56,8 +24,6 @@
 #include "BelosOperatorTraits.hpp"
 #include "BelosMultiVecTraits.hpp"
 
-#include "Teuchos_SerialDenseMatrix.hpp"
-#include "Teuchos_SerialDenseVector.hpp"
 #include "Teuchos_ScalarTraits.hpp"
 #include "Teuchos_ParameterList.hpp"
 #include "Teuchos_TimeMonitor.hpp"
@@ -73,15 +39,15 @@
 
 namespace Belos {
 
-template<class ScalarType, class MV, class OP>
-class FixedPointIter : virtual public FixedPointIteration<ScalarType,MV,OP> {
+template<class ScalarType, class MV, class OP, class DM = DefaultDenseMatrix<int,ScalarType>>
+class FixedPointIter : virtual public FixedPointIteration<ScalarType,MV,OP,DM> {
 
   public:
 
   //
   // Convenience typedefs
   //
-  typedef MultiVecTraits<ScalarType,MV> MVT;
+  typedef MultiVecTraits<ScalarType,MV,DM> MVT;
   typedef OperatorTraits<ScalarType,MV,OP> OPT;
   typedef Teuchos::ScalarTraits<ScalarType> SCT;
   typedef typename SCT::magnitudeType MagnitudeType;
@@ -94,9 +60,9 @@ class FixedPointIter : virtual public FixedPointIteration<ScalarType,MV,OP> {
    * This constructor takes pointers required by the linear solver iteration, in addition
    * to a parameter list of options for the linear solver.
    */
-  FixedPointIter( const Teuchos::RCP<LinearProblem<ScalarType,MV,OP> > &problem,
+  FixedPointIter( const Teuchos::RCP<LinearProblem<ScalarType,MV,OP,DM> > &problem,
                   const Teuchos::RCP<OutputManager<ScalarType> > &printer,
-                  const Teuchos::RCP<StatusTest<ScalarType,MV,OP> > &tester,
+                  const Teuchos::RCP<StatusTest<ScalarType,MV,OP,DM> > &tester,
                   Teuchos::ParameterList &params );
 
   //! Destructor.
@@ -186,7 +152,7 @@ class FixedPointIter : virtual public FixedPointIteration<ScalarType,MV,OP> {
   //@{
 
   //! Get a constant reference to the linear problem.
-  const LinearProblem<ScalarType,MV,OP>& getProblem() const { return *lp_; }
+  const LinearProblem<ScalarType,MV,OP,DM>& getProblem() const { return *lp_; }
 
   //! Get the blocksize to be used by the iterative solver in solving this linear problem.
   int getBlockSize() const { return numRHS_; }
@@ -210,9 +176,9 @@ class FixedPointIter : virtual public FixedPointIteration<ScalarType,MV,OP> {
   //
   // Classes inputed through constructor that define the linear problem to be solved.
   //
-  const Teuchos::RCP<LinearProblem<ScalarType,MV,OP> >    lp_;
+  const Teuchos::RCP<LinearProblem<ScalarType,MV,OP,DM> >    lp_;
   const Teuchos::RCP<OutputManager<ScalarType> >          om_;
-  const Teuchos::RCP<StatusTest<ScalarType,MV,OP> >       stest_;
+  const Teuchos::RCP<StatusTest<ScalarType,MV,OP,DM> >       stest_;
 
   // Algorithmic parameters
   //
@@ -249,11 +215,11 @@ class FixedPointIter : virtual public FixedPointIteration<ScalarType,MV,OP> {
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
   // Constructor.
-  template<class ScalarType, class MV, class OP>
-  FixedPointIter<ScalarType,MV,OP>::FixedPointIter(const Teuchos::RCP<LinearProblem<ScalarType,MV,OP> > &problem,
-                                                   const Teuchos::RCP<OutputManager<ScalarType> > &printer,
-                                                   const Teuchos::RCP<StatusTest<ScalarType,MV,OP> > &tester,
-                                                   Teuchos::ParameterList &params ):
+  template<class ScalarType, class MV, class OP, class DM>
+  FixedPointIter<ScalarType,MV,OP,DM>::FixedPointIter(const Teuchos::RCP<LinearProblem<ScalarType,MV,OP,DM> > &problem,
+                                                      const Teuchos::RCP<OutputManager<ScalarType> > &printer,
+                                                      const Teuchos::RCP<StatusTest<ScalarType,MV,OP,DM> > &tester,
+                                                      Teuchos::ParameterList &params ):
     lp_(problem),
     om_(printer),
     stest_(tester),
@@ -267,8 +233,8 @@ class FixedPointIter : virtual public FixedPointIteration<ScalarType,MV,OP> {
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
   // Setup the state storage.
-  template <class ScalarType, class MV, class OP>
-  void FixedPointIter<ScalarType,MV,OP>::setStateSize ()
+  template<class ScalarType, class MV, class OP, class DM>
+  void FixedPointIter<ScalarType,MV,OP,DM>::setStateSize ()
   {
     if (!stateStorageInitialized_) {
       // Check if there is any multivector to clone from.
@@ -299,8 +265,8 @@ class FixedPointIter : virtual public FixedPointIteration<ScalarType,MV,OP> {
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
   // Set the block size and make necessary adjustments.
-  template <class ScalarType, class MV, class OP>
-  void FixedPointIter<ScalarType,MV,OP>::setBlockSize(int blockSize)
+  template<class ScalarType, class MV, class OP, class DM>
+  void FixedPointIter<ScalarType,MV,OP,DM>::setBlockSize(int blockSize)
   {
     // This routine only allocates space; it doesn't not perform any computation
     // any change in size will invalidate the state of the solver.
@@ -327,8 +293,8 @@ class FixedPointIter : virtual public FixedPointIteration<ScalarType,MV,OP> {
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
   // Initialize this iteration object
-  template <class ScalarType, class MV, class OP>
-  void FixedPointIter<ScalarType,MV,OP>::initializeFixedPoint(FixedPointIterationState<ScalarType,MV>& newstate)
+  template<class ScalarType, class MV, class OP, class DM>
+  void FixedPointIter<ScalarType,MV,OP,DM>::initializeFixedPoint(FixedPointIterationState<ScalarType,MV>& newstate)
   {
     // Initialize the state storage if it isn't already.
     if (!stateStorageInitialized_)
@@ -340,10 +306,6 @@ class FixedPointIter : virtual public FixedPointIteration<ScalarType,MV,OP> {
     // NOTE:  In FixedPointIter R_, the initial residual, is required!!!
     //
     std::string errstr("Belos::FixedPointIter::initialize(): Specified multivectors must have a consistent length and width.");
-
-    // Create convenience variables for zero and one.
-    const ScalarType one = Teuchos::ScalarTraits<ScalarType>::one();
-    const ScalarType zero = Teuchos::ScalarTraits<ScalarType>::zero();
 
     if (newstate.R != Teuchos::null) {
       TEUCHOS_TEST_FOR_EXCEPTION( MVT::GetNumberVecs(*R_) != MVT::GetNumberVecs(*newstate.R),
@@ -357,7 +319,7 @@ class FixedPointIter : virtual public FixedPointIteration<ScalarType,MV,OP> {
       // Copy basis vectors from newstate into V
       if (newstate.R != R_) {
         // copy over the initial residual (unpreconditioned).
-        MVT::MvAddMv( one, *newstate.R, zero, *newstate.R, *R_ );
+        MVT::Assign( *newstate.R, *R_ );
       }
 
     }
@@ -373,8 +335,8 @@ class FixedPointIter : virtual public FixedPointIteration<ScalarType,MV,OP> {
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
   // Iterate until the status test informs us we should stop.
-  template <class ScalarType, class MV, class OP>
-  void FixedPointIter<ScalarType,MV,OP>::iterate()
+  template<class ScalarType, class MV, class OP, class DM>
+  void FixedPointIter<ScalarType,MV,OP,DM>::iterate()
   {
     //
     // Allocate/initialize data structures

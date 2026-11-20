@@ -1,43 +1,11 @@
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //           Panzer: A partial differential equation assembly
 //       engine for strongly coupled complex multiphysics systems
-//                 Copyright (2011) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Roger P. Pawlowski (rppawlo@sandia.gov) and
-// Eric C. Cyr (eccyr@sandia.gov)
-// ***********************************************************************
+// Copyright 2011 NTESS and the Panzer contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #ifndef PANZER_DOF_DIV_IMPL_HPP
@@ -62,7 +30,7 @@ class EvaluateDOFDiv_withSens {
   const bool use_shared_memory;
 
 public:
-  using scratch_view = Kokkos::View<ScalarT* ,typename PHX::DevLayout<ScalarT>::type,typename PHX::exec_space::scratch_memory_space,Kokkos::MemoryUnmanaged>;
+  using scratch_view = Kokkos::View<ScalarT* ,typename PHX::DevLayout<ScalarT>::type,typename PHX::ExecutionSpace::scratch_memory_space,Kokkos::MemoryUnmanaged>;
 
   EvaluateDOFDiv_withSens(PHX::MDField<ScalarT,Cell,IP> & in_dof_div,
                           PHX::MDField<const ScalarT,Cell,Point> & in_dof_value,
@@ -73,12 +41,12 @@ public:
       div_basis(in_div_basis),
       num_fields(static_cast<int>(div_basis.extent(1))),
       num_points(static_cast<int>(div_basis.extent(2))),
-      fad_size(static_cast<int>(Kokkos::dimension_scalar(in_dof_div.get_view()))),
+      fad_size(static_cast<int>(Sacado::dimension_scalar(in_dof_div.get_view()))),
       use_shared_memory(in_use_shared_memory)
   {}
 
   KOKKOS_INLINE_FUNCTION
-  void operator()(const Kokkos::TeamPolicy<PHX::exec_space>::member_type& team) const
+  void operator()(const Kokkos::TeamPolicy<PHX::ExecutionSpace>::member_type& team) const
   {
     const int cell = team.league_rank();
 
@@ -227,7 +195,7 @@ evaluateFields(typename TRAITS::EvalData workset)
   Array div_basis = use_descriptors_ ? basisValues.getDivVectorBasis(false) : Array(basisValues.div_basis);
 
   const bool use_shared_memory = panzer::HP::inst().useSharedMemory<ScalarT>();
-  auto policy = panzer::HP::inst().teamPolicy<ScalarT,PHX::exec_space>(workset.num_cells);
+  auto policy = panzer::HP::inst().teamPolicy<ScalarT,PHX::ExecutionSpace>(workset.num_cells);
   auto f = EvaluateDOFDiv_withSens<ScalarT,Array>(dof_div,dof_value,div_basis,use_shared_memory);
   Kokkos::parallel_for(this->getName(),policy,f);
 }
@@ -333,7 +301,7 @@ evaluateFields(typename TRAITS::EvalData workset)
 
   if(!accelerate_jacobian) {
     const bool use_shared_memory = panzer::HP::inst().useSharedMemory<ScalarT>();
-    auto policy = panzer::HP::inst().teamPolicy<ScalarT,PHX::exec_space>(workset.num_cells);
+    auto policy = panzer::HP::inst().teamPolicy<ScalarT,PHX::ExecutionSpace>(workset.num_cells);
     auto f = EvaluateDOFDiv_withSens<ScalarT,Array>(dof_div,dof_value,div_basis,use_shared_memory);
     Kokkos::parallel_for(this->getName(),policy,f);
     return;

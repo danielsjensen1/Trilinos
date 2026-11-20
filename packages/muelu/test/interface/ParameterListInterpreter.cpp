@@ -1,47 +1,10 @@
 // @HEADER
-//
-// ***********************************************************************
-//
+// *****************************************************************************
 //        MueLu: A package for multigrid based preconditioning
-//                  Copyright 2012 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact
-//                    Jonathan Hu       (jhu@sandia.gov)
-//                    Andrey Prokopenko (aprokop@sandia.gov)
-//                    Ray Tuminaro      (rstumin@sandia.gov)
-//
-// ***********************************************************************
-//
+// Copyright 2012 NTESS and the MueLu contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #include <cstdlib>
@@ -55,9 +18,7 @@
 
 #include <MueLu.hpp>
 
-#if defined(HAVE_MUELU_AMESOS2)
 #include <Amesos2_config.h>  // needed for check whether KLU2 is available
-#endif
 
 #include <MueLu_Exceptions.hpp>
 #include <MueLu_TestHelpers.hpp>
@@ -96,6 +57,8 @@ int main_(Teuchos::CommandLineProcessor& clp, Xpetra::UnderlyingLib& lib, int ar
   bool runHeavyTests       = false;
   std::string xmlForceFile = "";
   bool useKokkos           = false;
+  bool outputToScreen      = false;
+
   if (lib == Xpetra::UseTpetra) {
     useKokkos = !Node::is_serial;
   }
@@ -104,6 +67,7 @@ int main_(Teuchos::CommandLineProcessor& clp, Xpetra::UnderlyingLib& lib, int ar
   clp.setOption("heavytests", "noheavytests", &runHeavyTests, "whether to exercise tests that take a long time to run");
   clp.setOption("xml", &xmlForceFile, "xml input file (useful for debugging)");
   clp.setOption("compareWithGold", "skipCompareWithGold", &compareWithGold, "compare runs against gold files");
+  clp.setOption("outputToScreen", "noOutputToScreen", &outputToScreen, "output to screen rather than static output files");
   clp.recogniseAllOptions(true);
   switch (clp.parse(argc, argv)) {
     case Teuchos::CommandLineProcessor::PARSE_HELP_PRINTED: return EXIT_SUCCESS;
@@ -111,6 +75,10 @@ int main_(Teuchos::CommandLineProcessor& clp, Xpetra::UnderlyingLib& lib, int ar
     case Teuchos::CommandLineProcessor::PARSE_UNRECOGNIZED_OPTION: return EXIT_FAILURE;
     case Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL: break;
   }
+
+  // If we ask for screen output, we can't compare w/ the gold files
+  if (outputToScreen)
+    compareWithGold = false;
 
   // =========================================================================
   // Problem construction
@@ -145,14 +113,6 @@ int main_(Teuchos::CommandLineProcessor& clp, Xpetra::UnderlyingLib& lib, int ar
       dirList.push_back(prefix + "FactoryParameterListInterpreter/");
     }
   }
-#if defined(HAVE_MPI) && defined(HAVE_MUELU_ISORROPIA) && defined(HAVE_AMESOS2_KLU2)
-  // The ML interpreter have internal ifdef, which means that the resulting
-  // output would depend on configuration (reguarl interpreter does not have
-  // that). Therefore, we need to stabilize the configuration here.
-  // In addition, we run ML parameter list tests only if KLU is available
-  dirList.push_back(prefix + "MLParameterListInterpreter/");
-  dirList.push_back(prefix + "MLParameterListInterpreter2/");
-#endif
   int numLists = dirList.size();
 
   bool failed  = false;
@@ -171,6 +131,7 @@ int main_(Teuchos::CommandLineProcessor& clp, Xpetra::UnderlyingLib& lib, int ar
 
       // Reset (potentially) cached value of the estimate
       A->SetMaxEigenvalueEstimate(-Teuchos::ScalarTraits<SC>::one());
+      if (A->IsView("stridedMaps")) A->RemoveView("stridedMaps");
 
       std::string xmlFile;
       std::string outFile;
@@ -204,7 +165,7 @@ int main_(Teuchos::CommandLineProcessor& clp, Xpetra::UnderlyingLib& lib, int ar
       if (myRank == 0)
         std::cout << "Testing: " << xmlFile << std::endl;
 
-      baseFile             = baseFile + (lib == Xpetra::UseEpetra ? "_epetra" : "_tpetra");
+      baseFile             = baseFile + "_tpetra";
       std::string goldFile = baseFile + ".gold";
       std::ifstream f(goldFile.c_str());
       if (!f.good()) {
@@ -216,7 +177,9 @@ int main_(Teuchos::CommandLineProcessor& clp, Xpetra::UnderlyingLib& lib, int ar
       std::stringbuf buffer;
       std::streambuf* oldbuffer = NULL;
       //   // Redirect output
-      oldbuffer = std::cout.rdbuf(&buffer);
+      if (!outputToScreen) {
+        oldbuffer = std::cout.rdbuf(&buffer);
+      }
 
       // NOTE: we cannot use ParameterListInterpreter(xmlFile, comm), because we want to update the ParameterList
       // first to include "test" verbosity
@@ -228,6 +191,11 @@ int main_(Teuchos::CommandLineProcessor& clp, Xpetra::UnderlyingLib& lib, int ar
         paramList.sublist("Hierarchy").set("verbosity", "InterfaceTest");
       else if (dirList[k] == prefix + "MLParameterListInterpreter/" || dirList[k] == prefix + "MLParameterListInterpreter2/")
         paramList.set("ML output", 666);
+
+#ifndef HAVE_MUELU_BELOS
+      if ((paramList.isParameter("multigrid algorithm") && paramList.get<std::string>("multigrid algorithm") == "emin"))
+        continue;
+#endif
 
       try {
         timer.start();
@@ -250,7 +218,8 @@ int main_(Teuchos::CommandLineProcessor& clp, Xpetra::UnderlyingLib& lib, int ar
         } else if (dirList[k] == prefix + "MLParameterListInterpreter/") {
           if (paramList.isParameter("parameter list: syntax"))
             paramList.remove("parameter list: syntax");
-          RCP<Teuchos::ParameterList> mueluParamList = Teuchos::getParametersFromXmlString(MueLu::ML2MueLuParameterTranslator::translate(paramList, "SA"));
+
+          RCP<Teuchos::ParameterList> mueluParamList = MueLu::ML2MueLuParameterTranslator::translate(paramList, "SA");
           mueluParamList->set("multigrid algorithm", "sa");
           mueluParamList->set("use kokkos refactor", useKokkos);
 
@@ -267,7 +236,7 @@ int main_(Teuchos::CommandLineProcessor& clp, Xpetra::UnderlyingLib& lib, int ar
           mueluFactory = Teuchos::rcp(new ParameterListInterpreter(*mueluParamList));
 
         } else if (dirList[k] == prefix + "MLParameterListInterpreter2/") {
-          RCP<Teuchos::ParameterList> mueluParamList = Teuchos::getParametersFromXmlString(MueLu::ML2MueLuParameterTranslator::translate(paramList, "SA"));
+          RCP<Teuchos::ParameterList> mueluParamList = MueLu::ML2MueLuParameterTranslator::translate(paramList, "SA");
 
           mueluParamList->set("multigrid algorithm", "sa");
           mueluParamList->set("use kokkos refactor", useKokkos);
@@ -293,12 +262,18 @@ int main_(Teuchos::CommandLineProcessor& clp, Xpetra::UnderlyingLib& lib, int ar
 
         timer.stop();
 
-      } catch (Teuchos::ExceptionBase& e) {
+      } catch (std::logic_error& e) {
         std::string msg = e.what();
         msg             = msg.substr(msg.find_last_of('\n') + 1);
 
-        if (myRank == 0)
+        if (myRank == 0) {
           std::cout << "Caught exception: " << msg << std::endl;
+          if (!outputToScreen) {
+            std::ostream actual_cout(oldbuffer);
+            std::string logStr = buffer.str();
+            actual_cout << logStr << std::endl;
+          }
+        }
 
         if (msg == "Zoltan interface is not available" ||
             msg == "Zoltan2 interface is not available" ||
@@ -311,26 +286,28 @@ int main_(Teuchos::CommandLineProcessor& clp, Xpetra::UnderlyingLib& lib, int ar
       }
 
       // Redirect output back
-      std::cout.rdbuf(oldbuffer);
+      if (!outputToScreen) {
+        std::cout.rdbuf(oldbuffer);
 #ifdef HAVE_MPI
-      std::string logStr = buffer.str();
-      if (myRank == 0)
-        remove((baseFile + ".out").c_str());
-      RCP<const Teuchos::OpaqueWrapper<MPI_Comm> > mpiComm = Teuchos::rcp_dynamic_cast<const Teuchos::MpiComm<int> >(comm)->getRawMpiComm();
-      MPI_File logfile;
-      comm->barrier();
-      MPI_File_open((*mpiComm)(), (baseFile + ".out").c_str(), MPI_MODE_WRONLY | MPI_MODE_CREATE, MPI_INFO_NULL, &logfile);
-      MPI_File_set_atomicity(logfile, true);
-      const char* msg = logStr.c_str();
-      int err         = MPI_File_write_ordered(logfile, msg, logStr.size(), MPI_CHAR, MPI_STATUS_IGNORE);
-      TEUCHOS_ASSERT(err == MPI_SUCCESS);
-      MPI_File_close(&logfile);
+        std::string logStr = buffer.str();
+        if (myRank == 0)
+          remove((baseFile + ".out").c_str());
+        RCP<const Teuchos::OpaqueWrapper<MPI_Comm> > mpiComm = Teuchos::rcp_dynamic_cast<const Teuchos::MpiComm<int> >(comm)->getRawMpiComm();
+        MPI_File logfile;
+        comm->barrier();
+        MPI_File_open((*mpiComm)(), (baseFile + ".out").c_str(), MPI_MODE_WRONLY | MPI_MODE_CREATE, MPI_INFO_NULL, &logfile);
+        MPI_File_set_atomicity(logfile, true);
+        const char* msg = logStr.c_str();
+        int err         = MPI_File_write_ordered(logfile, msg, logStr.size(), MPI_CHAR, MPI_STATUS_IGNORE);
+        TEUCHOS_ASSERT(err == MPI_SUCCESS);
+        MPI_File_close(&logfile);
 #else
-      std::ofstream outStream;
-      outStream.open((baseFile + ".out").c_str(), std::ofstream::out);
-      outStream << buffer.str();
-      outStream.close();
+        std::ofstream outStream;
+        outStream.open((baseFile + ".out").c_str(), std::ofstream::out);
+        outStream << buffer.str();
+        outStream.close();
 #endif
+      }
 
       std::string cmd;
       if (myRank == 0) {
@@ -347,8 +324,6 @@ int main_(Teuchos::CommandLineProcessor& clp, Xpetra::UnderlyingLib& lib, int ar
         // using different seed, and may have different algorithm from one
         // gcc version to another, or to another compiler (like clang)
         // This leads to us always failing this test.
-        // NOTE1 : Epetra, on the other hand, rolls out its out random number
-        // generator, which always produces same results
 
         // make sure complex tests pass
         run_sed("'s/relaxation: damping factor = (1,0)/relaxation: damping factor = 1/'", baseFile);
@@ -360,6 +335,12 @@ int main_(Teuchos::CommandLineProcessor& clp, Xpetra::UnderlyingLib& lib, int ar
 
         // Ignore the value of "lambdaMin"
         run_sed("'s/lambdaMin: [0-9]*.[0-9]*/lambdaMin = <ignored>/'", baseFile);
+
+        // Ignore Chebyshev eigenvalue
+        run_sed("'s/chebyshev: max eigenvalue (calculated by Ifpack2) = [0-9]*.[0-9]*/chebyshev: max eigenvalue (calculated by Ifpack2) = <ignored>/'", baseFile);
+
+        // Ignore prolongator damping factor
+        run_sed("'s/Prolongator damping factor = [0-9]*.[0-9]* (|[0-9]*.[0-9]* \\/ [0-9]*.[0-9]*|)/Prolongator damping factor = <ignored>/'", baseFile);
 
         // Ignore the value of "chebyshev: max eigenvalue"
         // NOTE: we skip lines with default value ([default])

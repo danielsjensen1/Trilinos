@@ -1,10 +1,11 @@
-// @HEADER
-// ****************************************************************************
-//                Tempus: Copyright (2017) Sandia Corporation
+//@HEADER
+// *****************************************************************************
+//          Tempus: Time Integration and Sensitivity Analysis Package
 //
-// Distributed under BSD 3-clause license (See accompanying file Copyright.txt)
-// ****************************************************************************
-// @HEADER
+// Copyright 2017 NTESS and the Tempus contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+//@HEADER
 
 #ifndef Tempus_Stepper_ErrorNorm_impl_hpp
 #define Tempus_Stepper_ErrorNorm_impl_hpp
@@ -64,7 +65,7 @@ Scalar Stepper_ErrorNorm<Scalar>::computeWRMSNorm(
                          errorWeightVector_.ptr());
 
   const auto space_dim = err->space()->dim();
-  Scalar err_norm      = std::abs(Thyra::norm(*errorWeightVector_) / space_dim);
+  Scalar err_norm      = Thyra::norm(*errorWeightVector_) / std::sqrt(static_cast<Scalar>(space_dim));
   return err_norm;
 }
 

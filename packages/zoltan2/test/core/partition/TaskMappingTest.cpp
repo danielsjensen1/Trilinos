@@ -1,3 +1,11 @@
+// @HEADER
+// *****************************************************************************
+//   Zoltan2: A package of combinatorial algorithms for scientific computing
+//
+// Copyright 2012 NTESS and the Zoltan2 contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
 
 #include "Zoltan2_TaskMapping.hpp"
 #include <Zoltan2_PartitioningProblem.hpp>
@@ -361,6 +369,10 @@ int main(int narg, char *arg[]) {
       std::cout << "PASS" << std::endl;
     }
 
+
+    delete [] task_gnos;
+    delete [] task_communication_xadj_;
+    delete [] task_communication_adj_;
 
     for (int i = 0; i < coordDim; i++) delete [] partCenters[i];
     delete [] partCenters;

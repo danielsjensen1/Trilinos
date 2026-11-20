@@ -1,47 +1,10 @@
 // @HEADER
-//
-// ***********************************************************************
-//
+// *****************************************************************************
 //        MueLu: A package for multigrid based preconditioning
-//                  Copyright 2012 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact
-//                    Jonathan Hu       (jhu@sandia.gov)
-//                    Andrey Prokopenko (aprokop@sandia.gov)
-//                    Ray Tuminaro      (rstumin@sandia.gov)
-//
-// ***********************************************************************
-//
+// Copyright 2012 NTESS and the MueLu contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #include <cstdlib>
@@ -66,11 +29,6 @@
 #include <MueLu_TpetraOperator.hpp>
 #include <Xpetra_TpetraVector.hpp>
 #include <MueLu_CreateTpetraPreconditioner.hpp>
-#ifdef HAVE_MUELU_EPETRA
-#include <MueLu_EpetraOperator.hpp>
-#include <Xpetra_EpetraVector.hpp>
-#include <MueLu_CreateEpetraPreconditioner.hpp>
-#endif
 #include <MueLu_TestHelpers.hpp>
 
 const std::string thickSeparator = "==========================================================================================================================";
@@ -101,7 +59,7 @@ void setup_system_list(Xpetra::UnderlyingLib& lib, Teuchos::RCP<Xpetra::Matrix<S
       oldbuffer = std::cout.rdbuf(&buffer);
     }
 
-    RCP<Tpetra_CrsMatrix> At = Xpetra::Helpers<Scalar, LocalOrdinal, GlobalOrdinal, Node>::Op2NonConstTpetraCrs(A);
+    RCP<Tpetra_CrsMatrix> At = toTpetra(A);
     RCP<Tpetra::Operator<Scalar, LocalOrdinal, GlobalOrdinal, Node> > opA(At);
     RCP<Tpetra_Operator> Mt = MueLu::CreateTpetraPreconditioner(opA, mueluList);
 
@@ -111,24 +69,6 @@ void setup_system_list(Xpetra::UnderlyingLib& lib, Teuchos::RCP<Xpetra::Matrix<S
       buffer.close();
     }
   }
-#if defined(HAVE_MUELU_EPETRA) && defined(HAVE_MUELU_SERIAL)
-  if (lib == Xpetra::UseEpetra) {
-    if (myRank == 0) {
-      // Redirect output
-      buffer.open((fname + ".out").c_str(), std::ios::out);
-      oldbuffer = std::cout.rdbuf(&buffer);
-    }
-
-    RCP<Epetra_CrsMatrix> Ae = Xpetra::Helpers<Scalar, LocalOrdinal, GlobalOrdinal, Node>::Op2NonConstEpetraCrs(A);
-    RCP<Epetra_Operator> Me  = MueLu::CreateEpetraPreconditioner(Ae, mueluList);
-
-    if (myRank == 0) {
-      // Redirect output back
-      std::cout.rdbuf(oldbuffer);
-      buffer.close();
-    }
-  }
-#endif
 }
 
 // This routine generate's the user's original A matrix and nullspace
@@ -208,8 +148,6 @@ bool compare_to_gold(int myRank, const std::string& baseFile) {
     // using different seed, and may have different algorithm from one
     // gcc version to another, or to anogther compiler (like clang)
     // This leads to us always failing this test.
-    // NOTE1 : Epetra, on the other hand, rolls out its out random number
-    // generator, which always produces same results
 
     // make sure complex tests pass
     run_sed("'s/relaxation: damping factor = (1,0)/relaxation: damping factor = 1/'", baseFile);
@@ -344,7 +282,7 @@ int main_(Teuchos::CommandLineProcessor& clp, Xpetra::UnderlyingLib lib, int arg
     out << prefSeparator << " Solve 1: Standard " << prefSeparator << std::endl;
     {
       std::string fname = prefix + "Output/operator_solve_1_np" + Teuchos::toString(numProc);
-      fname             = fname + (lib == Xpetra::UseEpetra ? "_epetra" : "_tpetra");
+      fname             = fname + "_tpetra";
 
       std::filebuf buffer;
       std::streambuf* oldbuffer = NULL;
@@ -397,7 +335,7 @@ int main_(Teuchos::CommandLineProcessor& clp, Xpetra::UnderlyingLib lib, int arg
     out << prefSeparator << " Solve 5: LevelWrap, Fast Way, P, R " << prefSeparator << std::endl;
     {
       std::string fname = prefix + "Output/operator_solve_5_np" + Teuchos::toString(numProc);
-      fname             = fname + (lib == Xpetra::UseEpetra ? "_epetra" : "_tpetra");
+      fname             = fname + "_tpetra";
 
       std::srand(12345);
 
@@ -427,7 +365,7 @@ int main_(Teuchos::CommandLineProcessor& clp, Xpetra::UnderlyingLib lib, int arg
     out << prefSeparator << " Solve 6: LevelWrap, Fast Way, P only, explicit transpose " << prefSeparator << std::endl;
     {
       std::string fname = prefix + "Output/operator_solve_6_np" + Teuchos::toString(numProc);
-      fname             = fname + (lib == Xpetra::UseEpetra ? "_epetra" : "_tpetra");
+      fname             = fname + "_tpetra";
 
       std::srand(12345);
 
@@ -458,7 +396,7 @@ int main_(Teuchos::CommandLineProcessor& clp, Xpetra::UnderlyingLib lib, int arg
     out << prefSeparator << " Solve 7: LevelWrap, Fast Way, P only, implicit transpose " << prefSeparator << std::endl;
     {
       std::string fname = prefix + "Output/operator_solve_7_np" + Teuchos::toString(numProc);
-      fname             = fname + (lib == Xpetra::UseEpetra ? "_epetra" : "_tpetra");
+      fname             = fname + "_tpetra";
 
       std::srand(12345);
 

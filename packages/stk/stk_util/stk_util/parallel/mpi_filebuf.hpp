@@ -36,10 +36,12 @@
 #ifndef STK_UTIL_PARALLEL_MPI_FILEBUF_HPP
 #define STK_UTIL_PARALLEL_MPI_FILEBUF_HPP
 
+#include "stk_util/util/ReportHandler.hpp"
 #include "stk_util/parallel/Parallel.hpp"  // for MPI_Comm, ompi_communicator_t
 #include <cstdio>                          // for size_t, EOF, FILE
 #include <ios>                             // for basic_streambuf<>::char_type, ios_base, ios_ba...
 #include <streambuf>
+#include <istream>
 #include <string>                          // for string
 
 namespace SEAMS { class Aprepro; }
@@ -116,13 +118,13 @@ public:
 protected:
 
   //: Called to refill the input buffer
-  virtual int underflow();
+  virtual int underflow() override;
 
   //: Called when output buffer is filled
-  virtual int overflow( int c = EOF );
+  virtual int overflow( int c = EOF ) override;
 
   //: Sync is a no-op
-  virtual int sync();
+  virtual int sync() override;
 
 private:
 
@@ -150,6 +152,29 @@ private:
 
 
 };
+
+namespace stk {
+
+inline
+std::string read_and_broadcast_file(const std::string& fileName, MPI_Comm comm)
+{
+  try {
+    mpi_filebuf buf;
+    buf.open(comm, 0, std::ios::in, fileName.c_str());
+    STK_ThrowRequireMsg(buf.is_open(), "could not open input file " << fileName);
+    std::istream in(&buf);
+    std::string content((std::istreambuf_iterator<char>(in)),
+                         std::istreambuf_iterator<char>());
+    return content;
+  }
+  catch(std::exception& e) {
+    STK_ThrowErrorMsg("Error reading input file '"<<fileName<<"': "<<e.what());
+  }
+ 
+  return std::string();
+}
+
+} // namespace stk
 
 /*--------------------------------------------------------------------*/
 

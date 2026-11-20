@@ -1,42 +1,10 @@
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //         Stratimikos: Thyra-based strategies for linear solvers
-//                Copyright (2006) Sandia Corporation
 //
-// Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
-// license for use of this work by or on behalf of the U.S. Government.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Roscoe A. Bartlett (rabartl@sandia.gov)
-//
-// ***********************************************************************
+// Copyright 2006 NTESS and the Stratimikos contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 /*! \file BelosThyraAdapter.hpp
@@ -63,6 +31,13 @@
 #ifdef HAVE_BELOS_TSQR
 #  include <Thyra_TsqrAdaptor.hpp>
 #endif // HAVE_BELOS_TSQR
+
+#if defined(HAVE_STRATIMIKOS_THYRATPETRAADAPTERS) && defined(HAVE_BELOS_TPETRA)
+#include "Thyra_TpetraThyraWrappers.hpp"
+#include "BelosMultiVecTraits_Tpetra.hpp"
+#include "Thyra_DefaultProductMultiVector.hpp"
+#include "Thyra_DefaultProductVectorSpace.hpp"
+#endif
 
 #ifdef HAVE_STRATIMIKOS_BELOS_TIMERS
 # include <Teuchos_TimeMonitor.hpp>
@@ -97,6 +72,43 @@ namespace Belos {
     typedef Thyra::MultiVectorBase<ScalarType> TMVB;
     typedef Teuchos::ScalarTraits<ScalarType> ST;
     typedef typename ST::magnitudeType magType;
+    using DM = Belos::DefaultDenseMatrix<int, ScalarType>;
+    using DMT = Belos::DenseMatTraits<ScalarType, DM>;
+#if defined(HAVE_STRATIMIKOS_THYRATPETRAADAPTERS) && defined(HAVE_BELOS_TPETRA)
+    using TpMap = Tpetra::Map<Tpetra::MultiVector<>::local_ordinal_type,
+                              Tpetra::MultiVector<>::global_ordinal_type,
+                              Tpetra::MultiVector<>::node_type>;
+    using TpMV = Tpetra::MultiVector<ScalarType, Tpetra::MultiVector<>::local_ordinal_type,
+                                     Tpetra::MultiVector<>::global_ordinal_type,
+                                     Tpetra::MultiVector<>::node_type>;
+    using Extraction = Thyra::TpetraOperatorVectorExtraction<ScalarType,
+                                                             Tpetra::MultiVector<>::local_ordinal_type,
+                                                             Tpetra::MultiVector<>::global_ordinal_type,
+                                                             Tpetra::MultiVector<>::node_type>;
+    using TpMVT = Belos::MultiVecTraits<ScalarType, TpMV>;
+
+    private:
+    static Teuchos::RCP<TMVB> BuildProductMultiVectorMaybe(Teuchos::RCP<const TMVB> &mv_rcp, const int numvecs) {
+      auto pmv_rcp = Teuchos::rcp_dynamic_cast<const Thyra::DefaultProductMultiVector<ScalarType>>(mv_rcp);
+      if (!pmv_rcp.is_null()) {
+        auto ps = Teuchos::rcp_dynamic_cast<const Thyra::DefaultProductVectorSpace<ScalarType>>(pmv_rcp->range());
+        const int numBlocks = ps->numBlocks();
+        Teuchos::Array<Teuchos::RCP<Thyra::MultiVectorBase<ScalarType>>> multiVecs;
+        for (int k = 0; k < numBlocks; ++k) {
+          auto vs = ps->getBlock(k);
+          Teuchos::RCP<const TpMap> map = Extraction::getTpetraMap(vs);
+          if (map.is_null())
+            break;
+          auto tp_mv = impl::getMultiVectorFromPool<ScalarType>(map, numvecs);
+          auto thy_mv = createMultiVector(tp_mv, vs);
+          multiVecs.push_back(thy_mv);
+        }
+        if (multiVecs.size() == numBlocks)
+          return Thyra::defaultProductMultiVector<ScalarType>(ps, multiVecs);
+      }
+      return Teuchos::null;
+    }
+#endif
 
   public:
 
@@ -109,7 +121,24 @@ namespace Belos {
     */
     static Teuchos::RCP<TMVB> Clone( const TMVB& mv, const int numvecs )
     {
-      Teuchos::RCP<TMVB> c = Thyra::createMembers( mv.range(), numvecs );
+      Teuchos::RCP<TMVB> c;
+#if defined(HAVE_STRATIMIKOS_THYRATPETRAADAPTERS) && defined(HAVE_BELOS_TPETRA)
+      auto mv_rcp = Teuchos::rcpFromRef(mv);
+      try {
+        Teuchos::RCP<const TpMV> X = Extraction::getConstTpetraMultiVector(mv_rcp);
+        auto X_copy = ::Belos::MultiVecTraits<ScalarType, TpMV>::Clone(*X, numvecs);
+        c = Thyra::createMultiVector(X_copy);
+      } catch (std::logic_error&)
+#endif
+      {
+#if defined(HAVE_STRATIMIKOS_THYRATPETRAADAPTERS) && defined(HAVE_BELOS_TPETRA)
+        c = BuildProductMultiVectorMaybe(mv_rcp, numvecs);
+        if (c.is_null())
+#endif
+        {
+          c = Thyra::createMembers(mv.range(), numvecs);
+        }
+      }
       return c;
     }
 
@@ -119,11 +148,28 @@ namespace Belos {
     */
     static Teuchos::RCP<TMVB> CloneCopy( const TMVB& mv )
     {
-      int numvecs = mv.domain()->dim();
-      // create the new multivector
-      Teuchos::RCP< TMVB > cc = Thyra::createMembers( mv.range(), numvecs );
-      // copy the data from the source multivector to the new multivector
-      Thyra::assign(cc.ptr(), mv);
+      Teuchos::RCP< TMVB > cc;
+#if defined(HAVE_STRATIMIKOS_THYRATPETRAADAPTERS) && defined(HAVE_BELOS_TPETRA)
+      auto mv_rcp = Teuchos::rcpFromRef(mv);
+      try {
+        Teuchos::RCP<const TpMV> X = Extraction::getConstTpetraMultiVector(mv_rcp);
+        auto X_copy = ::Belos::MultiVecTraits<ScalarType, TpMV>::CloneCopy(*X);
+        cc = Thyra::createMultiVector(X_copy);
+      } catch (std::logic_error&)
+#endif
+      {
+        int numvecs = mv.domain()->dim();
+        // create the new multivector
+#if defined(HAVE_STRATIMIKOS_THYRATPETRAADAPTERS) && defined(HAVE_BELOS_TPETRA)
+        cc = BuildProductMultiVectorMaybe(mv_rcp, numvecs);
+        if (cc.is_null())
+#endif
+        {
+          cc = Thyra::createMembers(mv.range(), numvecs);
+        }
+        // copy the data from the source multivector to the new multivector
+        Thyra::assign(cc.ptr(), mv);
+      }
       return cc;
     }
 
@@ -134,26 +180,60 @@ namespace Belos {
     */
     static Teuchos::RCP<TMVB> CloneCopy( const TMVB& mv, const std::vector<int>& index )
     {
-      int numvecs = index.size();
-      // create the new multivector
-      Teuchos::RCP<TMVB> cc = Thyra::createMembers( mv.range(), numvecs );
-      // create a view to the relevant part of the source multivector
-      Teuchos::RCP<const TMVB> view = mv.subView(index);
-      // copy the data from the relevant view to the new multivector
-      Thyra::assign(cc.ptr(), *view);
+      Teuchos::RCP<TMVB> cc;
+#if defined(HAVE_STRATIMIKOS_THYRATPETRAADAPTERS) && defined(HAVE_BELOS_TPETRA)
+      auto mv_rcp = Teuchos::rcpFromRef(mv);
+      try {
+        Teuchos::RCP<const TpMV> X = Extraction::getConstTpetraMultiVector(mv_rcp);
+        auto X_copy = ::Belos::MultiVecTraits<ScalarType, TpMV>::CloneCopy(*X, index);
+        cc = Thyra::createMultiVector(X_copy);
+      } catch (std::logic_error&)
+#endif
+      {
+        int numvecs = index.size();
+        // create the new multivector
+#if defined(HAVE_STRATIMIKOS_THYRATPETRAADAPTERS) && defined(HAVE_BELOS_TPETRA)
+        cc = BuildProductMultiVectorMaybe(mv_rcp, numvecs);
+        if (cc.is_null())
+#endif
+        {
+          cc = Thyra::createMembers(mv.range(), numvecs);
+        }
+        // create a view to the relevant part of the source multivector
+        Teuchos::RCP<const TMVB> view = mv.subView(index);
+        // copy the data from the relevant view to the new multivector
+        Thyra::assign(cc.ptr(), *view);
+      }
       return cc;
     }
 
     static Teuchos::RCP<TMVB>
     CloneCopy (const TMVB& mv, const Teuchos::Range1D& index)
     {
-      const int numVecs = index.size();
-      // Create the new multivector
-      Teuchos::RCP<TMVB> cc = Thyra::createMembers (mv.range(), numVecs);
-      // Create a view to the relevant part of the source multivector
-      Teuchos::RCP<const TMVB> view = mv.subView (index);
-      // Copy the data from the view to the new multivector.
-      Thyra::assign (cc.ptr(), *view);
+      Teuchos::RCP<TMVB> cc;
+#if defined(HAVE_STRATIMIKOS_THYRATPETRAADAPTERS) && defined(HAVE_BELOS_TPETRA)
+      auto mv_rcp = Teuchos::rcpFromRef(mv);
+      try {
+        Teuchos::RCP<const TpMV> X = Extraction::getConstTpetraMultiVector(mv_rcp);
+        auto X_copy = ::Belos::MultiVecTraits<ScalarType, TpMV>::CloneCopy(*X, index);
+        cc = Thyra::createMultiVector(X_copy);
+      } catch (std::logic_error&)
+#endif
+      {
+        const int numVecs = index.size();
+        // Create the new multivector
+#if defined(HAVE_STRATIMIKOS_THYRATPETRAADAPTERS) && defined(HAVE_BELOS_TPETRA)
+        cc = BuildProductMultiVectorMaybe(mv_rcp, numVecs);
+        if (cc.is_null())
+#endif
+        {
+          cc = Thyra::createMembers(mv.range(), numVecs);
+        }
+        // Create a view to the relevant part of the source multivector
+        Teuchos::RCP<const TMVB> view = mv.subView (index);
+        // Copy the data from the view to the new multivector.
+        Thyra::assign (cc.ptr(), *view);
+      }
       return cc;
     }
 
@@ -282,31 +362,46 @@ namespace Belos {
     /*! \brief Update \c mv with \f$ \alpha AB + \beta mv \f$.
      */
     static void MvTimesMatAddMv( const ScalarType alpha, const TMVB& A,
-         const Teuchos::SerialDenseMatrix<int,ScalarType>& B,
+         const DM& B,
          const ScalarType beta, TMVB& mv )
     {
       using Teuchos::arrayView; using Teuchos::arcpFromArrayView;
       STRATIMIKOS_TIME_MONITOR("Belos::MVT::MvTimesMatAddMv");
 
-      const int m = B.numRows();
-      const int n = B.numCols();
-      // Check if B is 1-by-1, in which case we can just call MvAddMv()
-      if ((m == 1) && (n == 1)) {
-        using Teuchos::tuple; using Teuchos::ptrInArg; using Teuchos::inoutArg;
-        const ScalarType alphaNew = alpha * B(0, 0);
-        Thyra::linear_combination<ScalarType>(tuple(alphaNew)(), tuple(ptrInArg(A))(), beta, inoutArg(mv));
-      } else {
-        // perform the operation via A: mv <- alpha*A*B_thyra + beta*mv
-        auto vs = A.domain();
-        // Create a view of the B object!
-        Teuchos::RCP< const TMVB >
+#if defined(HAVE_STRATIMIKOS_THYRATPETRAADAPTERS) && defined(HAVE_BELOS_TPETRA)
+      auto A_rcp = Teuchos::rcpFromRef(A);
+      auto mv_rcp = Teuchos::rcpFromRef(mv);
+      try {
+        Teuchos::RCP<const TpMV> A_tp = Extraction::getConstTpetraMultiVector(A_rcp);
+        Teuchos::RCP<TpMV> mv_tp = Extraction::getTpetraMultiVector(mv_rcp);
+        TpMVT::MvTimesMatAddMv(alpha, *A_tp, B, beta, *mv_tp);
+        return;
+      } catch (std::logic_error&)
+#endif
+      {
+        const int m = DMT::GetNumRows(B);
+        const int n = DMT::GetNumCols(B);
+        // Check if B is 1-by-1, in which case we can just call MvAddMv()
+        if ((m == 1) && (n == 1)) {
+          using Teuchos::tuple; using Teuchos::ptrInArg; using Teuchos::inoutArg;
+          auto B_ptr = DMT::GetConstRawHostPtr(B);
+          const ScalarType alphaNew = alpha * (*B_ptr);
+          Thyra::linear_combination<ScalarType>(tuple(alphaNew)(), tuple(ptrInArg(A))(), beta, inoutArg(mv));
+        } else {
+          // perform the operation via A: mv <- alpha*A*B_thyra + beta*mv
+          auto vs = A.domain();
+          auto B_ptr = DMT::GetConstRawHostPtr(B);
+          auto stride = DMT::GetStride(B);
+          // Create a view of the B object!
+          Teuchos::RCP< const TMVB >
           B_thyra = vs->createCachedMembersView(
-            RTOpPack::ConstSubMultiVectorView<ScalarType>(
-              0, m, 0, n,
-              arcpFromArrayView(arrayView(&B(0,0), B.stride()*B.numCols())), B.stride()
-              )
-            );
-        Thyra::apply<ScalarType>(A, Thyra::NOTRANS, *B_thyra, Teuchos::outArg(mv), alpha, beta);
+                                                RTOpPack::ConstSubMultiVectorView<ScalarType>(
+                                                                                              0, m, 0, n,
+                                                                                              arcpFromArrayView(arrayView(B_ptr, stride*n)), stride
+                                                                                              )
+                                                );
+          Thyra::apply<ScalarType>(A, Thyra::NOTRANS, *B_thyra, Teuchos::outArg(mv), alpha, beta);
+        }
       }
     }
 
@@ -345,25 +440,40 @@ namespace Belos {
     /*! \brief Compute a dense matrix \c B through the matrix-matrix multiply \f$ \alpha A^Tmv \f$.
     */
     static void MvTransMv( const ScalarType alpha, const TMVB& A, const TMVB& mv,
-      Teuchos::SerialDenseMatrix<int,ScalarType>& B )
+      DM& B )
     {
       using Teuchos::arrayView; using Teuchos::arcpFromArrayView;
       STRATIMIKOS_TIME_MONITOR("Belos::MVT::MvTransMv");
 
-      // Create a multivector to hold the result (m by n)
-      int m = A.domain()->dim();
-      int n = mv.domain()->dim();
-      auto vs = A.domain();
-      // Create a view of the B object!
-      Teuchos::RCP< TMVB >
+#if defined(HAVE_STRATIMIKOS_THYRATPETRAADAPTERS) && defined(HAVE_BELOS_TPETRA)
+      auto A_rcp = Teuchos::rcpFromRef(A);
+      auto mv_rcp = Teuchos::rcpFromRef(mv);
+      try {
+        Teuchos::RCP<const TpMV> A_tp = Extraction::getConstTpetraMultiVector(A_rcp);
+        Teuchos::RCP<const TpMV> mv_tp = Extraction::getConstTpetraMultiVector(mv_rcp);
+        TpMVT::MvTransMv(alpha, *A_tp, *mv_tp, B);
+        return;
+      } catch (std::logic_error&)
+#endif
+      {
+        // Create a multivector to hold the result (m by n)
+        int m = A.domain()->dim();
+        int n = mv.domain()->dim();
+        auto vs = A.domain();
+        auto stride = DMT::GetStride(B);
+        auto B_cols = DMT::GetNumCols(B);
+        auto B_ptr = DMT::GetRawHostPtr(B);
+        // Create a view of the B object!
+        Teuchos::RCP< TMVB >
         B_thyra = vs->createCachedMembersView(
-          RTOpPack::SubMultiVectorView<ScalarType>(
-            0, m, 0, n,
-            arcpFromArrayView(arrayView(&B(0,0), B.stride()*B.numCols())), B.stride()
-            ),
-          false
-          );
-      Thyra::apply<ScalarType>(A, Thyra::CONJTRANS, mv, B_thyra.ptr(), alpha);
+                                              RTOpPack::SubMultiVectorView<ScalarType>(
+                                                                                       0, m, 0, n,
+                                                                                       arcpFromArrayView(arrayView(B_ptr, stride*B_cols)), stride
+                                                                                       ),
+                                              false
+                                              );
+        Thyra::apply<ScalarType>(A, Thyra::CONJTRANS, mv, B_thyra.ptr(), alpha);
+      }
     }
 
     /*! \brief Compute a std::vector \c b where the components are the individual dot-products of the

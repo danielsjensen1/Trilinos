@@ -26,10 +26,13 @@ namespace krino{
 
 Simulation::Simulation(const std::string & in_name)
   : my_name(in_name),
-    my_timer("krino", sierra::Diag::sierraTimer()),
+    myTimer("krino", sierra::Diag::sierraTimer()),
+    myParseTimer("parse", myTimer),
+    myExecuteTimer("execute", myTimer),
     my_is_transient(false),
     my_stop_time(0.0),
     my_step_count(0),
+    my_old_time(0.0),
     my_current_time(0.0),
     my_time_step_size(0.0)
 {
@@ -53,7 +56,7 @@ void Simulation::commit()
 
 void Simulation::execute()
 {
-  stk::diag::TimeBlock timer__(my_timer);
+  stk::diag::TimeBlock timer__(myExecuteTimer);
 
   //=====================================
   // start-up procedure
@@ -67,7 +70,7 @@ void Simulation::execute()
 
   for (auto && region : my_regions)
   {
-    region->process_output(false);
+    region->process_output();
   }
 
   //=====================================
@@ -76,7 +79,13 @@ void Simulation::execute()
 
   while ( my_current_time < my_stop_time )
   {
+    for (auto && region : my_regions)
+    {
+      region->mesh_bulk_data().update_field_data_states();
+    }
+
     static const double sqrt_epsilon = std::sqrt(std::numeric_limits<double>::epsilon());
+    my_old_time = my_current_time;
     if (my_current_time+my_time_step_size > my_stop_time*(1.-sqrt_epsilon))
     {
       my_time_step_size = my_stop_time - my_current_time;
@@ -104,12 +113,7 @@ void Simulation::execute()
 
     for (auto && region : my_regions)
     {
-      region->process_output(false);
-    }
-
-    for (auto && region : my_regions)
-    {
-      region->mesh_bulk_data().update_field_data_states();
+      region->process_output();
     }
   }
 

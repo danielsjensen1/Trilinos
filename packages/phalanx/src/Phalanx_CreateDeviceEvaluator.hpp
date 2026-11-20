@@ -1,3 +1,13 @@
+// @HEADER
+// *****************************************************************************
+//        Phalanx: A Partial Differential Equation Field Evaluation 
+//       Kernel for Flexible Management of Complex Dependency Chains
+//
+// Copyright 2008 NTESS and the Phalanx contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
+
 #ifndef PHALANX_CREATE_DEVICE_EVALUATOR_HPP
 #define PHALANX_CREATE_DEVICE_EVALUATOR_HPP
 
@@ -40,7 +50,7 @@ namespace PHX {
       : device_evaluator_(de), data_(data) {}
 
     KOKKOS_INLINE_FUNCTION
-    void operator()(const Kokkos::TeamPolicy<PHX::exec_space>::member_type& team) const
+    void operator()(const Kokkos::TeamPolicy<PHX::ExecutionSpace>::member_type& team) const
     {
       device_evaluator_.prepareForRecompute(team, data_);
       device_evaluator_.evaluate(team, data_);

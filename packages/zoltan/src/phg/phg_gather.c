@@ -1,48 +1,11 @@
-/* 
- * @HEADER
- *
- * ***********************************************************************
- *
- *  Zoltan Toolkit for Load-balancing, Partitioning, Ordering and Coloring
- *                  Copyright 2012 Sandia Corporation
- *
- * Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
- * the U.S. Government retains certain rights in this software.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- * 1. Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *
- * 2. Redistributions in binary form must reproduce the above copyright
- * notice, this list of conditions and the following disclaimer in the
- * documentation and/or other materials provided with the distribution.
- *
- * 3. Neither the name of the Corporation nor the names of the
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- * Questions? Contact Karen Devine	kddevin@sandia.gov
- *                    Erik Boman	egboman@sandia.gov
- *
- * ***********************************************************************
- *
- * @HEADER
- */
+// @HEADER
+// *****************************************************************************
+//  Zoltan Toolkit for Load-balancing, Partitioning, Ordering and Coloring
+//
+// Copyright 2012 NTESS and the Zoltan contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
 
 
 #ifdef __cplusplus
@@ -252,6 +215,8 @@ int max_nProc_xy = MAX(nProc_x, nProc_y);
     sum = 0;
     for (i = 0; i < col_nEdge; i++) {
       tmp = col_hindex[i];
+      if (tmp < 0)
+        FATAL_ERROR("Received negative edge size in gathered hindex data");
       col_hindex[i] = sum;
       sum += tmp;
     }
@@ -283,6 +248,11 @@ int max_nProc_xy = MAX(nProc_x, nProc_y);
     }
    
   
+    /* Validate gathered vertex LNOs before using them as indices. */
+    for (i = 0; i < col_nPin; i++)
+      if (col_hvertex[i] < 0 || col_hvertex[i] >= col_nVtx)
+        FATAL_ERROR("Received out-of-range vertex in gathered hvertex data");
+
     Zoltan_HG_Mirror(col_nEdge, col_hindex, col_hvertex, 
                      col_nVtx, col_vindex, col_vedge);
   
@@ -375,6 +345,8 @@ int max_nProc_xy = MAX(nProc_x, nProc_y);
     sum = 0;
     for (i = 0; i < shg->nVtx; i++) {
       tmp = shg->vindex[i];
+      if (tmp < 0)
+        FATAL_ERROR("Received negative vertex size in gathered vindex data");
       shg->vindex[i] = sum;
       sum += tmp;
     }
@@ -448,6 +420,11 @@ int max_nProc_xy = MAX(nProc_x, nProc_y);
                      shg->vwgt, each, disp, MPI_FLOAT, phg->comm->row_comm);
     }
   
+    /* Validate gathered edge numbers before using them as indices. */
+    for (i = 0; i < shg->nPins; i++)
+      if (shg->vedge[i] < 0 || shg->vedge[i] >= shg->nEdge)
+        FATAL_ERROR("Received out-of-range edge in gathered vedge data");
+
     Zoltan_HG_Mirror(shg->nVtx, shg->vindex, shg->vedge, 
                      shg->nEdge, shg->hindex, shg->hvertex);
 

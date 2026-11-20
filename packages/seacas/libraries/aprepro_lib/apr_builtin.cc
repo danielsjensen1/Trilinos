@@ -1,4 +1,4 @@
-// Copyright(C) 1999-2024 National Technology & Engineering Solutions
+// Copyright(C) 1999-2025 National Technology & Engineering Solutions
 // of Sandia, LLC (NTESS).  Under the terms of Contract DE-NA0003525 with
 // NTESS, the U.S. Government retains certain rights in this software.
 //
@@ -24,10 +24,8 @@
 #include <utility>
 #include <vector>
 
-#if defined FMT_SUPPORT
 #include <fmt/ostream.h>
 #include <fmt/printf.h>
-#endif
 
 #if defined(WIN32) || defined(__WIN32__) || defined(_WIN32) || defined(_MSC_VER) ||                \
     defined(__MINGW32__) || defined(_WIN64) || defined(__MINGW64__)
@@ -94,6 +92,15 @@ namespace SEAMS {
 #define min(x, y) (x) < (y) ? (x) : (y)
 #endif
 
+  const char *do_use_legacy_output_format()
+  {
+    SEAMS::symrec *ptr = aprepro->getsym("_FORMAT");
+    if (ptr != nullptr) {
+      ptr->value.svar = "%.10g";
+    }
+    return (nullptr);
+  }
+
   double do_time()
   {
     time_t timer = time(nullptr);
@@ -110,7 +117,7 @@ namespace SEAMS {
     reset_error();
     double temp = (x < 0 ? -std::floor(-(x)) : std::floor(x));
     SEAMS::math_error("int");
-    return (temp);
+    return temp;
   }
 
   // DO_NINT:  Calculate integer nearest value
@@ -119,7 +126,7 @@ namespace SEAMS {
     reset_error();
     double temp = (x < 0 ? -std::floor(0.5 - x) : std::floor(x + 0.5));
     SEAMS::math_error("nint");
-    return (temp);
+    return temp;
   }
 
   // DO_DIST: Calculate distance between point 1 at (x1,y1) and
@@ -130,7 +137,7 @@ namespace SEAMS {
     reset_error();
     double temp = std::hypot((x1 - x2), (y1 - y2));
     SEAMS::math_error("hypot");
-    return (temp);
+    return temp;
   }
 
   // DO_ANGLE: Calculate angle (radians) between vector 1 at (0,0; x1,y1) and
@@ -142,7 +149,7 @@ namespace SEAMS {
     reset_error();
     temp = acos(temp);
     SEAMS::math_error("angle");
-    return (temp);
+    return temp;
   }
 
   // DO_ANGLE: Calculate angle (degrees) between vector 1 at (0,0; x1,y1) and
@@ -154,7 +161,7 @@ namespace SEAMS {
     reset_error();
     temp = r2d(acos(temp));
     SEAMS::math_error("angled");
-    return (temp);
+    return temp;
   }
 
   // DO_HYPOT: calculate sqrt(p^2 + q^2)
@@ -171,7 +178,7 @@ namespace SEAMS {
     reset_error();
     double temp = max(x, y);
     SEAMS::math_error("max");
-    return (temp);
+    return temp;
   }
 
   double do_min(double x, double y)
@@ -179,7 +186,7 @@ namespace SEAMS {
     reset_error();
     double temp = min(x, y);
     SEAMS::math_error("min");
-    return (temp);
+    return temp;
   }
 
   double do_d2r(double x) { return (d2r(x)); }
@@ -191,7 +198,7 @@ namespace SEAMS {
     reset_error();
     double temp = sin(d2r(x));
     SEAMS::math_error("sind");
-    return (temp);
+    return temp;
   }
 
   double do_sin(double x)
@@ -199,7 +206,7 @@ namespace SEAMS {
     reset_error();
     double temp = sin(x);
     SEAMS::math_error("sin");
-    return (temp);
+    return temp;
   }
 
   double do_cosd(double x)
@@ -207,7 +214,7 @@ namespace SEAMS {
     reset_error();
     double temp = cos(d2r(x));
     SEAMS::math_error("cosd");
-    return (temp);
+    return temp;
   }
 
   double do_cos(double x)
@@ -215,7 +222,7 @@ namespace SEAMS {
     reset_error();
     double temp = cos(x);
     SEAMS::math_error("cos");
-    return (temp);
+    return temp;
   }
 
   double do_tand(double x)
@@ -223,7 +230,7 @@ namespace SEAMS {
     reset_error();
     double temp = tan(d2r(x));
     SEAMS::math_error("tand");
-    return (temp);
+    return temp;
   }
 
   double do_tan(double x)
@@ -231,7 +238,7 @@ namespace SEAMS {
     reset_error();
     double temp = tan(x);
     SEAMS::math_error("tan");
-    return (temp);
+    return temp;
   }
 
   double do_atan2d(double x, double y)
@@ -239,7 +246,7 @@ namespace SEAMS {
     reset_error();
     double temp = r2d(atan2(x, y));
     SEAMS::math_error("atan2d");
-    return (temp);
+    return temp;
   }
 
   double do_atan2(double x, double y)
@@ -247,7 +254,7 @@ namespace SEAMS {
     reset_error();
     double temp = atan2(x, y);
     SEAMS::math_error("atan2");
-    return (temp);
+    return temp;
   }
 
   double do_atand(double x)
@@ -255,7 +262,7 @@ namespace SEAMS {
     reset_error();
     double temp = r2d(atan(x));
     SEAMS::math_error("atand");
-    return (temp);
+    return temp;
   }
 
   double do_atan(double x)
@@ -263,7 +270,7 @@ namespace SEAMS {
     reset_error();
     double temp = atan(x);
     SEAMS::math_error("atan");
-    return (temp);
+    return temp;
   }
 
   double do_asind(double x)
@@ -271,7 +278,7 @@ namespace SEAMS {
     reset_error();
     double temp = r2d(asin(x));
     SEAMS::math_error("asind");
-    return (temp);
+    return temp;
   }
 
   double do_asin(double x)
@@ -279,7 +286,7 @@ namespace SEAMS {
     reset_error();
     double temp = asin(x);
     SEAMS::math_error("asin");
-    return (temp);
+    return temp;
   }
 
   double do_acosd(double x)
@@ -287,7 +294,7 @@ namespace SEAMS {
     reset_error();
     double temp = r2d(acos(x));
     SEAMS::math_error("acosd");
-    return (temp);
+    return temp;
   }
 
   double do_acos(double x)
@@ -295,7 +302,7 @@ namespace SEAMS {
     reset_error();
     double temp = acos(x);
     SEAMS::math_error("acos");
-    return (temp);
+    return temp;
   }
 
   // do_srand(x) Seed the random generator with the specified integer value
@@ -335,7 +342,7 @@ namespace SEAMS {
     reset_error();
     double temp = (y) >= 0 ? fabs(x) : -fabs(x);
     SEAMS::math_error("sign");
-    return (temp);
+    return temp;
   }
 
   double do_dim(double x, double y)
@@ -343,7 +350,7 @@ namespace SEAMS {
     reset_error();
     double temp = x - (min(x, y));
     SEAMS::math_error("dim");
-    return (temp);
+    return temp;
   }
 
   double do_fabs(double x)
@@ -351,7 +358,7 @@ namespace SEAMS {
     reset_error();
     double temp = fabs(x);
     SEAMS::math_error("fabs");
-    return (temp);
+    return temp;
   }
 
   double do_ceil(double x)
@@ -359,7 +366,7 @@ namespace SEAMS {
     reset_error();
     double temp = ceil(x);
     SEAMS::math_error("ceil");
-    return (temp);
+    return temp;
   }
 
   double do_cosh(double x)
@@ -367,15 +374,23 @@ namespace SEAMS {
     reset_error();
     double temp = cosh(x);
     SEAMS::math_error("cosh");
-    return (temp);
+    return temp;
   }
 
   double do_exp(double x)
   {
     reset_error();
     double temp = exp(x);
-    SEAMS::math_error("exp");
-    return (temp);
+    // `exp` will report ERANGE error on both overflow and underflow
+    // We want no error on underflow, so see if `temp == 0` and if so,
+    // don't check math_error.
+    if (temp != 0.0) {
+      SEAMS::math_error("exp");
+    }
+    else {
+      reset_error();
+    }
+    return temp;
   }
 
   double do_expm1(double x)
@@ -383,7 +398,7 @@ namespace SEAMS {
     reset_error();
     double temp = std::expm1(x);
     SEAMS::math_error("exp");
-    return (temp);
+    return temp;
   }
 
   double do_erf(double x) { return std::erf(x); }
@@ -395,7 +410,7 @@ namespace SEAMS {
     reset_error();
     double temp = floor(x);
     SEAMS::math_error("floor");
-    return (temp);
+    return temp;
   }
 
   double do_fmod(double x, double y)
@@ -403,7 +418,7 @@ namespace SEAMS {
     reset_error();
     double temp = fmod(x, y);
     SEAMS::math_error("fmod");
-    return (temp);
+    return temp;
   }
 
   double do_log(double x)
@@ -411,7 +426,7 @@ namespace SEAMS {
     reset_error();
     double temp = std::log(x);
     SEAMS::math_error("log");
-    return (temp);
+    return temp;
   }
 
   double do_log10(double x)
@@ -419,7 +434,7 @@ namespace SEAMS {
     reset_error();
     double temp = std::log10(x);
     SEAMS::math_error("log10");
-    return (temp);
+    return temp;
   }
 
   double do_sinh(double x)
@@ -427,7 +442,7 @@ namespace SEAMS {
     reset_error();
     double temp = sinh(x);
     SEAMS::math_error("sinh");
-    return (temp);
+    return temp;
   }
 
   double do_sqrt(double x)
@@ -438,7 +453,7 @@ namespace SEAMS {
     if (fetestexcept(FE_INVALID | FE_OVERFLOW | FE_DIVBYZERO) != 0) {
       SEAMS::math_error("sqrt");
     }
-    return (temp);
+    return temp;
   }
 
   double do_cbrt(double x)
@@ -449,7 +464,7 @@ namespace SEAMS {
     if (fetestexcept(FE_INVALID | FE_OVERFLOW | FE_DIVBYZERO) != 0) {
       SEAMS::math_error("sqrt");
     }
-    return (temp);
+    return temp;
   }
 
   double do_tanh(double x)
@@ -457,7 +472,7 @@ namespace SEAMS {
     reset_error();
     double temp = tanh(x);
     SEAMS::math_error("tanh");
-    return (temp);
+    return temp;
   }
 
   double do_polarX(double rad, double ang) { return (rad * cos(d2r(ang))); }
@@ -571,7 +586,7 @@ namespace SEAMS {
     char *p = string;
     while (*p != '\0') {
       if (isupper(static_cast<int>(*p)) != 0) {
-        *p = tolower(static_cast<int>(*p));
+        *p = static_cast<char>(tolower(static_cast<int>(*p)));
       }
       p++;
     }
@@ -583,7 +598,7 @@ namespace SEAMS {
     char *p = string;
     while (*p != '\0') {
       if (islower(static_cast<int>(*p)) != 0) {
-        *p = toupper(static_cast<int>(*p));
+        *p = static_cast<char>(toupper(static_cast<int>(*p)));
       }
       p++;
     }
@@ -592,18 +607,24 @@ namespace SEAMS {
 
   const char *do_tostring(double x)
   {
-    char       *tmp;
-    static char tmpstr[128];
+    char *tmp;
     if (x == 0.0) {
       new_string("0", &tmp);
       return (tmp);
     }
 
-    SEAMS::symrec *format;
-    format = aprepro->getsym("_FORMAT");
-    snprintf(tmpstr, 128, format->value.svar.c_str(), x);
-    new_string(tmpstr, &tmp);
-    return (tmp);
+    const SEAMS::symrec *format = aprepro->getsym("_FORMAT");
+    if (format->value.svar.empty()) {
+      std::ostringstream lines;
+      fmt::print(lines, "{}", x);
+      new_string(lines.str(), &tmp);
+      return tmp;
+    }
+    else {
+      auto tmpstr = fmt::sprintf(format->value.svar, x);
+      new_string(tmpstr.c_str(), &tmp);
+      return tmp;
+    }
   }
 
   const char *do_output(char *filename)
@@ -671,6 +692,10 @@ namespace SEAMS {
     auto &tokens = get_tokenized_strings(string, delm);
 
     auto in = static_cast<size_t>(n);
+    if (in == 0) {
+      aprepro->error("Index to get_word must be positive.", false);
+      return "";
+    }
     if (tokens.size() >= in) {
       char *word = nullptr;
       new_string(tokens[in - 1], &word);
@@ -818,6 +843,14 @@ namespace SEAMS {
     return (tmp);
   }
 
+  const char *do_format(double var, char *format)
+  {
+    auto  tmpstr = std::strlen(format) > 0 ? fmt::sprintf(format, var) : fmt::format("{}", var);
+    char *tmp;
+    new_string(tmpstr.c_str(), &tmp);
+    return tmp;
+  }
+
   const char *do_execute(char *string)
   {
     aprepro->lexer->execute(string);
@@ -839,13 +872,13 @@ namespace SEAMS {
   const char *do_if(double x)
   {
     aprepro->inIfdefGetvar = false;
-    aprepro->lexer->if_handler(x);
+    aprepro->lexer->if_handler((x != 0.0));
     return nullptr;
   }
 
   const char *do_notif(double x)
   {
-    aprepro->lexer->if_handler(!x);
+    aprepro->lexer->if_handler(x == 0.0);
     return nullptr;
   }
 
@@ -899,7 +932,7 @@ namespace SEAMS {
     // does not appear, then return the remainder of the string. If
     // 'begin' == "", then start at beginning; if 'end' == "", then
     // return remainder of the string.
-    char *start = string;
+    auto *start = string;
 
     if (std::strlen(begin) > 0) {
       start = std::strstr(string, begin);
@@ -908,11 +941,11 @@ namespace SEAMS {
       }
     }
 
-    int len = std::strlen(start);
+    auto len = std::strlen(start);
     if (std::strlen(end) > 0) {
-      char *finish = std::strstr(start, end);
+      auto *finish = std::strstr(start, end);
       if (finish != nullptr) {
-        len = finish - start;
+        len = static_cast<size_t>(finish - start);
       }
     }
 
@@ -943,18 +976,17 @@ namespace SEAMS {
     if (my_array_data != nullptr) {
       std::ostringstream lines;
 
-      int rows = my_array_data->rows;
-      int cols = my_array_data->cols;
+      auto rows = my_array_data->rows;
+      auto cols = my_array_data->cols;
 
-      int idx = 0;
+      size_t idx = 0;
 
-      for (int ir = 0; ir < rows; ir++) {
+      for (size_t ir = 0; ir < rows; ir++) {
         if (ir > 0) {
           lines << "\n";
         }
         lines << "\t";
-        for (int ic = 0; ic < cols; ic++) {
-#if defined FMT_SUPPORT
+        for (size_t ic = 0; ic < cols; ic++) {
           const SEAMS::symrec *format = aprepro->getsym("_FORMAT");
           if (format->value.svar.empty()) {
             fmt::print(lines, "{}", my_array_data->data[idx++]);
@@ -963,9 +995,6 @@ namespace SEAMS {
             auto tmpstr = fmt::sprintf(format->value.svar, my_array_data->data[idx++]);
             lines << tmpstr;
           }
-#else
-          lines << my_array_data->data[idx++];
-#endif
           if (ic < cols - 1) {
             lines << "\t";
           }
@@ -988,15 +1017,15 @@ namespace SEAMS {
 
   array *do_make_array(double rows, double cols)
   {
-    auto array_data = aprepro->make_array(rows, cols);
+    auto array_data = aprepro->make_array(static_cast<size_t>(rows), static_cast<size_t>(cols));
     return array_data;
   }
 
   array *do_make_array_init(double rows, double cols, double init)
   {
-    auto array_data = aprepro->make_array(rows, cols);
-    int  isize      = (int)rows * int(cols);
-    for (int i = 0; i < isize; i++) {
+    auto array_data = aprepro->make_array(static_cast<size_t>(rows), static_cast<size_t>(cols));
+    auto isize      = static_cast<size_t>(rows) * static_cast<size_t>(cols);
+    for (size_t i = 0; i < isize; i++) {
       array_data->data[i] = init;
     }
     return array_data;
@@ -1004,25 +1033,25 @@ namespace SEAMS {
 
   array *do_identity(double size)
   {
-    auto array_data = aprepro->make_array(size, size);
+    auto array_data = aprepro->make_array(static_cast<size_t>(size), static_cast<size_t>(size));
 
-    int isize = size;
-    for (int i = 0; i < isize; i++) {
+    size_t isize = static_cast<size_t>(size);
+    for (size_t i = 0; i < isize; i++) {
       array_data->data[i * isize + i] = 1.0;
     }
     return array_data;
   }
 
-  array *do_linear_array(double init, double final, double count)
+  array *do_linear_array(double init, double last, double count)
   {
     // Create 1D array with `count` rows and 1 column.
-    // Values are linearly spaced from `init` to `final`
-    int  isize      = count;
-    auto array_data = aprepro->make_array(count, 1);
+    // Values are linearly spaced from `init` to `last`
+    auto isize      = static_cast<size_t>(count);
+    auto array_data = aprepro->make_array(isize, 1);
 
-    double inc = (final - init) / (count - 1);
-    for (int i = 0; i < isize; i++) {
-      array_data->data[i] = init + (double)i * inc;
+    double inc = (last - init) / (count - 1);
+    for (size_t i = 0; i < isize; i++) {
+      array_data->data[i] = init + static_cast<double>(i) * inc;
     }
     return array_data;
   }
@@ -1031,8 +1060,8 @@ namespace SEAMS {
   {
     auto array_data = aprepro->make_array(a->cols, a->rows);
 
-    for (int i = 0; i < a->rows; i++) {
-      for (int j = 0; j < a->cols; j++) {
+    for (size_t i = 0; i < a->rows; i++) {
+      for (size_t j = 0; j < a->cols; j++) {
         array_data->data[j * a->rows + i] = a->data[i * a->cols + j];
       }
     }
@@ -1137,8 +1166,8 @@ namespace SEAMS {
       file->clear();
       file->seekg(0);
 
-      int idx = 0;
-      rows    = 0;
+      size_t idx = 0;
+      rows       = 0;
       while (std::getline(*file, line)) {
         if (++rows > rows_to_skip) {
           auto tokens = tokenize(line, delim);
@@ -1152,7 +1181,7 @@ namespace SEAMS {
           }
         }
       }
-      assert(rows - rows_to_skip == (size_t)array_data->rows);
+      assert(rows - rows_to_skip == static_cast<size_t>(array_data->rows));
       delete file;
       return array_data;
     }
@@ -1178,14 +1207,14 @@ namespace SEAMS {
         }
       }
 
-      auto array_data = aprepro->make_array(rows, cols);
+      auto array_data = aprepro->make_array(static_cast<size_t>(rows), static_cast<size_t>(cols));
 
       // Read file again storing entries in array_data->data
       file->clear();
       file->seekg(0);
 
-      int idx = 0;
-      rows    = 0;
+      size_t idx = 0;
+      rows       = 0;
       while (std::getline(*file, line)) {
         if (line[0] != comment[0]) {
           rows++;
@@ -1200,7 +1229,7 @@ namespace SEAMS {
           }
         }
       }
-      assert((int)rows == array_data->rows);
+      assert(static_cast<size_t>(rows) == array_data->rows);
       delete file;
       return array_data;
     }
@@ -1212,7 +1241,7 @@ namespace SEAMS {
     auto tokens     = SEAMS::tokenize(string, delm);
     auto array_data = aprepro->make_array(tokens.size(), 1);
 
-    int idx = 0;
+    size_t idx = 0;
     for (const auto &token : tokens) {
       array_data->data[idx++] = std::stod(token);
     }

@@ -73,7 +73,6 @@ TEST(UnitTestGhosting, ThreeElemSendElemWithNonOwnedNodes)
 
   unsigned spatialDim = 3;
   stk::mesh::MetaData meta(spatialDim);
-  meta.use_simple_fields();
   stk::unit_test_util::BulkDataTester bulk(meta, communicator);
   const std::string generatedMeshSpecification = "generated:1x1x3";
   stk::io::fill_mesh(generatedMeshSpecification, bulk);
@@ -232,7 +231,6 @@ TEST(UnitTestGhosting, WithSharedFiltered)
   }
 
   stk::io::StkMeshIoBroker stkMeshIoBroker(communicator);
-  stkMeshIoBroker.use_simple_fields();
   const std::string generatedMeshSpecification = "generated:1x1x6";
   stkMeshIoBroker.add_mesh_database(generatedMeshSpecification, stk::io::READ_MESH);
   stkMeshIoBroker.create_input_mesh();
@@ -297,7 +295,6 @@ TEST(UnitTestGhosting, WithShared)
   }
 
   stk::io::StkMeshIoBroker stkMeshIoBroker(communicator);
-  stkMeshIoBroker.use_simple_fields();
   const std::string generatedMeshSpecification = "generated:1x1x6";
   stkMeshIoBroker.add_mesh_database(generatedMeshSpecification, stk::io::READ_MESH);
   stkMeshIoBroker.create_input_mesh();
@@ -406,12 +403,6 @@ void create_mesh_with_1_tri_per_proc(stk::mesh::BulkData& bulk)
 void delete_node_2_and_connect_node_5_to_elem_1(stk::mesh::BulkData& bulk)
 {
   bulk.modification_begin();
-{
-std::ostringstream os;
-os<<"P"<<bulk.parallel_rank()<<"  **** doing test mod ****" << std::endl;
-std::cerr<<os.str();
-stk::parallel_machine_barrier(bulk.parallel());
-}
   if (bulk.parallel_rank() == 0) {
     stk::mesh::Entity node5 = bulk.declare_node(5);
     stk::mesh::Entity node2 = bulk.get_entity(stk::topology::NODE_RANK, 2);

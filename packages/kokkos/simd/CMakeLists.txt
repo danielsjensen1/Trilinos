@@ -1,5 +1,9 @@
-IF (NOT Kokkos_INSTALL_TESTING)
-  ADD_SUBDIRECTORY(src)
-ENDIF()
+if(NOT Kokkos_INSTALL_TESTING)
+  add_subdirectory(src)
+endif()
 
-KOKKOS_ADD_TEST_DIRECTORIES(unit_tests)
+# FIXME_NEXTSILICON: unimplemented
+if(NOT KOKKOS_ENABLE_NEXTSILICON)
+  kokkos_add_test_directories(unit_tests)
+  kokkos_add_benchmark_directories(perf_tests)
+endif()

@@ -1,3 +1,12 @@
+// @HEADER
+// *****************************************************************************
+//        MueLu: A package for multigrid based preconditioning
+//
+// Copyright 2012 NTESS and the MueLu contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
+
 /*
  * MueLu_AdaptiveSaMLParamterListInterpreter_def.hpp
  *
@@ -11,9 +20,6 @@
 #include <Teuchos_XMLParameterListHelpers.hpp>
 
 #include "MueLu_ConfigDefs.hpp"
-#if defined(HAVE_MUELU_ML) && defined(HAVE_MUELU_EPETRA)
-#include <ml_ValidateParameters.h>
-#endif
 
 #include <Xpetra_Matrix.hpp>
 #include <Xpetra_MultiVector.hpp>

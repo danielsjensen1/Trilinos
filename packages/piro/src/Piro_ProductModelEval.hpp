@@ -1,47 +1,16 @@
 // @HEADER
-// ************************************************************************
-//
+// *****************************************************************************
 //        Piro: Strategy package for embedded analysis capabilitites
-//                  Copyright (2010) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Andy Salinger (agsalin@sandia.gov), Sandia
-// National Laboratories.
-//
-// ************************************************************************
+// Copyright 2010 NTESS and the Piro contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #ifndef PIRO_PRODUCTMODELEVAL_HPP
 #define PIRO_PRODUCTMODELEVAL_HPP
+
+#include "Piro_ConfigDefs.hpp"
 
 #include "Teuchos_RCP.hpp"
 #include "Thyra_ModelEvaluator.hpp"
@@ -54,6 +23,7 @@
 
 #ifdef HAVE_PIRO_ROL
 #include "ROL_Types.hpp"
+#include "ROL_ThyraVector.hpp"
 #endif
 
 #ifdef HAVE_PIRO_TEKO
@@ -100,6 +70,11 @@ public:
                     const ROL::Vector<Real> &u,
                     const ROL::Vector<Real> &z,
                     const int g_idx) const;
+    void block_diagonal_hessian_22(Teuchos::RCP<Thyra::LinearOpBase<Real>>& H,
+                const ROL::Vector<Real> &u,
+                const ROL::Vector<Real> &z,
+                const int g_idx,
+                const int p_index) const;
 #endif
 
     /** \brief . */
@@ -125,6 +100,8 @@ public:
     ::Thyra::ModelEvaluatorBase::InArgs<Real> getLowerBounds() const;
     /** \brief . */
     ::Thyra::ModelEvaluatorBase::InArgs<Real> getUpperBounds() const;
+
+    const std::vector<int>& get_p_indices() const {return p_indices_;}
 
 protected:
 
@@ -237,15 +214,18 @@ ProductModelEvaluator<Real>::get_p_names(int l) const
                         "supports only 1 parameter vector.  Supplied index l = " <<
                         l << std::endl);
 
-    Teuchos::RCP<Teuchos::Array<std::string> > p_names =
-        Teuchos::rcp(new Teuchos::Array<std::string>(p_indices_.size()) );
+    // Names of the parameter vectors p_indices_[0], p_indices_[1], ... of the underlying model,
+    // in this order. Parameter vectors without names are skipped.
+    Teuchos::RCP<Teuchos::Array<std::string> > p_names = Teuchos::rcp(new Teuchos::Array<std::string>());
+    bool hasNames = false;
     for (std::size_t i = 0; i < p_indices_.size(); ++i) {
-    std::stringstream ss;
-    ss << "Parameter " << i;
-    const std::string name = ss.str();
-    (*p_names)[i] = name;
+        const auto names_i = thyra_model_->get_p_names(p_indices_[i]);
+        if (Teuchos::nonnull(names_i)) {
+            hasNames = true;
+            p_names->insert(p_names->end(), names_i->begin(), names_i->end());
+        }
     }
-    return thyra_model_->get_p_names(l);
+    return hasNames ? Teuchos::RCP<const Teuchos::Array<std::string> >(p_names) : Teuchos::null;
 }
 
 template <typename Real>
@@ -652,13 +632,18 @@ ProductModelEvaluator<Real>::getLowerBounds() const
 
     Teuchos::RCP<const Thyra::DefaultProductVectorSpace<Real>> p_space = Teuchos::rcp_dynamic_cast<const Thyra::DefaultProductVectorSpace<Real>>(this->get_p_space(0));
 
+    // The bounds of the product parameter are defined only if the bounds of all the parameters are defined
+    bool areBoundsDefined = true;
     Teuchos::Array<Teuchos::RCP<const Thyra::VectorBase<Real>>> p_vecs(p_indices_.size());
     for (std::size_t i = 0; i < p_indices_.size(); ++i) {
         p_vecs[i] = internal_inArgs.get_p(p_indices_[i]);
+        areBoundsDefined = areBoundsDefined && Teuchos::nonnull(p_vecs[i]);
     }
-    Teuchos::RCP<Thyra::DefaultProductVector<Real>> p_prod = Thyra::defaultProductVector<double>(p_space, p_vecs());
 
-    result.set_p(0, p_prod);
+    if (areBoundsDefined)
+        result.set_p(0, Thyra::defaultProductVector<double>(p_space, p_vecs()));
+    else
+        result.set_p(0, Teuchos::null);
 
     return result;
 }
@@ -677,13 +662,18 @@ ProductModelEvaluator<Real>::getUpperBounds() const
 
     Teuchos::RCP<const Thyra::DefaultProductVectorSpace<Real>> p_space = Teuchos::rcp_dynamic_cast<const Thyra::DefaultProductVectorSpace<Real>>(this->get_p_space(0));
 
+    // The bounds of the product parameter are defined only if the bounds of all the parameters are defined
+    bool areBoundsDefined = true;
     Teuchos::Array<Teuchos::RCP<const Thyra::VectorBase<Real>>> p_vecs(p_indices_.size());
     for (std::size_t i = 0; i < p_indices_.size(); ++i) {
         p_vecs[i] = internal_inArgs.get_p(p_indices_[i]);
+        areBoundsDefined = areBoundsDefined && Teuchos::nonnull(p_vecs[i]);
     }
-    Teuchos::RCP<Thyra::DefaultProductVector<Real>> p_prod = Thyra::defaultProductVector<double>(p_space, p_vecs());
 
-    result.set_p(0, p_prod);
+    if (areBoundsDefined)
+        result.set_p(0, Thyra::defaultProductVector<double>(p_space, p_vecs()));
+    else
+        result.set_p(0, Teuchos::null);
 
     return result;
 }
@@ -975,6 +965,41 @@ ProductModelEvaluator<Real>::block_diagonal_hessian_22(const Teuchos::RCP<Thyra:
     H->endBlockFill();
 
     thyra_model_->evalModel(inArgs, outArgs);
+}
+
+template <typename Real>
+void
+ProductModelEvaluator<Real>::block_diagonal_hessian_22(Teuchos::RCP<Thyra::LinearOpBase<Real>>& H,
+                    const ROL::Vector<Real> &u,
+                    const ROL::Vector<Real> &z,
+                    const int g_idx,
+                    const int p_index) const
+{
+    Thyra::ModelEvaluatorBase::OutArgs<Real> outArgs = thyra_model_->createOutArgs();
+    bool supports_deriv = true;
+    supports_deriv = supports_deriv &&  outArgs.supports(Thyra::ModelEvaluatorBase::OUT_ARG_hess_g_pp, g_idx, p_index, p_index);
+    
+    TEUCHOS_TEST_FOR_EXCEPTION( !supports_deriv, std::logic_error, 
+        "ProductModelEvaluator<Real>::block_diagonal_hessian_22: H_pp is not supported");
+
+    const ROL::ThyraVector<Real>  & thyra_p = dynamic_cast<const ROL::ThyraVector<Real>&>(z);
+    ROL::Ptr<ROL::Vector<Real>> unew = u.clone();
+    unew->set(u);
+    const ROL::ThyraVector<Real>  & thyra_x = dynamic_cast<const ROL::ThyraVector<Real>&>(*unew);
+
+    Thyra::ModelEvaluatorBase::InArgs<Real> inArgs = thyra_model_->createInArgs();
+
+    inArgs.set_p(p_index, thyra_p.getVector());
+    inArgs.set_x(thyra_x.getVector());
+
+    Teuchos::RCP< Thyra::VectorBase<Real> > multiplier_g = Thyra::createMember<Real>(thyra_model_->get_g_multiplier_space(g_idx));
+    Thyra::put_scalar(1.0, multiplier_g.ptr());
+    inArgs.set_g_multiplier(g_idx, multiplier_g);
+
+    H = thyra_model_->create_hess_g_pp(g_idx, p_index, p_index);
+    outArgs.set_hess_g_pp(g_idx, p_index, p_index, H);
+    thyra_model_->evalModel(inArgs, outArgs);
+
 }
 #endif
 

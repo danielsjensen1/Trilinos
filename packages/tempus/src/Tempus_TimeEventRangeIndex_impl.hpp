@@ -1,10 +1,11 @@
-// @HEADER
-// ****************************************************************************
-//                Tempus: Copyright (2017) Sandia Corporation
+//@HEADER
+// *****************************************************************************
+//          Tempus: Time Integration and Sensitivity Analysis Package
 //
-// Distributed under BSD 3-clause license (See accompanying file Copyright.txt)
-// ****************************************************************************
-// @HEADER
+// Copyright 2017 NTESS and the Tempus contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+//@HEADER
 
 #ifndef Tempus_TimeEventRangeIndex_impl_hpp
 #define Tempus_TimeEventRangeIndex_impl_hpp
@@ -149,7 +150,7 @@ bool TimeEventRangeIndex<Scalar>::eventInRangeIndex(int index1,
 
 template <class Scalar>
 void TimeEventRangeIndex<Scalar>::describe(
-    Teuchos::FancyOStream &out, const Teuchos::EVerbosityLevel verbLevel) const
+    Teuchos::FancyOStream &out, const Teuchos::EVerbosityLevel /*verbLevel*/) const
 {
   auto l_out = Teuchos::fancyOStream(out.getOStream());
   Teuchos::OSTab ostab(*l_out, 2, "TimeEventRangeIndex");

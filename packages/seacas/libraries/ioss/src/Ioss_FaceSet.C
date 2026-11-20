@@ -1,4 +1,4 @@
-// Copyright(C) 1999-2020, 2023 National Technology & Engineering Solutions
+// Copyright(C) 1999-2020, 2023, 2025 National Technology & Engineering Solutions
 // of Sandia, LLC (NTESS).  Under the terms of Contract DE-NA0003525 with
 // NTESS, the U.S. Government retains certain rights in this software.
 //
@@ -9,7 +9,6 @@
 #include "Ioss_Field.h"
 #include "Ioss_Property.h"
 #include <cstddef>
-#include <vector>
 
 #include "Ioss_EntitySet.h"
 #include "Ioss_FieldManager.h"
@@ -54,4 +53,4 @@ Ioss::Property Ioss::FaceSet::get_implicit_property(const std::string &my_name) 
   return Ioss::EntitySet::get_implicit_property(my_name);
 }
 
-void Ioss::FaceSet::block_membership(std::vector<std::string> & /*block_members*/) {}
+void Ioss::FaceSet::block_membership(Ioss::NameList & /*block_members*/) {}

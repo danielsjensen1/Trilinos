@@ -7,7 +7,7 @@
 namespace
 {
 
-class MeshCheckerOwnedOrphans : public stk::unit_test_util::simple_fields::MeshFixture
+class MeshCheckerOwnedOrphans : public stk::unit_test_util::MeshFixture
 {
 protected:
   MeshCheckerOwnedOrphans()
@@ -60,13 +60,11 @@ TEST_F(MeshCheckerOwnedOrphans, check_mesh_with_orphaned_owned_sides)
     EXPECT_EQ(badSidesPerProc[get_bulk().parallel_rank()], orphanedOwnedSidesKeys);
     EXPECT_FALSE(stk::is_true_on_all_procs(get_bulk().parallel(), orphanedOwnedSides.empty()));
     const std::vector<std::string> & orphanedOwnedMessages = get_messages_for_orphaned_owned_sides(get_bulk(), orphanedOwnedSides);
-    for (const std::string & errorMessage : orphanedOwnedMessages) {
-      std::cerr << errorMessage;
-    }
+    EXPECT_EQ(orphanedOwnedSides.size(), orphanedOwnedMessages.size());
   }
 }
 
-class MeshCheckerWithElements : public stk::unit_test_util::simple_fields::MeshFixture
+class MeshCheckerWithElements : public stk::unit_test_util::MeshFixture
 {
 protected:
   void delete_element5_on_proc0()

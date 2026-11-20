@@ -1,44 +1,11 @@
 // @HEADER
-// ************************************************************************
-//
+// *****************************************************************************
 //        Phalanx: A Partial Differential Equation Field Evaluation 
 //       Kernel for Flexible Management of Complex Dependency Chains
-//                    Copyright 2008 Sandia Corporation
 //
-// Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
-// license for use of this work by or on behalf of the U.S. Government.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Roger Pawlowski (rppawlo@sandia.gov), Sandia
-// National Laboratories.
-//
-// ************************************************************************
+// Copyright 2008 NTESS and the Phalanx contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #ifndef PHX_DAG_MANAGER_HPP
@@ -95,6 +62,14 @@ namespace PHX {
 
     //! If set to true, a graphviz file will be written during for DAG construction errors.
     void setWriteGraphvizFileOnError(bool write_file);
+
+    /*! When configured with Phalanx_ENABLE_TEUCHOS_TIME_MONITOR, a
+        static index is added to evaluator timer names to make them
+        unique. Set to false to drop the index from the timer
+        names. Default is true for backwards compatibility. Applies
+        to all DagManager objects with the same Traits.
+    */
+    static void setAddIndexToTimerNames(bool add_index);
 
     /*! Builds the evaluation DAG.  This should only be called after
       all required fields and evaluators are registered. Must be
@@ -335,7 +310,7 @@ namespace PHX {
     bool allow_multiple_evaluators_for_same_field_;
 
 #ifdef PHX_ENABLE_KOKKOS_AMT
-    //std::vector<Kokkos::Experimental::Future<void,PHX::exec_space>> node_futures_;
+    //std::vector<Kokkos::Experimental::Future<void,PHX::ExecutionSpace>> node_futures_;
 #endif
 
     //! A map that returns all evaluators that bind the memory of a particular field. Key is unique field identifier.  
@@ -361,6 +336,9 @@ namespace PHX {
 
     //! True if the unshared fields have been evaluated.
     bool unshared_evaluated_;
+
+    //! If true, a static counter index is added to evaluator timer names to make them unique.
+    inline static bool add_index_to_timer_names_ = true;
   };
   
   template<typename Traits>

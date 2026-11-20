@@ -1,48 +1,12 @@
 // @HEADER
-//
-// ***********************************************************************
-//
+// *****************************************************************************
 //        MueLu: A package for multigrid based preconditioning
-//                  Copyright 2012 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact
-//                    Jonathan Hu       (jhu@sandia.gov)
-//                    Andrey Prokopenko (aprokop@sandia.gov)
-//                    Ray Tuminaro      (rstumin@sandia.gov)
-//
-// ***********************************************************************
-//
+// Copyright 2012 NTESS and the MueLu contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
+
 #ifndef MUELU_SEMICOARSENPFACTORY_KOKKOS_DEF_HPP
 #define MUELU_SEMICOARSENPFACTORY_KOKKOS_DEF_HPP
 
@@ -338,8 +302,8 @@ void SemiCoarsenPFactory_kokkos<
                       const RCP<MultiVector> fineNullspace, RCP<Matrix> &P,
                       RCP<MultiVector> &coarseNullspace) const {
   SubFactoryMonitor m2(*this, "BuildSemiCoarsenP", coarseLevel);
-  using impl_SC  = typename Kokkos::ArithTraits<SC>::val_type;
-  using impl_ATS = Kokkos::ArithTraits<impl_SC>;
+  using impl_SC  = typename KokkosKernels::ArithTraits<SC>::val_type;
+  using impl_ATS = KokkosKernels::ArithTraits<impl_SC>;
   using LOView1D = Kokkos::View<LO *, DeviceType>;
   using LOView2D = Kokkos::View<LO **, DeviceType>;
 
@@ -354,14 +318,14 @@ void SemiCoarsenPFactory_kokkos<
     importer = ImportFactory::Build(Amat->getDomainMap(), Amat->getColMap());
   {
     // Fill local temp with layer ids and fill ghost nodes
-    const auto localTempHost = localTemp->getHostLocalView(Xpetra::Access::ReadWrite);
+    const auto localTempHost = localTemp->getLocalViewHost(Tpetra::Access::ReadWrite);
     for (int row = 0; row < NFRows; row++)
       localTempHost(row, 0) = LayerId[row / DofsPerNode];
-    const auto localTempView = localTemp->getDeviceLocalView(Xpetra::Access::ReadWrite);
+    const auto localTempView = localTemp->getLocalViewDevice(Tpetra::Access::ReadWrite);
     Kokkos::deep_copy(localTempView, localTempHost);
     FCol2LayerVector->doImport(*localTemp, *(importer), Xpetra::INSERT);
   }
-  const auto FCol2LayerView = FCol2LayerVector->getDeviceLocalView(Xpetra::Access::ReadOnly);
+  const auto FCol2LayerView = FCol2LayerVector->getLocalViewDevice(Tpetra::Access::ReadOnly);
   const auto FCol2Layer     = Kokkos::subview(FCol2LayerView, Kokkos::ALL(), 0);
 
   // Construct a map from fine level column to local dof per node id (including
@@ -370,14 +334,14 @@ void SemiCoarsenPFactory_kokkos<
       Xpetra::VectorFactory<LO, LO, GO, NO>::Build(Amat->getColMap());
   {
     // Fill local temp with local dof per node ids and fill ghost nodes
-    const auto localTempHost = localTemp->getHostLocalView(Xpetra::Access::ReadWrite);
+    const auto localTempHost = localTemp->getLocalViewHost(Tpetra::Access::ReadWrite);
     for (int row = 0; row < NFRows; row++)
       localTempHost(row, 0) = row % DofsPerNode;
-    const auto localTempView = localTemp->getDeviceLocalView(Xpetra::Access::ReadWrite);
+    const auto localTempView = localTemp->getLocalViewDevice(Tpetra::Access::ReadWrite);
     Kokkos::deep_copy(localTempView, localTempHost);
     FCol2DofVector->doImport(*localTemp, *(importer), Xpetra::INSERT);
   }
-  const auto FCol2DofView = FCol2DofVector->getDeviceLocalView(Xpetra::Access::ReadOnly);
+  const auto FCol2DofView = FCol2DofVector->getLocalViewDevice(Tpetra::Access::ReadOnly);
   const auto FCol2Dof     = Kokkos::subview(FCol2DofView, Kokkos::ALL(), 0);
 
   // Compute NVertLines
@@ -392,7 +356,7 @@ void SemiCoarsenPFactory_kokkos<
 
   // Construct a map from Line, Layer ids to fine level node
   LOView2D LineLayer2Node("LineLayer2Node", NVertLines, NFLayers);
-  typename LOView2D::HostMirror LineLayer2NodeHost =
+  typename LOView2D::host_mirror_type LineLayer2NodeHost =
       Kokkos::create_mirror_view(LineLayer2Node);
   for (int node = 0; node < NFNodes; ++node)
     LineLayer2NodeHost(VertLineId[node], LayerId[node]) = node;
@@ -400,7 +364,7 @@ void SemiCoarsenPFactory_kokkos<
 
   // Construct a map from coarse layer id to fine layer id
   LOView1D CLayer2FLayer("CLayer2FLayer", NCLayers);
-  typename LOView1D::HostMirror CLayer2FLayerHost =
+  typename LOView1D::host_mirror_type CLayer2FLayerHost =
       Kokkos::create_mirror_view(CLayer2FLayer);
   using coordT = typename Teuchos::ScalarTraits<Scalar>::coordinateType;
   const LO FirstStride =
@@ -423,9 +387,9 @@ void SemiCoarsenPFactory_kokkos<
   int MaxStencilSize = 1;
   LOView1D CLayer2StartLayer("CLayer2StartLayer", NCLayers);
   LOView1D CLayer2StencilSize("CLayer2StencilSize", NCLayers);
-  typename LOView1D::HostMirror CLayer2StartLayerHost =
+  typename LOView1D::host_mirror_type CLayer2StartLayerHost =
       Kokkos::create_mirror_view(CLayer2StartLayer);
-  typename LOView1D::HostMirror CLayer2StencilSizeHost =
+  typename LOView1D::host_mirror_type CLayer2StencilSizeHost =
       Kokkos::create_mirror_view(CLayer2StencilSize);
   for (int clayer = 0; clayer < NCLayers; ++clayer) {
     const int startLayer  = (clayer > 0) ? CLayer2FLayerHost(clayer - 1) + 1 : 0;
@@ -466,7 +430,7 @@ void SemiCoarsenPFactory_kokkos<
   // Note: Each coarse layer stencil dof contributes DofsPerNode to the
   // corresponding row in P
   Kokkos::View<size_t *, DeviceType> Pptr("Pptr", NFRows + 1);
-  typename Kokkos::View<size_t *, DeviceType>::HostMirror PptrHost =
+  typename Kokkos::View<size_t *, DeviceType>::host_mirror_type PptrHost =
       Kokkos::create_mirror_view(Pptr);
   Kokkos::deep_copy(PptrHost, 0);
   for (int line = 0; line < NVertLines; ++line) {
@@ -497,7 +461,7 @@ void SemiCoarsenPFactory_kokkos<
   Kokkos::deep_copy(layerBuckets, 0);
   LOView2D CLayerSNode2PptrOffset("CLayerSNode2PptrOffset", NCLayers,
                                   MaxStencilSize);
-  typename LOView2D::HostMirror CLayerSNode2PptrOffsetHost =
+  typename LOView2D::host_mirror_type CLayerSNode2PptrOffsetHost =
       Kokkos::create_mirror_view(CLayerSNode2PptrOffset);
   for (int clayer = 0; clayer < NCLayers; ++clayer) {
     const int stencilSize = CLayer2StencilSizeHost(clayer);
@@ -649,7 +613,7 @@ void SemiCoarsenPFactory_kokkos<
       rowMap->lib(), NCLayers * itemp, NCLayers * NVertLines * DofsPerNode, 0,
       stridingInfo_, rowMap->getComm(), -1, 0);
   P                   = rcp(new CrsMatrixWrap(rowMap, coarseMap, 0));
-  RCP<CrsMatrix> PCrs = rcp_dynamic_cast<CrsMatrixWrap>(P)->getCrsMatrix();
+  RCP<CrsMatrix> PCrs = toCrsMatrix(P);
   PCrs->setAllValues(Pptr, Pcols, Pvals);
   PCrs->expertStaticFillComplete(coarseMap, Amat->getDomainMap());
 
@@ -663,8 +627,8 @@ void SemiCoarsenPFactory_kokkos<
   coarseNullspace =
       MultiVectorFactory::Build(coarseMap, fineNullspace->getNumVectors());
   const int numVectors           = fineNullspace->getNumVectors();
-  const auto fineNullspaceView   = fineNullspace->getDeviceLocalView(Xpetra::Access::ReadOnly);
-  const auto coarseNullspaceView = coarseNullspace->getDeviceLocalView(Xpetra::Access::ReadWrite);
+  const auto fineNullspaceView   = fineNullspace->getLocalViewDevice(Tpetra::Access::ReadOnly);
+  const auto coarseNullspaceView = coarseNullspace->getLocalViewDevice(Tpetra::Access::ReadWrite);
   using range_policy             = Kokkos::RangePolicy<execution_space>;
   Kokkos::parallel_for(
       "MueLu::SemiCoarsenPFactory_kokkos::BuildSemiCoarsenP Inject Nullspace",

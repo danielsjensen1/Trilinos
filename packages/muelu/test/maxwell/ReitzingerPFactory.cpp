@@ -1,48 +1,12 @@
 // @HEADER
-//
-// ***********************************************************************
-//
+// *****************************************************************************
 //        MueLu: A package for multigrid based preconditioning
-//                  Copyright 2012 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact
-//                    Jonathan Hu       (jhu@sandia.gov)
-//                    Andrey Prokopenko (aprokop@sandia.gov)
-//                    Ray Tuminaro      (rstumin@sandia.gov)
-//
-// ***********************************************************************
-//
+// Copyright 2012 NTESS and the MueLu contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
+
 #include <iostream>
 #include <map>
 #include <Teuchos_UnitTestRepository.hpp>
@@ -119,6 +83,7 @@ CheckCommutingProperty(MueLu::Level& nodeLevel_coarse, MueLu::Level& edgeLevel_f
 template <typename Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
 void read_matrix(Xpetra::UnderlyingLib& lib, RCP<const Teuchos::Comm<int> >& comm,
                  RCP<Xpetra::Matrix<Scalar, LocalOrdinal, GlobalOrdinal, Node> >& SM_Matrix,
+                 RCP<Xpetra::Matrix<Scalar, LocalOrdinal, GlobalOrdinal, Node> >& S_Matrix,
                  RCP<Xpetra::Matrix<Scalar, LocalOrdinal, GlobalOrdinal, Node> >& D0_Matrix,
                  RCP<Xpetra::Matrix<Scalar, LocalOrdinal, GlobalOrdinal, Node> >& Kn_Matrix,
                  RCP<Xpetra::MultiVector<typename Teuchos::ScalarTraits<Scalar>::magnitudeType, LocalOrdinal, GlobalOrdinal, Node> >& coords) {
@@ -163,7 +128,7 @@ void read_matrix(Xpetra::UnderlyingLib& lib, RCP<const Teuchos::Comm<int> >& com
 
   // build stiffness plus mass matrix (SM_Matrix)
   // edge stiffness matrix
-  RCP<Matrix> S_Matrix  = Xpetra::IO<SC, LO, GO, NO>::Read(S_file, edge_map);
+  S_Matrix              = Xpetra::IO<SC, LO, GO, NO>::Read(S_file, edge_map);
   RCP<Matrix> M1_Matrix = Xpetra::IO<SC, LO, GO, NO>::Read(M1_file, edge_map);
   Scalar one            = Teuchos::ScalarTraits<SC>::one();
   Xpetra::MatrixMatrix<Scalar, LocalOrdinal, GlobalOrdinal, Node>::TwoMatrixAdd(*S_Matrix, false, one, *M1_Matrix, false, one, SM_Matrix, *out);
@@ -190,9 +155,9 @@ TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(ReitzingerPFactory, Setup2Level_Unsmoothed, Sc
   RCP<const Teuchos::Comm<int> > comm = TestHelpers::Parameters::getDefaultComm();
   Xpetra::UnderlyingLib lib           = MueLuTests::TestHelpers::Parameters::getLib();
 
-  RCP<Matrix> SM_Matrix, D0_Matrix, Kn_Matrix;
+  RCP<Matrix> SM_Matrix, S_Matrix, D0_Matrix, Kn_Matrix;
   RCP<Xpetra::MultiVector<typename Teuchos::ScalarTraits<Scalar>::magnitudeType, LO, GO, NO> > coords;
-  read_matrix<SC, LO, GO, NO>(lib, comm, SM_Matrix, D0_Matrix, Kn_Matrix, coords);
+  read_matrix<SC, LO, GO, NO>(lib, comm, SM_Matrix, S_Matrix, D0_Matrix, Kn_Matrix, coords);
 
   int NumLevels = 2;
   // This guy works by generating a nodal hierarchy, copying the relevant data to the edge hierarchy
@@ -302,9 +267,9 @@ TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(ReitzingerPFactory, Setup2Level_AlphaSmoothed,
   RCP<const Teuchos::Comm<int> > comm = TestHelpers::Parameters::getDefaultComm();
   Xpetra::UnderlyingLib lib           = MueLuTests::TestHelpers::Parameters::getLib();
 
-  RCP<Matrix> SM_Matrix, D0_Matrix, Kn_Matrix;
+  RCP<Matrix> SM_Matrix, S_Matrix, D0_Matrix, Kn_Matrix;
   RCP<Xpetra::MultiVector<typename Teuchos::ScalarTraits<Scalar>::magnitudeType, LO, GO, NO> > coords;
-  read_matrix<SC, LO, GO, NO>(lib, comm, SM_Matrix, D0_Matrix, Kn_Matrix, coords);
+  read_matrix<SC, LO, GO, NO>(lib, comm, SM_Matrix, S_Matrix, D0_Matrix, Kn_Matrix, coords);
 
   int NumLevels = 2;
   // This guy works by generating a nodal hierarchy, copying the relevant data to the edge hierarchy
@@ -410,9 +375,9 @@ TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(ReitzingerPFactory, Setup3Level_AlphaSmoothed,
   RCP<const Teuchos::Comm<int> > comm = TestHelpers::Parameters::getDefaultComm();
   Xpetra::UnderlyingLib lib           = MueLuTests::TestHelpers::Parameters::getLib();
 
-  RCP<Matrix> SM_Matrix, D0_Matrix, Kn_Matrix;
+  RCP<Matrix> SM_Matrix, S_Matrix, D0_Matrix, Kn_Matrix;
   RCP<Xpetra::MultiVector<typename Teuchos::ScalarTraits<Scalar>::magnitudeType, LO, GO, NO> > coords;
-  read_matrix<SC, LO, GO, NO>(lib, comm, SM_Matrix, D0_Matrix, Kn_Matrix, coords);
+  read_matrix<SC, LO, GO, NO>(lib, comm, SM_Matrix, S_Matrix, D0_Matrix, Kn_Matrix, coords);
 
   int NumLevels = 3;
   // This guy works by generating a nodal hierarchy, copying the relevant data to the edge hierarchy
@@ -493,6 +458,7 @@ TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(ReitzingerPFactory, Setup3Level_AlphaSmoothed,
     if (i == 0) {
       EdgeL->Set("A", SM_Matrix);
       EdgeL->Set("D0", D0_Matrix);
+      EdgeL->Set("CurlCurl", S_Matrix);
     }
   }
 
@@ -558,9 +524,9 @@ TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(ReitzingerPFactory, Setup3Level_Unsmoothed, Sc
   RCP<const Teuchos::Comm<int> > comm = TestHelpers::Parameters::getDefaultComm();
   Xpetra::UnderlyingLib lib           = MueLuTests::TestHelpers::Parameters::getLib();
 
-  RCP<Matrix> SM_Matrix, D0_Matrix, Kn_Matrix;
+  RCP<Matrix> SM_Matrix, S_Matrix, D0_Matrix, Kn_Matrix;
   RCP<Xpetra::MultiVector<typename Teuchos::ScalarTraits<Scalar>::magnitudeType, LO, GO, NO> > coords;
-  read_matrix<SC, LO, GO, NO>(lib, comm, SM_Matrix, D0_Matrix, Kn_Matrix, coords);
+  read_matrix<SC, LO, GO, NO>(lib, comm, SM_Matrix, S_Matrix, D0_Matrix, Kn_Matrix, coords);
 
   int NumLevels = 3;
   // This guy works by generating a nodal hierarchy, copying the relevant data to the edge hierarchy

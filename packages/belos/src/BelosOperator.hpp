@@ -1,43 +1,11 @@
-//@HEADER
-// ************************************************************************
-//
+// @HEADER
+// *****************************************************************************
 //                 Belos: Block Linear Solvers Package
-//                  Copyright 2004 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
-//
-// ************************************************************************
-//@HEADER
+// Copyright 2004-2016 NTESS and the Belos contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
 
 #ifndef BELOS_OPERATOR_HPP
 #define BELOS_OPERATOR_HPP
@@ -76,7 +44,7 @@ namespace Belos {
   /// A concrete implementation of this class is necessary.  Users may
   /// create their own implementation if the supplied implementations
   /// are not suitable for their needs.
-  template <class ScalarType>
+  template <class ScalarType, class DM = DefaultDenseMatrix<int, ScalarType>>
   class Operator {
   public:
     //! @name Constructor/Destructor
@@ -116,8 +84,8 @@ namespace Belos {
     /// applying the operator by throwing a subclass of
     /// std::exception.
     virtual void 
-    Apply (const MultiVec<ScalarType>& x, 
-	   MultiVec<ScalarType>& y, 
+    Apply (const MultiVec<ScalarType, DM>& x,
+	   MultiVec<ScalarType, DM>& y,
 	   ETrans trans=NOTRANS) const = 0;
 
     /// \brief Whether this operator implements applying the transpose.
@@ -158,15 +126,15 @@ namespace Belos {
   /// Belos::MultiVec abstract interfaces.  Any class that inherits
   /// from Belos::Operator will be accepted by the Belos templated
   /// solvers, due to this specialization of Belos::OperatorTraits.
-  template<class ScalarType> 
-  class OperatorTraits<ScalarType, MultiVec<ScalarType>, Operator<ScalarType> > 
+  template<class ScalarType, class DM>
+  class OperatorTraits<ScalarType, MultiVec<ScalarType, DM>, Operator<ScalarType, DM> >
   {
   public:
     //! Specialization of Apply() for Operator and MultiVec objects.
     static void 
-    Apply (const Operator<ScalarType>& Op, 
-	   const MultiVec<ScalarType>& x, 
-	   MultiVec<ScalarType>& y,
+    Apply (const Operator<ScalarType, DM>& Op,
+	   const MultiVec<ScalarType, DM>& x,
+	   MultiVec<ScalarType, DM>& y,
 	   ETrans trans=NOTRANS)
     { 
       Op.Apply (x, y, trans); 
@@ -174,7 +142,7 @@ namespace Belos {
 
     //! Specialization of HasApplyTranspose() for Operator objects.
     static bool
-    HasApplyTranspose (const Operator<ScalarType>& Op)
+    HasApplyTranspose (const Operator<ScalarType, DM>& Op)
     {
       return Op.HasApplyTranspose ();
     }
@@ -195,12 +163,12 @@ namespace Belos {
   /// \warning This interface is experimental and therefore subject to
   ///   change or removal at any time.  Do not rely on the stability
   ///   of this interface.
-  template<class Scalar>
-  class OperatorInnerSolver : public Operator<Scalar> {
+  template<class Scalar, class DM = DefaultDenseMatrix<int, Scalar>>
+  class OperatorInnerSolver : public Operator<Scalar, DM> {
   public:
     typedef Scalar scalar_type;
-    typedef MultiVec<Scalar> multivector_type;
-    typedef Operator<Scalar> operator_type;
+    typedef MultiVec<Scalar, DM> multivector_type;
+    typedef Operator<Scalar, DM> operator_type;
     typedef InnerSolver<scalar_type, multivector_type, operator_type> inner_solver_type;
 
     /// \brief Constructor.
@@ -287,14 +255,14 @@ namespace Belos {
   ///   change or removal at any time.  Do not rely on the stability
   ///   of this interface.
   ///
-  template <class Scalar>
-  class InnerSolverTraits<Scalar, MultiVec<Scalar>, Operator<Scalar> > {
+  template <class Scalar, class DM>
+  class InnerSolverTraits<Scalar, MultiVec<Scalar>, Operator<Scalar, DM> > {
   public:
     typedef Scalar scalar_type;
-    typedef MultiVec<scalar_type> multivector_type;
-    typedef Operator<scalar_type> operator_type;
+    typedef MultiVec<scalar_type, DM> multivector_type;
+    typedef Operator<scalar_type, DM> operator_type;
     typedef InnerSolver<scalar_type, multivector_type, operator_type> inner_solver_type;
-    typedef OperatorInnerSolver<scalar_type> wrapper_type;
+    typedef OperatorInnerSolver<scalar_type, DM> wrapper_type;
 
     /// \brief Wrap the given inner solver in a wrapper_type.
     ///

@@ -1,43 +1,11 @@
-//@HEADER
-// ************************************************************************
-//
+// @HEADER
+// *****************************************************************************
 //                 Belos: Block Linear Solvers Package
-//                  Copyright 2004 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
-//
-// ************************************************************************
-//@HEADER
+// Copyright 2004-2016 NTESS and the Belos contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
 //
 // This driver reads a problem from a Harwell-Boeing (HB) file.
 // The right-hand-side corresponds to a randomly generated solution.
@@ -50,6 +18,7 @@
 #include "BelosTpetraAdapter.hpp"
 #include "BelosTpetraOperator.hpp"
 #include "BelosBlockGmresSolMgr.hpp"
+#include "BelosTpetraTestFramework.hpp"
 
 // I/O for Harwell-Boeing files
 #include "Tpetra_MatrixIO.hpp"
@@ -71,14 +40,15 @@ using Teuchos::RCP;
 using Teuchos::rcp;
 using Teuchos::ParameterList;
 
-int main(int argc, char *argv[]) {
-  typedef Tpetra::MultiVector<>::scalar_type ST;
+template <class ScalarType, class DM>
+int run(Teuchos::CommandLineProcessor&cmdp, int argc, char *argv[]) {
+  typedef typename Tpetra::MultiVector<ScalarType>::scalar_type ST;
   typedef Teuchos::ScalarTraits<ST>       SCT;
-  typedef SCT::magnitudeType               MT;
+  typedef typename SCT::magnitudeType               MT;
   typedef Tpetra::Operator<ST>             OP;
   typedef Tpetra::MultiVector<ST>          MV;
   typedef Belos::OperatorTraits<ST,MV,OP> OPT;
-  typedef Belos::MultiVecTraits<ST,MV>    MVT;
+  typedef Belos::MultiVecTraits<ST,MV,DM> MVT;
 
   Tpetra::ScopeGuard tpetraScope(&argc,&argv);
 
@@ -103,7 +73,6 @@ int main(int argc, char *argv[]) {
     std::string filename("bcsstk14.hb");
     MT tol = 1.0e-5;     // relative residual tolerance
 
-    Teuchos::CommandLineProcessor cmdp(false,true);
     cmdp.setOption("verbose","quiet",&verbose,"Print messages and results.");
     cmdp.setOption("debug","nodebug",&debug,"Run debugging checks.");
     cmdp.setOption("frequency",&frequency,"Solvers frequency for printing residuals (#iters).");
@@ -185,21 +154,20 @@ int main(int argc, char *argv[]) {
     innerBelosList.set( "Timer Label", "Belos Preconditioner Solve" );// Choose a different label for the inner solve
 
     // *****Construct linear problem for the inner iteration using A *****
-    Belos::LinearProblem<ST,MV,OP> innerProblem;
+    Belos::LinearProblem<ST,MV,OP,DM> innerProblem;
     innerProblem.setOperator( A );
     innerProblem.setLabel( "Belos Preconditioner Solve" );
 
     //  
     // *****Create the inner block Gmres iteration********
     //  
-    RCP<Belos::TpetraOperator<ST>> innerSolver;
-    innerSolver = rcp( new Belos::TpetraOperator<ST>( rcpFromRef(innerProblem), rcpFromRef(innerBelosList), "Block Gmres", true ) );
+    auto innerSolver = rcp( new Belos::TpetraOperator<ST, typename MV::local_ordinal_type, typename MV::global_ordinal_type, typename MV::node_type, DM>( rcpFromRef(innerProblem), rcpFromRef(innerBelosList), "Block Gmres", true ) );
     //  
 
     //
     // Construct a linear problem instance with GMRES as preconditoner.
     //
-    Belos::LinearProblem<ST,MV,OP> problem( A, X, B );
+    Belos::LinearProblem<ST,MV,OP,DM> problem( A, X, B );
     problem.setInitResVec( B );
     problem.setRightPrec( innerSolver );
     problem.setLabel( "Belos Flexible Gmres Solve" );
@@ -214,7 +182,7 @@ int main(int argc, char *argv[]) {
     // *************Start the block Gmres iteration***********************
     // *******************************************************************
     //
-    Belos::BlockGmresSolMgr<ST,MV,OP> solver( rcpFromRef(problem), rcpFromRef(belosList) );
+    Belos::BlockGmresSolMgr<ST,MV,OP,DM> solver( rcpFromRef(problem), rcpFromRef(belosList) );
 
     //
     // **********Print out information about problem*******************
@@ -267,4 +235,10 @@ int main(int argc, char *argv[]) {
   TEUCHOS_STANDARD_CATCH_STATEMENTS(verbose, std::cerr, success);
 
   return ( success ? EXIT_SUCCESS : EXIT_FAILURE );
-} // end test_bl_fgmres_hb.cpp
+} // end test_kokkos_bl_fgmres_hb.cpp
+
+#include "BelosTpetraTestMain.hpp"
+
+int main(int argc, char* argv[]) {
+  return common_main(argc, argv);
+}

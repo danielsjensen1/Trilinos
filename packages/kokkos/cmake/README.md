@@ -7,7 +7,7 @@ This document contains a build system overview for developers with information o
 * Optional features
 * Third-partly libraries
 * Compiler and linker flags
-For build system details for users, refer to the [build instructions](../BUILD.md).
+Users please refer to the documentation on https://kokkos.org
 
 ## Build System
 
@@ -113,6 +113,11 @@ The function checks if `-DKokkos_ENABLE_TESTS` was given,
 whether it was given with the wrong case, e.g. `-DKokkos_Enable_Tests`,
 and then defines a regular (non-cache) variable `KOKKOS_ENABLE_TESTS` to `ON` or `OFF`
 depending on the given default and whether the option was specified.
+
+When `Kokkos_ENABLE_TESTS` is `ON`, a smoke target `Kokkos_CoreUnitTest_<Backend>_SmokeTest`
+is generated for each enabled backend; each target contains a small subset of the core unit tests.
+As a guideline for adding more smoke tests, we suggest including one test case per major API
+category or feature block. Do not duplicate by adding variations. Measure compilation time to quantify impact.
 
 ### Defining Kokkos Config Macros
 
@@ -309,20 +314,6 @@ Even if the TPL just loads a valid CMake target, we still must "export" it into 
 When Kokkos is loaded by a downstream project, this TPL must be loaded.
 Calling this function simply appends text recording the location where the TPL was found
 and adding a `find_dependency(...)` call that will reload the CMake target.
-
-### The Great TriBITS Compromise
-
-TriBITS was a masterpiece of CMake version 2 before the modern CMake idioms of building and using.
-TriBITS greatly limited verbosity of CMake files, handled complicated dependency trees between packages, and handled automatically setting up include and linker paths for dependent libraries.
-
-Kokkos is now used by numerous projects that don't (and won't) depend on TriBITS for their build systems.
-Kokkos has to work outside of TriBITS and provide a standard CMake 3+ build system.
-At the same time, Kokkos is used by numerous projects that depend on TriBITS and don't (and won't) switch to a standard CMake 3+ build system.
-
-Instead of calling functions `TRIBITS_X(...)`, the CMake calls wrapper functions `KOKKOS_X(...)`.
-If TriBITS is available (as in Trilinos), `KOKKOS_X` will just be a thin wrapper around `TRIBITS_X`.
-If TriBITS is not available, Kokkos maps `KOKKOS_X` calls to native CMake that complies with CMake 3 idioms.
-For the time being, this seems the most sensible way to handle the competing requirements of a standalone modern CMake and TriBITS build system.
 
 ##### [LICENSE](https://github.com/kokkos/kokkos/blob/devel/LICENSE)
 

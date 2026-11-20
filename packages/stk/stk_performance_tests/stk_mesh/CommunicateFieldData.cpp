@@ -86,23 +86,29 @@ void createNodalVectorFields(stk::mesh::MetaData& meshMetaData,
 
 size_t setFieldData(stk::mesh::BulkData& mesh, stk::mesh::Selector select)
 {
-    const stk::mesh::MetaData& meta = mesh.mesh_meta_data();
-    const stk::mesh::FieldVector& fields = meta.get_fields(stk::topology::NODE_RANK);
-    const stk::mesh::BucketVector& node_buckets = mesh.get_buckets(stk::topology::NODE_RANK, select);
-    size_t num_nodes = 0;
-    for(size_t i=0; i<node_buckets.size(); ++i) {
-        stk::mesh::Bucket& bucket = *node_buckets[i];
-        num_nodes += bucket.size();
-        for(size_t f=0; f<fields.size(); ++f) {
-            double* data = static_cast<double*>(stk::mesh::field_data(*fields[f], bucket));
-            unsigned flen = stk::mesh::field_scalars_per_entity(*fields[f], bucket);
-            for(size_t n=0; n<flen*bucket.size(); ++n) {
-                data[n] = static_cast<double>(f);
-            }
-        }
-    }
+  const stk::mesh::MetaData& meta = mesh.mesh_meta_data();
+  const stk::mesh::FieldVector& fields = meta.get_fields(stk::topology::NODE_RANK);
+  const stk::mesh::BucketVector& nodeBuckets = mesh.get_buckets(stk::topology::NODE_RANK, select);
 
-    return num_nodes;
+  for (unsigned fieldIndex = 0; fieldIndex < fields.size(); ++fieldIndex) {
+    const stk::mesh::FieldBase& field = *fields[fieldIndex];
+    auto fieldData = field.data<double, stk::mesh::ReadWrite>();
+    for (stk::mesh::Bucket* bucket : nodeBuckets) {
+      auto bucketValues = fieldData.bucket_values(*bucket);
+      for (stk::mesh::EntityIdx entityIdx : bucket->entities()) {
+        for (stk::mesh::ScalarIdx scalar : bucketValues.scalars()) {
+          bucketValues(entityIdx, scalar) = static_cast<double>(fieldIndex);
+        }
+      }
+    }
+  }
+
+  size_t numNodes = 0;
+  for (stk::mesh::Bucket* bucket : nodeBuckets) {
+    numNodes += bucket->size();
+  }
+
+  return numNodes;
 }
 
 void createMetaAndBulkData(stk::io::StkMeshIoBroker &exodusFileReader,
@@ -110,7 +116,7 @@ void createMetaAndBulkData(stk::io::StkMeshIoBroker &exodusFileReader,
                            unsigned numBlocks,
                            unsigned numFields)
 {
-    std::string exodusFileName = stk::unit_test_util::simple_fields::get_option("-i", "NO_FILE_SPECIFIED");
+    std::string exodusFileName = stk::unit_test_util::get_option("-i", "NO_FILE_SPECIFIED");
     if (exodusFileName == "NO_FILE_SPECIFIED") {
       exodusFileName = genMeshSpec;
     }
@@ -220,7 +226,6 @@ void test_communicate_field_data_all_ghosting(stk::ParallelMachine communicator,
     batchTimer.initialize_batch_timer();
 
     stk::io::StkMeshIoBroker exodusFileReader(communicator);
-    exodusFileReader.use_simple_fields();
 
     std::string genMeshSpec = "generated:60x60x48|sideset:xXyY";
     const unsigned numBlocks = 1;
@@ -261,11 +266,10 @@ void test_communicate_field_data_all_ghosting(stk::ParallelMachine communicator,
         const_fields[i] = fields[i];
     }
 
-    stk::parallel_machine_barrier(mesh.parallel());
-
     const unsigned NUM_RUNS = 5;
   
     for (unsigned j = 0; j < NUM_RUNS; j++) {
+      stk::parallel_machine_barrier(mesh.parallel());
       batchTimer.start_batch_timer();
 
       for(int iter=0; iter<num_iters; ++iter) {
@@ -290,7 +294,6 @@ void test_communicate_field_data_ghosting(MPI_Comm communicator,
     batchTimer.initialize_batch_timer();
 
     stk::io::StkMeshIoBroker exodusFileReader(communicator);
-    exodusFileReader.use_simple_fields();
     std::string genMeshSpec = "generated:100x100x48|sideset:xXyY";
     createMetaAndBulkData(exodusFileReader,genMeshSpec, numBlocks, numFields);
 
@@ -307,11 +310,10 @@ void test_communicate_field_data_ghosting(MPI_Comm communicator,
         const_fields[i] = fields[i];
     }
 
-    stk::parallel_machine_barrier(mesh.parallel());
-
     const unsigned NUM_RUNS = 5;
   
     for (unsigned j = 0; j < NUM_RUNS; j++) {
+      stk::parallel_machine_barrier(mesh.parallel());
       batchTimer.start_batch_timer();
 
       for(int iter=0; iter<num_iters; ++iter) {
@@ -322,81 +324,65 @@ void test_communicate_field_data_ghosting(MPI_Comm communicator,
     batchTimer.print_batch_timing(num_iters);
 }
 
-void test_communicate_field_data_ngp_ghosting(stk::mesh::BulkData& mesh, const stk::mesh::Ghosting& ghosting, int num_iters, bool syncToHostEveryIter)
+void test_communicate_field_data_ngp_ghosting(int num_iters, bool syncToHostEveryIter)
 {
-    const int my_proc = mesh.parallel_rank();
-    if (my_proc == 0) {
-        std::cerr << "Calling communicate_field_data " << num_iters << " times"<<std::endl;
-    }
+  const int meshDim = stk::unit_test_util::get_command_line_option("-s", 100);
+  std::string meshDimStr = std::to_string(meshDim);
+  std::string meshSpec = "generated:" + meshDimStr + "x" + meshDimStr + "x" + meshDimStr;
 
-    stk::unit_test_util::BatchTimer batchTimer(mesh.parallel());
-    batchTimer.initialize_batch_timer();
-    createNgpFields(mesh);
-    const stk::mesh::MetaData& meta = mesh.mesh_meta_data();
-    const stk::mesh::FieldVector& fields = meta.get_fields();
-    std::vector<stk::mesh::NgpField<double>*> ngpFields;
-    for(auto field : fields) {
-        ngpFields.push_back(&stk::mesh::get_updated_ngp_field<double>(*field));
-    }
+  stk::ParallelMachine comm = MPI_COMM_WORLD;
+  stk::unit_test_util::BatchTimer batchTimer(comm);
+  batchTimer.initialize_batch_timer();
 
-    stk::parallel_machine_barrier(mesh.parallel());
+  stk::io::StkMeshIoBroker exodusFileReader(comm);
 
-    const unsigned NUM_RUNS = 5;
+  const unsigned numBlocks = 1;
+  const unsigned numFields = 8;
+  createMetaAndBulkData(exodusFileReader, meshSpec, numBlocks, numFields);
+
+  stk::mesh::BulkData &mesh = exodusFileReader.bulk_data();
+  const int my_proc = mesh.parallel_rank();
+
+  if (my_proc == 0) {
+      std::cerr << "Calling communicate_field_data " << num_iters << " times"<<std::endl;
+  }
+
+  createNgpFields(mesh);
+  const stk::mesh::MetaData& meta = mesh.mesh_meta_data();
+  const stk::mesh::FieldVector& fields = meta.get_fields();
+  std::vector<stk::mesh::NgpField<double>*> ngpFields;
+  for(auto field : fields) {
+    ngpFields.push_back(&stk::mesh::get_updated_ngp_field<double>(*field));
+  }
+
+  const unsigned NUM_RUNS = 5;
   
-    for (unsigned j = 0; j < NUM_RUNS; j++) {
-      batchTimer.start_batch_timer();
+  for (unsigned j = 0; j < NUM_RUNS; j++) {
+    stk::parallel_machine_barrier(mesh.parallel());
+    batchTimer.start_batch_timer();
 
-      for(int iter=0; iter<num_iters; ++iter) {
-        if(syncToHostEveryIter) {
-          set_modify_on_device<double>(ngpFields);
-        }
-
-        stk::mesh::communicate_field_data(mesh, ngpFields, true);
+    for(int iter=0; iter<num_iters; ++iter) {
+      if(syncToHostEveryIter) {
+        set_modify_on_device<double>(ngpFields);
       }
-      batchTimer.stop_batch_timer();
+
+      stk::mesh::communicate_field_data(mesh, ngpFields, true);
     }
-    batchTimer.print_batch_timing(num_iters);
+    batchTimer.stop_batch_timer();
+  }
+  batchTimer.print_batch_timing(num_iters);
 }
 
 TEST(CommunicateFieldData, copy_to_all)
 {
-    stk::ParallelMachine communicator = MPI_COMM_WORLD;
-    int numProcs = stk::parallel_machine_size(communicator);
-    if (numProcs < 2) {
-      return;
-    }
+  stk::ParallelMachine comm = MPI_COMM_WORLD;
+  if (stk::parallel_machine_size(comm) < 2) { GTEST_SKIP(); }
 
-    test_communicate_field_data_all_ghosting(communicator, 300);
+  test_communicate_field_data_all_ghosting(comm, 300);
 }
 
 
 TEST(CommunicateFieldData, Ghosting)
-{
-    stk::ParallelMachine communicator = MPI_COMM_WORLD;
-    int numProcs = stk::parallel_machine_size(communicator);
-    if (numProcs < 2) {
-      return;
-    }
-  
-    const unsigned numBlocks = 1;
-    const unsigned numFields = 8;
-    test_communicate_field_data_ghosting(communicator, numBlocks, numFields, 1000);
-}
-
-TEST(CommunicateFieldData, Ghosting_MultiBlock)
-{
-    stk::ParallelMachine communicator = MPI_COMM_WORLD;
-    int numProcs = stk::parallel_machine_size(communicator);
-    if (numProcs < 2) {
-      return;
-    }
-  
-    const unsigned numBlocks = 1;
-    const unsigned numFields = 8;
-    test_communicate_field_data_ghosting(communicator, numBlocks, numFields, 300);
-}
-
-TEST(CommunicateFieldData, NgpGhosting)
 {
   stk::ParallelMachine communicator = MPI_COMM_WORLD;
   int numProcs = stk::parallel_machine_size(communicator);
@@ -404,23 +390,31 @@ TEST(CommunicateFieldData, NgpGhosting)
     return;
   }
 
-  int meshDim = stk::unit_test_util::simple_fields::get_command_line_option("-s", 100);
-  std::string meshDimStr = std::to_string(meshDim);
-  int iter = stk::unit_test_util::simple_fields::get_command_line_option("-t", 1000);
-  bool syncToHostEveryIter = stk::unit_test_util::simple_fields::get_command_line_option("-h", false);
-  std::string meshSpec = "generated:" + meshDimStr + "x" + meshDimStr + "x" + meshDimStr;
+  const unsigned numBlocks = 1;
+  const unsigned numFields = 8;
+  test_communicate_field_data_ghosting(communicator, numBlocks, numFields, 1000);
+}
 
-  stk::io::StkMeshIoBroker exodusFileReader(communicator);
-  exodusFileReader.use_simple_fields();
+TEST(CommunicateFieldData, Ghosting_MultiBlock)
+{
+  stk::ParallelMachine communicator = MPI_COMM_WORLD;
+  int numProcs = stk::parallel_machine_size(communicator);
+  if (numProcs < 2) {
+    return;
+  }
 
   const unsigned numBlocks = 1;
   const unsigned numFields = 8;
-  createMetaAndBulkData(exodusFileReader, meshSpec, numBlocks, numFields);
+  test_communicate_field_data_ghosting(communicator, numBlocks, numFields, 300);
+}
 
-  stk::mesh::BulkData &stkMeshBulkData = exodusFileReader.bulk_data();
+TEST(CommunicateFieldData, NgpGhosting)
+{
+  if (stk::parallel_machine_size(MPI_COMM_WORLD) < 2) { GTEST_SKIP(); }
 
-  const stk::mesh::Ghosting& aura_ghosting = stkMeshBulkData.aura_ghosting();
-  test_communicate_field_data_ngp_ghosting(stkMeshBulkData, aura_ghosting, iter, syncToHostEveryIter);
+  int iter = stk::unit_test_util::get_command_line_option("-t", 1000);
+  bool syncToHostEveryIter = stk::unit_test_util::get_command_line_option("-h", false);
+  test_communicate_field_data_ngp_ghosting(iter, syncToHostEveryIter);
 }
 
 }

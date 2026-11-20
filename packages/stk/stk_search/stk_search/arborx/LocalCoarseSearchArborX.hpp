@@ -42,181 +42,236 @@
 #include "ArborX.hpp"
 #include "Kokkos_Core.hpp"
 #include "stk_search/BoxIdent.hpp"
+#include "stk_search/HelperTraits.hpp"
 #include "stk_search/CommonSearchUtil.hpp"
 #include "stk_search/arborx/StkToArborX.hpp"
 #include "stk_util/util/ReportHandler.hpp"
 #include "stk_util/util/SortAndUnique.hpp"
+#include "stk_search/arborx/AccessTraits.hpp"
 
 namespace stk::search
 {
 namespace impl
 {
-  
-template <typename DomainBoxType,
-    typename DomainIdentType,
-    typename RangeBoxType,
-    typename RangeIdentType,
-    typename ValuesViewType,
-    typename OffsetsViewType>
-void fill_local_search_results(const std::vector<std::pair<DomainBoxType, DomainIdentType>>& localDomain,
-    const std::vector<std::pair<RangeBoxType, RangeIdentType>>& localRange,
-    ValuesViewType values,
-    OffsetsViewType offsets,
-    std::vector<std::pair<DomainIdentType, RangeIdentType>>& searchResults)
+
+template <typename DomainViewType, typename RangeViewType, typename ResultView>
+class SearchResultsInserter
 {
-  bool constexpr isSphere = is_stk_sphere<DomainBoxType> || is_stk_sphere<RangeBoxType>;
-  searchResults.clear();
+  public:
+    using DomainBoxIdent = typename DomainViewType::value_type;
+    using RangeBoxIdent  = typename RangeViewType::value_type;
+    using DomainBox      = typename DomainBoxIdent::box_type;
+    using DomainIdent    = typename DomainBoxIdent::ident_type;
+    using RangeBox       = typename RangeBoxIdent::box_type;
+    using RangeIdent     = typename RangeBoxIdent::ident_type;
+    using ExecutionSpace = typename DomainViewType::execution_space;
+    using ArborXPredicateWithIndex = typename ArborX::AccessTraits<impl::ViewWrapperForArborXTraits<DomainViewType>, ArborX::PredicatesTag>::ArborXPredicateWithIndex;
 
-  for (std::size_t i = 0; i < offsets.extent(0) - 1; ++i) {
-    int rangeIndexBegin = offsets(i);
-    int rangeIndexEnd = offsets(i + 1);
+    static bool constexpr isSphere = impl::is_stk_sphere<DomainBox> || impl::is_stk_sphere<RangeBox>;
 
-    for (auto j = rangeIndexBegin; j < rangeIndexEnd; ++j) {
-      auto domainIdx = i;
-      auto rangeIdx = values(j);
+    SearchResultsInserter(DomainViewType localDomain, RangeViewType localRange,
+                          ResultView searchResults, bool swapRangeDomain) :
+      m_localDomain(localDomain),
+      m_localRange(localRange),
+      m_searchResults(searchResults),
+      m_counter(Kokkos::ViewAllocateWithoutInitializing("counter")),
+      m_searchResultsSize(m_searchResults.extent(0)),
+      m_swapRangeDomain(swapRangeDomain)
+    {
+      check_domain_or_range_view_types_local<DomainViewType, typename DomainViewType::execution_space>();
+      check_domain_or_range_view_types_local<RangeViewType, typename RangeViewType::execution_space>();
+      static_assert(is_ident_intersection_container_v<ResultView>, "ResultView must be a View<IdentIntersection>");
 
-      if (!(isSphere) || intersects(localDomain[domainIdx].first, localRange[rangeIdx].first)) {
-        searchResults.emplace_back(localDomain[domainIdx].second, localRange[rangeIdx].second);
+      Kokkos::deep_copy(m_counter, 0);
+
+      Kokkos::Profiling::pushRegion("SearchResultsInserter pre-allocation");
+      if (m_searchResults.extent(0) == 0) {
+        unsigned initialCapacity = std::max(localDomain.extent(0), localRange.extent(0)) * 16;
+        Kokkos::resize(Kokkos::WithoutInitializing, m_searchResults, initialCapacity);
+        m_searchResultsSize = initialCapacity;
+      }
+      Kokkos::Profiling::popRegion();
+    }
+
+    KOKKOS_INLINE_FUNCTION
+    void operator()(const ArborXPredicateWithIndex& predicate, int rangeBoxIdx) const
+    {
+      const int domainBoxIdx = ArborX::getData(predicate);
+      const DomainBoxIdent domainBoxIdent = m_localDomain(domainBoxIdx);
+      const RangeBoxIdent rangeBoxIdent   = m_localRange(rangeBoxIdx);
+
+      if constexpr (isSphere) {
+        if (intersects(domainBoxIdent.box, rangeBoxIdent.box)) {
+          insert_result(domainBoxIdent.ident, rangeBoxIdent.ident);
+        }
+      }
+      else {
+        insert_result(domainBoxIdent.ident, rangeBoxIdent.ident);
       }
     }
-  }
-}
 
-template <typename DomainBoxType,
-    typename DomainIdentType,
-    typename RangeBoxType,
-    typename RangeIdentType,
-    typename ValuesViewType,
-    typename OffsetsViewType,
-    typename ExecutionSpace>
-void fill_local_search_results(const Kokkos::View<BoxIdent<DomainBoxType, DomainIdentType>*, ExecutionSpace> &  localDomain,
-    const Kokkos::View<BoxIdent<RangeBoxType, RangeIdentType>*, ExecutionSpace> & localRange,
-    ValuesViewType values,
-    OffsetsViewType offsets,
-    Kokkos::View<IdentIntersection<DomainIdentType, RangeIdentType>*, ExecutionSpace> & searchResults)
-{ 
-
-  bool constexpr isSphere = is_stk_sphere<DomainBoxType> || is_stk_sphere<RangeBoxType>;
-
-  int numActualSearchResults = 0;
-  Kokkos::parallel_reduce(Kokkos::RangePolicy<ExecutionSpace>(0, 1), KOKKOS_LAMBDA(int /*index*/, int & searchResultSum) {
-      for (std::size_t i = 0; i < offsets.extent(0) - 1; ++i) {
-        int rangeIndexBegin = offsets(i);
-        int rangeIndexEnd = offsets(i + 1);
-
-      for (auto j = rangeIndexBegin; j < rangeIndexEnd; ++j) {
-        auto domainIdx = i;
-        auto rangeIdx = values(j);
-
-        if (!(isSphere) || intersects(localDomain[domainIdx].box, localRange[rangeIdx].box)) {
-            searchResults(searchResultSum++) = {localDomain[domainIdx].ident, localRange[rangeIdx].ident};
+    KOKKOS_INLINE_FUNCTION
+    void insert_result(typename DomainBoxIdent::ident_type domainIdent, typename RangeBoxIdent::ident_type rangeIdent) const
+    {
+      int idx = Kokkos::atomic_fetch_add(&(m_counter()), 1);
+      if (idx < m_searchResultsSize)
+      {
+        if (m_swapRangeDomain) {
+          m_searchResults(idx) = {rangeIdent, domainIdent};
+        }
+        else {
+          m_searchResults(idx) = {domainIdent, rangeIdent};
         }
       }
     }
-    },
-      numActualSearchResults);
 
-    Kokkos::resize(searchResults, numActualSearchResults);
+    bool resizeSearchResults()
+    {
+      int initialResultsSize = m_searchResultsSize;
+      Kokkos::deep_copy(m_searchResultsSize, m_counter);
+      bool needToRunAgain = m_searchResultsSize > initialResultsSize;
 
-}
+      Kokkos::resize(Kokkos::WithoutInitializing, m_searchResults, m_searchResultsSize);
+      if (needToRunAgain)
+      {
+        Kokkos::deep_copy(m_counter, 0);
+      }
+
+      return needToRunAgain;
+    }
+
+    ResultView getSearchResults() { return m_searchResults; }
+
+  private:
+    DomainViewType m_localDomain;
+    RangeViewType m_localRange;
+    ResultView m_searchResults;
+    Kokkos::View<int, ExecutionSpace> m_counter;
+    int m_searchResultsSize;
+    bool m_swapRangeDomain;
+};
 
 }  // namespace impl
 
 template <typename DomainBoxType, typename DomainIdentType, typename RangeBoxType, typename RangeIdentType>
 inline void local_coarse_search_arborx(const std::vector<std::pair<DomainBoxType, DomainIdentType>>& localDomain,
     const std::vector<std::pair<RangeBoxType, RangeIdentType>>& localRange,
-    std::vector<std::pair<DomainIdentType, RangeIdentType>>& searchResults)
+    std::vector<std::pair<DomainIdentType, RangeIdentType>>& searchResults,
+    bool sortSearchResults = false)
 {
-  using ExecSpace = Kokkos::DefaultHostExecutionSpace;
-  using MemSpace = typename ExecSpace::memory_space;
-  using DomainValueType = typename DomainBoxType::value_type;
-  using RangeValueType = typename RangeBoxType::value_type;
-  using ArborXDomainType = typename impl::StkToArborX<DomainBoxType>::ArborXType;
-  using ArborXRangeType = typename impl::StkToArborX<RangeBoxType>::ArborXType;
+  using ExecSpace  = Kokkos::DefaultHostExecutionSpace;
+  using MemSpace   = typename ExecSpace::memory_space;
+  using DomainView = Kokkos::View<const std::pair<DomainBoxType, DomainIdentType>*, Kokkos::HostSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>;
+  using RangeView  = Kokkos::View<const std::pair<RangeBoxType, RangeIdentType>*, Kokkos::HostSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged>>;
+  using Access     = typename ArborX::AccessTraits<impl::ViewWrapperForArborXTraits<DomainView>, ArborX::PredicatesTag>;
+  using ArborXPredicateWithIndex = typename Access::ArborXPredicateWithIndex;
 
-  STK_ThrowRequireMsg((std::is_same_v<DomainValueType, RangeValueType>),
+  static bool constexpr isSphere = impl::is_stk_sphere<DomainBoxType> || impl::is_stk_sphere<RangeBoxType>;
+
+  STK_ThrowRequireMsg((std::is_same_v<typename DomainBoxType::value_type, typename RangeBoxType::value_type>),
       "The domain and range boxes must have the same floating-point precision");
 
   auto execSpace = ExecSpace{};
-  Kokkos::View<ArborXDomainType*, MemSpace> domainBoundingBoxes(
-      Kokkos::view_alloc(Kokkos::WithoutInitializing, "ArborX_Domain_BBs"), localDomain.size());
-  Kokkos::View<ArborXRangeType*, MemSpace> rangeBoundingBoxes(
-      Kokkos::view_alloc(Kokkos::WithoutInitializing, "ArborX_Range_BBs"), localRange.size());
 
-  Kokkos::View<int*, MemSpace> values(Kokkos::view_alloc(Kokkos::WithoutInitializing, "Values"), 0);
-  Kokkos::View<ArborX::Intersects<ArborXDomainType>*, MemSpace> queries(
-      Kokkos::view_alloc(Kokkos::WithoutInitializing, "Queries"), localDomain.size());
-  Kokkos::View<int*, MemSpace> offsets(Kokkos::view_alloc(Kokkos::WithoutInitializing, "Offsets"), 0);
+  DomainView localDomainView(Kokkos::view_wrap(localDomain.data()), localDomain.size());
+  RangeView localRangeView(Kokkos::view_wrap(localRange.data()), localRange.size());
+  auto localDomainViewWrapped = impl::wrap_view_for_arborx(localDomainView);
+  auto localRangeViewWrapped  = impl::wrap_view_for_arborx(localRangeView);
 
-  impl::convert_and_init_bounding_boxes(localDomain, domainBoundingBoxes);
-  impl::convert_and_init_bounding_boxes(localRange, rangeBoundingBoxes);
+  searchResults.clear();
+  auto callback = [&](const ArborXPredicateWithIndex& predicate, int rangeBoxIdx)
+  {
+    int domainBoxIdx = ArborX::getData(predicate);
+    const auto& domainBoxIdent = localDomain[domainBoxIdx];
+    const auto& rangeBoxIdent   = localRange[rangeBoxIdx];
 
-  ArborX::BVH<MemSpace> bvh(execSpace, rangeBoundingBoxes);
+    if (!(isSphere) || intersects(domainBoxIdent.first, rangeBoxIdent.first))
+    {
+#ifdef _OPENMP
+      #pragma omp critical
+#endif
+      searchResults.emplace_back(domainBoxIdent.second, rangeBoxIdent.second);
+    }
+  };
 
-  Kokkos::parallel_for(
-      "setup_queries", Kokkos::RangePolicy<ExecSpace>(0, localDomain.size()),
-      KOKKOS_LAMBDA(int i) { queries(i) = ArborX::intersects(domainBoundingBoxes(i)); });
-  bvh.query(execSpace, queries, values, offsets);
-
+  ArborX::BVH<MemSpace> bvh(execSpace, localRangeViewWrapped);
+  bvh.query(execSpace, localDomainViewWrapped, callback);
   execSpace.fence();
-
-  auto valuesHost = Kokkos::create_mirror_view_and_copy(execSpace, values);
-  auto offsetsHost = Kokkos::create_mirror_view_and_copy(execSpace, offsets);
-
-  const int numCollisions = values.extent(0);
-  searchResults.reserve(numCollisions);
-
-  impl::fill_local_search_results(localDomain, localRange, valuesHost, offsetsHost, searchResults);
+  
+  if (sortSearchResults) {
+    Kokkos::Profiling::pushRegion("Sort searchResults");
+    std::sort(searchResults.begin(), searchResults.end());
+    Kokkos::Profiling::popRegion();
+  }
 }
 
-template <typename DomainBoxType,
-    typename DomainIdentType,
-    typename RangeBoxType,
-    typename RangeIdentType,
-    typename ExecutionSpace>
+template <typename DomainView,
+          typename RangeView,
+          typename ResultView,
+          typename ExecutionSpace = typename DomainView::execution_space>
 inline void local_coarse_search_arborx(
-    const Kokkos::View<BoxIdent<DomainBoxType, DomainIdentType>*, ExecutionSpace>& localDomain,
-    const Kokkos::View<BoxIdent<RangeBoxType, RangeIdentType>*, ExecutionSpace>& localRange,
-    Kokkos::View<IdentIntersection<DomainIdentType, RangeIdentType>*, ExecutionSpace>& searchResults)
+    const DomainView& localDomain,
+    const RangeView& localRange,
+    ResultView& searchResults,
+    ExecutionSpace const& execSpace = ExecutionSpace{},
+    bool sortSearchResults = false)
 {
-  using ExecSpace = ExecutionSpace;
-  using MemSpace = typename ExecSpace::memory_space;
-  using DomainValueType = typename DomainBoxType::value_type;
-  using RangeValueType = typename RangeBoxType::value_type;
-  using ArborXDomainType = typename impl::StkToArborX<DomainBoxType>::ArborXType;
-  using ArborXRangeType = typename impl::StkToArborX<RangeBoxType>::ArborXType;
+  check_coarse_search_types_local<DomainView, RangeView, ResultView, ExecutionSpace>();
+  using MemSpace        = typename ExecutionSpace::memory_space;
+  using DomainValueType = typename DomainView::value_type::box_type::value_type;
+  using RangeValueType  = typename RangeView::value_type::box_type::value_type;
 
   STK_ThrowRequireMsg((std::is_same_v<DomainValueType, RangeValueType>),
       "The domain and range boxes must have the same floating-point precision");
 
-  auto execSpace = ExecSpace{};
-  Kokkos::View<ArborXDomainType*, MemSpace> domainBoundingBoxes(
-      Kokkos::view_alloc(Kokkos::WithoutInitializing, "ArborX_Domain_BBs"), localDomain.extent(0));
-  Kokkos::View<ArborXRangeType*, MemSpace> rangeBoundingBoxes(
-      Kokkos::view_alloc(Kokkos::WithoutInitializing, "ArborX_Range_BBs"), localRange.extent(0));
+  Kokkos::Profiling::pushRegion("STK call arborx");
 
-  Kokkos::View<int*, MemSpace> values(Kokkos::view_alloc(Kokkos::WithoutInitializing, "Values"), 0);
-  Kokkos::View<ArborX::Intersects<ArborXDomainType>*, MemSpace> queries(
-      Kokkos::view_alloc(Kokkos::WithoutInitializing, "Queries"), localDomain.extent(0));
-  Kokkos::View<int*, MemSpace> offsets(Kokkos::view_alloc(Kokkos::WithoutInitializing, "Offsets"), 0);
+  const bool rangeIsSmaller = localRange.extent(0) < localDomain.extent(0);
+  const bool swapRangeDomain = !rangeIsSmaller;
 
-  impl::convert_and_init_bounding_boxes(localDomain, domainBoundingBoxes);
-  impl::convert_and_init_bounding_boxes(localRange, rangeBoundingBoxes);
+  if (rangeIsSmaller) {
+    auto localRangeWrapped = impl::wrap_view_for_arborx(localRange);
+    auto localDomainWrapped = impl::wrap_view_for_arborx(localDomain);
 
-  ArborX::BVH<MemSpace> bvh(execSpace, rangeBoundingBoxes);
+    impl::SearchResultsInserter<DomainView, RangeView, ResultView> callback(localDomain, localRange, searchResults, swapRangeDomain);
 
-  Kokkos::parallel_for(
-      "setup_queries", Kokkos::RangePolicy<ExecSpace>(0, localDomain.extent(0)),
-      KOKKOS_LAMBDA(int i) { queries(i) = ArborX::intersects(domainBoundingBoxes(i)); });
-  bvh.query(execSpace, queries, values, offsets);
+    ArborX::BVH<MemSpace> bvh(execSpace, localRangeWrapped);
+    bvh.query(execSpace, localDomainWrapped, callback);
+  
+    bool runSecondPass = callback.resizeSearchResults();
+    if (runSecondPass)
+    {
+      bvh.query(execSpace, localDomainWrapped, callback);
+    }
+
+    searchResults = callback.getSearchResults();
+  }
+  else {
+    auto localRangeWrapped = impl::wrap_view_for_arborx(localRange);
+    auto localDomainWrapped = impl::wrap_view_for_arborx(localDomain);
+
+    impl::SearchResultsInserter<RangeView, DomainView, ResultView> callback(localRange, localDomain, searchResults, swapRangeDomain);
+
+    ArborX::BVH<MemSpace> bvh(execSpace, localDomainWrapped);
+    bvh.query(execSpace, localRangeWrapped, callback);
+
+    bool runSecondPass = callback.resizeSearchResults();
+    if (runSecondPass)
+    {
+      bvh.query(execSpace, localRangeWrapped, callback);
+    }
+
+    searchResults = callback.getSearchResults();
+  }
 
   Kokkos::fence();
+  Kokkos::Profiling::popRegion();
 
-  const int numCollisions = values.extent(0);
-  searchResults = Kokkos::View<IdentIntersection<DomainIdentType, RangeIdentType>*, ExecutionSpace>(
-        Kokkos::ViewAllocateWithoutInitializing(searchResults.label()), numCollisions);
-
-  impl::fill_local_search_results(localDomain, localRange, values, offsets, searchResults);
+  if (sortSearchResults) {
+    Kokkos::Profiling::pushRegion("Sort searchResults");
+    Kokkos::sort(searchResults, Comparator<typename ResultView::value_type>());
+    Kokkos::Profiling::popRegion();
+  }
 
 }
 

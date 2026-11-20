@@ -1,3 +1,12 @@
+// @HEADER
+// *****************************************************************************
+//        MueLu: A package for multigrid based preconditioning
+//
+// Copyright 2012 NTESS and the MueLu contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
+
 // Type definitions for templated classes (generally graph-related) that do not require a scalar.
 
 #include <Xpetra_UseShortNamesOrdinal.hpp>
@@ -40,9 +49,6 @@ using InterfaceAggregationAlgorithm [[maybe_unused]] = MueLu::InterfaceAggregati
 #endif
 #ifdef MUELU_INTERFACEMAPPINGTRANSFERFACTORY_SHORT
 using InterfaceMappingTransferFactory [[maybe_unused]] = MueLu::InterfaceMappingTransferFactory<LocalOrdinal, GlobalOrdinal, Node>;
-#endif
-#ifdef MUELU_ISORROPIAINTERFACE_SHORT
-using IsorropiaInterface [[maybe_unused]] = MueLu::IsorropiaInterface<LocalOrdinal, GlobalOrdinal, Node>;
 #endif
 #ifdef MUELU_LWGRAPH_SHORT
 using LWGraph [[maybe_unused]] = MueLu::LWGraph<LocalOrdinal, GlobalOrdinal, Node>;
@@ -112,10 +118,4 @@ using VariableContainer [[maybe_unused]] = MueLu::VariableContainer;
 #endif
 #ifdef MUELU_SMOOTHERFACTORYBASE_SHORT
 using SmootherFactoryBase [[maybe_unused]] = MueLu::SmootherFactoryBase;
-#endif
-#ifdef MUELU_AMESOSSMOOTHER_SHORT
-typedef MueLu::AmesosSmoother<Node> AmesosSmoother;
-#endif
-#ifdef MUELU_IFPACKSMOOTHER_SHORT
-typedef MueLu::IfpackSmoother<Node> IfpackSmoother;
 #endif

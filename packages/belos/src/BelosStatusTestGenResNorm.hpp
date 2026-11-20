@@ -1,43 +1,11 @@
-//@HEADER
-// ************************************************************************
-//
+// @HEADER
+// *****************************************************************************
 //                 Belos: Block Linear Solvers Package
-//                  Copyright 2004 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
-//
-// ************************************************************************
-//@HEADER
+// Copyright 2004-2016 NTESS and the Belos contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
 
 #ifndef BELOS_STATUS_TEST_GEN_RESNORM_H
 #define BELOS_STATUS_TEST_GEN_RESNORM_H
@@ -75,15 +43,15 @@
 
 namespace Belos {
 
-template <class ScalarType, class MV, class OP>
-class StatusTestGenResNorm: public StatusTestResNorm<ScalarType,MV,OP> {
+template <class ScalarType, class MV, class OP, class DM = DefaultDenseMatrix<int,ScalarType>>
+class StatusTestGenResNorm: public StatusTestResNorm<ScalarType,MV,OP,DM> {
 
  public:
 
   // Convenience typedefs
   typedef Teuchos::ScalarTraits<ScalarType> SCT;
   typedef typename SCT::magnitudeType MagnitudeType;
-  typedef MultiVecTraits<ScalarType,MV>  MVT;
+  typedef MultiVecTraits<ScalarType,MV,DM>  MVT;
 
   //! @name Enums.
   //@{
@@ -182,7 +150,7 @@ class StatusTestGenResNorm: public StatusTestResNorm<ScalarType,MV,OP> {
 
     \return StatusType: Passed, Failed, or Undefined.
   */
-  StatusType checkStatus(Iteration<ScalarType,MV,OP>* iSolver);
+  StatusType checkStatus(Iteration<ScalarType,MV,OP,DM>* iSolver);
 
   //! Return the result of the most recent CheckStatus call.
   StatusType getStatus() const {return(status_);};
@@ -251,7 +219,7 @@ class StatusTestGenResNorm: public StatusTestResNorm<ScalarType,MV,OP> {
    * After this function is called <tt>getScaledNormValue()</tt> can be called
    * to get the scaling std::vector.
    */
-  StatusType firstCallCheckStatusSetup(Iteration<ScalarType,MV,OP>* iSolver);
+  StatusType firstCallCheckStatusSetup(Iteration<ScalarType,MV,OP,DM>* iSolver);
   //@}
 
   /** \name Overridden from Teuchos::Describable */
@@ -382,8 +350,8 @@ class StatusTestGenResNorm: public StatusTestResNorm<ScalarType,MV,OP> {
 
 };
 
-template <class ScalarType, class MV, class OP>
-StatusTestGenResNorm<ScalarType,MV,OP>::
+template <class ScalarType, class MV, class OP, class DM>
+StatusTestGenResNorm<ScalarType,MV,OP,DM>::
 StatusTestGenResNorm (MagnitudeType Tolerance, int quorum, bool showMaxResNormOnly)
   : tolerance_(Tolerance),
     quorum_(quorum),
@@ -406,12 +374,12 @@ StatusTestGenResNorm (MagnitudeType Tolerance, int quorum, bool showMaxResNormOn
   // the implicit residual std::vector.
 }
 
-template <class ScalarType, class MV, class OP>
-StatusTestGenResNorm<ScalarType,MV,OP>::~StatusTestGenResNorm()
+template <class ScalarType, class MV, class OP, class DM>
+StatusTestGenResNorm<ScalarType,MV,OP,DM>::~StatusTestGenResNorm()
 {}
 
-template <class ScalarType, class MV, class OP>
-void StatusTestGenResNorm<ScalarType,MV,OP>::reset()
+template <class ScalarType, class MV, class OP, class DM>
+void StatusTestGenResNorm<ScalarType,MV,OP,DM>::reset()
 {
   status_ = Undefined;
   curBlksz_ = 0;
@@ -423,8 +391,8 @@ void StatusTestGenResNorm<ScalarType,MV,OP>::reset()
   curSoln_ = Teuchos::null;
 }
 
-template <class ScalarType, class MV, class OP>
-int StatusTestGenResNorm<ScalarType,MV,OP>::defineResForm( ResType TypeOfResidual, NormType TypeOfNorm )
+template <class ScalarType, class MV, class OP, class DM>
+int StatusTestGenResNorm<ScalarType,MV,OP,DM>::defineResForm( ResType TypeOfResidual, NormType TypeOfNorm )
 {
   TEUCHOS_TEST_FOR_EXCEPTION(firstcallDefineResForm_==false,StatusTestError,
         "StatusTestGenResNorm::defineResForm(): The residual form has already been defined.");
@@ -436,8 +404,8 @@ int StatusTestGenResNorm<ScalarType,MV,OP>::defineResForm( ResType TypeOfResidua
   return(0);
 }
 
-template <class ScalarType, class MV, class OP>
-int StatusTestGenResNorm<ScalarType,MV,OP>::defineScaleForm(ScaleType TypeOfScaling, NormType TypeOfNorm,
+template <class ScalarType, class MV, class OP, class DM>
+int StatusTestGenResNorm<ScalarType,MV,OP,DM>::defineScaleForm(ScaleType TypeOfScaling, NormType TypeOfNorm,
                                                          MagnitudeType ScaleValue )
 {
   TEUCHOS_TEST_FOR_EXCEPTION(firstcallDefineScaleForm_==false,StatusTestError,
@@ -451,11 +419,11 @@ int StatusTestGenResNorm<ScalarType,MV,OP>::defineScaleForm(ScaleType TypeOfScal
   return(0);
 }
 
-template <class ScalarType, class MV, class OP>
-StatusType StatusTestGenResNorm<ScalarType,MV,OP>::checkStatus( Iteration<ScalarType,MV,OP>* iSolver )
+template <class ScalarType, class MV, class OP, class DM>
+StatusType StatusTestGenResNorm<ScalarType,MV,OP,DM>::checkStatus( Iteration<ScalarType,MV,OP,DM>* iSolver )
 {
   MagnitudeType zero = Teuchos::ScalarTraits<MagnitudeType>::zero();
-  const LinearProblem<ScalarType,MV,OP>& lp = iSolver->getProblem();
+  const LinearProblem<ScalarType,MV,OP,DM>& lp = iSolver->getProblem();
   // Compute scaling term (done once for each block that's being solved)
   if (firstcallCheckStatus_) {
     StatusType status = firstCallCheckStatusSetup(iSolver);
@@ -583,8 +551,8 @@ StatusType StatusTestGenResNorm<ScalarType,MV,OP>::checkStatus( Iteration<Scalar
   return status_;
 }
 
-template <class ScalarType, class MV, class OP>
-void StatusTestGenResNorm<ScalarType,MV,OP>::print(std::ostream& os, int indent) const
+template <class ScalarType, class MV, class OP, class DM>
+void StatusTestGenResNorm<ScalarType,MV,OP,DM>::print(std::ostream& os, int indent) const
 {
   for (int j = 0; j < indent; j ++)
     os << ' ';
@@ -596,7 +564,7 @@ void StatusTestGenResNorm<ScalarType,MV,OP>::print(std::ostream& os, int indent)
     os << std::endl;
     if(showMaxResNormOnly_ && curBlksz_ > 1) {
       const MagnitudeType maxRelRes = *std::max_element(
-        testvector_.begin()+curLSIdx_[0],testvector_.begin()+curLSIdx_[curBlksz_-1]
+        testvector_.begin()+curLSIdx_[0],testvector_.begin()+curLSIdx_[curBlksz_-1]+1
         );
       for (int j = 0; j < indent + 13; j ++)
         os << ' ';
@@ -615,8 +583,8 @@ void StatusTestGenResNorm<ScalarType,MV,OP>::print(std::ostream& os, int indent)
   os << std::endl;
 }
 
-template <class ScalarType, class MV, class OP>
-void StatusTestGenResNorm<ScalarType,MV,OP>::printStatus(std::ostream& os, StatusType type) const
+template <class ScalarType, class MV, class OP, class DM>
+void StatusTestGenResNorm<ScalarType,MV,OP,DM>::printStatus(std::ostream& os, StatusType type) const
 {
   os << std::left << std::setw(13) << std::setfill('.');
   switch (type) {
@@ -635,13 +603,13 @@ void StatusTestGenResNorm<ScalarType,MV,OP>::printStatus(std::ostream& os, Statu
     return;
 }
 
-template <class ScalarType, class MV, class OP>
-StatusType StatusTestGenResNorm<ScalarType,MV,OP>::firstCallCheckStatusSetup( Iteration<ScalarType,MV,OP>* iSolver )
+template <class ScalarType, class MV, class OP, class DM>
+StatusType StatusTestGenResNorm<ScalarType,MV,OP,DM>::firstCallCheckStatusSetup( Iteration<ScalarType,MV,OP,DM>* iSolver )
 {
   int i;
   MagnitudeType zero = Teuchos::ScalarTraits<MagnitudeType>::zero();
   MagnitudeType one = Teuchos::ScalarTraits<MagnitudeType>::one();
-  const LinearProblem<ScalarType,MV,OP>& lp = iSolver->getProblem();
+  const LinearProblem<ScalarType,MV,OP,DM>& lp = iSolver->getProblem();
   // Compute scaling term (done once for each block that's being solved)
   if (firstcallCheckStatus_) {
     //
@@ -696,5 +664,18 @@ StatusType StatusTestGenResNorm<ScalarType,MV,OP>::firstCallCheckStatusSetup( It
 }
 
 } // end namespace Belos
+
+#ifdef HAVE_BELOS_TPETRA
+#include "BelosTpetraETIHelpers.hpp"
+
+#define BELOS_TPETRA_STATUSTESTGENRESNORM_NOEXTERN_CALL(SC, LO, GO, NT)            \
+  BELOS_TPETRA_CALL(Belos::StatusTestGenResNorm, SC, LO, GO, NT)
+
+#define BELOS_TPETRA_STATUSTESTGENRESNORM_EXTERN_CALL(SC, LO, GO, NT)              \
+  BELOS_TPETRA_EXTERN_CALL(Belos::StatusTestGenResNorm, SC, LO, GO, NT)
+
+TPETRA_INSTANTIATE_SLGN_NO_ORDINAL_SCALAR(BELOS_TPETRA_STATUSTESTGENRESNORM_EXTERN_CALL)
+#endif
+
 
 #endif /* BELOS_STATUS_TEST_RESNORM_H */

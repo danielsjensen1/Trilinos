@@ -50,13 +50,8 @@ namespace stk { namespace mesh { class MetaData; } }
 namespace stk { namespace mesh { class Part; } }
 namespace stk { namespace mesh { class Selector; } }
 
-namespace stk { namespace mesh { class BulkData; } }
-namespace stk { namespace mesh { struct Entity; } }
 // clang-format on
 // #######################   End Clang Header Tool Managed Headers  ########################
-
-namespace stk { namespace io { class MetaData; } }
-namespace stk { namespace io { class BulkData; } }
 
 namespace stk {
 namespace io {
@@ -71,6 +66,7 @@ stk::mesh::Selector internal_build_selector(const stk::mesh::Selector *subset_se
 
 } // namespace impl
 
+int get_max_name_length(const stk::mesh::MetaData& meta);
 
 size_t get_entities(OutputParams &params,
                     const stk::mesh::Part &part,

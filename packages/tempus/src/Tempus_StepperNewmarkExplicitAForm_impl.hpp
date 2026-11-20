@@ -1,10 +1,11 @@
-// @HEADER
-// ****************************************************************************
-//                Tempus: Copyright (2017) Sandia Corporation
+//@HEADER
+// *****************************************************************************
+//          Tempus: Time Integration and Sensitivity Analysis Package
 //
-// Distributed under BSD 3-clause license (See accompanying file Copyright.txt)
-// ****************************************************************************
-// @HEADER
+// Copyright 2017 NTESS and the Tempus contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+//@HEADER
 
 #ifndef Tempus_StepperNewmarkExplicitAForm_impl_hpp
 #define Tempus_StepperNewmarkExplicitAForm_impl_hpp
@@ -303,7 +304,8 @@ void StepperNewmarkExplicitAForm<Scalar>::takeStep(
             Scalar>::ACTION_LOCATION::BEFORE_EXPLICIT_EVAL);
 
     // Evaluate xDotDot = f(x, xDot, t).
-    this->evaluateExplicitODE(a_new, d_new, v_new, time_old, p);
+    const Scalar time_new = workingState->getTime();
+    this->evaluateExplicitODE(a_new, d_new, v_new, time_new, p);
 
     stepperNewmarkExpAppAction_->execute(
         solutionHistory, thisStepper,
@@ -315,7 +317,6 @@ void StepperNewmarkExplicitAForm<Scalar>::takeStep(
 
     if (this->getUseFSAL()) {
       // Evaluate xDotDot = f(x, xDot, t).
-      const Scalar time_new = workingState->getTime();
       this->evaluateExplicitODE(a_new, d_new, v_new, time_new, p);
 
       // For UseFSAL=true, x, xDot and xDotxDot are now sync'ed or consistent

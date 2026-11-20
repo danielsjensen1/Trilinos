@@ -1,3 +1,12 @@
+// @HEADER
+// *****************************************************************************
+//        MueLu: A package for multigrid based preconditioning
+//
+// Copyright 2012 NTESS and the MueLu contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
+
 #include "Smooth_Prolongation.hpp"
 
 namespace MueLu {
@@ -104,7 +113,7 @@ coarse_file_sublist.set("R", "{1}");*/
   MueLu::ParameterListInterpreter<scalar_type> mueLuFactory(*coarse_list);
   RCP<MueLu::Hierarchy<scalar_type>> H = mueLuFactory.CreateHierarchy();
   H->setVerbLevel(Teuchos::VERB_HIGH);
-  RCP<xpetra_matrix> mueluA = MueLu::TpetraCrs_To_XpetraMatrix<scalar_type, local_ordinal_type, global_ordinal_type, node_type>(A);
+  RCP<xpetra_matrix> mueluA = Xpetra::toXpetra(A);
 
   RCP<Xpetra::MultiVector<scalar_type, local_ordinal_type, global_ordinal_type, node_type>> coords = Xpetra::toXpetra(coords_);
 
@@ -124,8 +133,8 @@ coarse_file_sublist.set("R", "{1}");*/
   if (L->IsAvailable("R"))
     restr = L->template Get<RCP<Xpetra::Matrix<scalar_type, local_ordinal_type, global_ordinal_type, node_type>>>("R");
 
-  RCP<crs_matrix_type> tpetra_prolong = MueLuUtilities::Op2NonConstTpetraCrs(prolong);
-  RCP<crs_matrix_type> tpetra_restr   = MueLuUtilities::Op2NonConstTpetraCrs(restr);
+  RCP<crs_matrix_type> tpetra_prolong = toTpetra(prolong);
+  RCP<crs_matrix_type> tpetra_restr   = toTpetra(restr);
 
   int mypid = GlobalComm_->getRank();
   GlobalComm_->barrier();
@@ -199,7 +208,7 @@ coarse_file_sublist.set("R", "{1}");*/
   //=============================================================================================================
 
   RCP<crs_matrix_type> Pbar    = Tpetra::MatrixMatrix::add(1.0, false, *tpetra_prolong, -1.0, false, *BAP);
-  RCP<xpetra_matrix> mueluPbar = MueLu::TpetraCrs_To_XpetraMatrix<scalar_type, local_ordinal_type, global_ordinal_type, node_type>(Pbar);
+  RCP<xpetra_matrix> mueluPbar = Xpetra::toXpetra(Pbar);
 
   H->GetLevel(1)->Set("Pbar", mueluPbar);
 

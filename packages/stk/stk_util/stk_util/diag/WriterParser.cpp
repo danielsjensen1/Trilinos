@@ -117,15 +117,28 @@ WriterParser::parseArg(
     OptionMaskNameMap::const_iterator mask_entry = m_optionMaskNameMap.find(name.c_str());
 
     if (mask_entry != m_optionMaskNameMap.end())
+    {
       m_optionMask |= (*mask_entry).second.m_mask;
-    else {
-      Mask  mask_hex = 0;
+    }
+    else 
+    {
+      Mask mask_hex = 0;
       std::istringstream mask_hex_stream(name.c_str());
       if (mask_hex_stream >> std::resetiosflags(std::ios::basefield) >> mask_hex)
+      {
         m_optionMask |= mask_hex;
+      }
       else
       {
-        throw std::runtime_error("Error: Unrecognized option flag argument" + name + "\n");
+        std::ostringstream os;
+        os << "Error: Unrecognized option flag argument: '" << name << "'.\n"
+           << "Valid option flags are:\n";
+
+        for (const auto& kv : m_optionMaskNameMap) {
+          os << "  " << kv.first << '\n';
+        }
+
+        throw std::runtime_error(os.str());
       }
     }
   }

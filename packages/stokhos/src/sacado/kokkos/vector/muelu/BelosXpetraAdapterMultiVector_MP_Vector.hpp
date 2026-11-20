@@ -1,56 +1,18 @@
 // @HEADER
-//
-// ***********************************************************************
-//
+// *****************************************************************************
 //        MueLu: A package for multigrid based preconditioning
-//                  Copyright 2012 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact
-//                    Jonathan Hu       (jhu@sandia.gov)
-//                    Andrey Prokopenko (aprokop@sandia.gov)
-//                    Ray Tuminaro      (rstumin@sandia.gov)
-//
-// ***********************************************************************
-//
+// Copyright 2012 NTESS and the MueLu contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
+
 #ifndef BELOS_XPETRA_ADAPTER_MULTIVECTOR_MP_VECTOR_HPP
 #define BELOS_XPETRA_ADAPTER_MULTIVECTOR_MP_VECTOR_HPP
 
 #include "BelosXpetraAdapterMultiVector.hpp"
 #include "Stokhos_Sacado_Kokkos_MP_Vector.hpp"
 #include "Belos_TpetraAdapter_MP_Vector.hpp"
-
-#ifdef HAVE_XPETRA_TPETRA
 
 namespace Belos { // should be moved to Belos or Xpetra?
 
@@ -70,7 +32,8 @@ namespace Belos { // should be moved to Belos or Xpetra?
   template<class Storage, class LO, class GO, class Node>
   class MultiVecTraits<typename Storage::value_type,
                        Xpetra::MultiVector<Sacado::MP::Vector<Storage>,
-                                           LO,GO,Node> > {
+                                           LO,GO,Node>,
+                       ::Belos::DefaultDenseMatrix<int, typename Storage::value_type> > {
   public:
     typedef typename Storage::ordinal_type s_ordinal;
     typedef typename Storage::value_type BaseScalar;
@@ -81,7 +44,8 @@ namespace Belos { // should be moved to Belos or Xpetra?
   private:
 
     typedef Xpetra::TpetraMultiVector<Scalar,LO,GO,Node>                   TpetraMultiVector;
-    typedef MultiVecTraits<dot_type,Tpetra::MultiVector<Scalar,LO,GO,Node> > MultiVecTraitsTpetra;
+    typedef ::Belos::DefaultDenseMatrix<int, BaseScalar>                   DM;
+    typedef MultiVecTraits<dot_type,Tpetra::MultiVector<Scalar,LO,GO,Node>,DM> MultiVecTraitsTpetra;
 
   public:
 
@@ -168,7 +132,7 @@ namespace Belos { // should be moved to Belos or Xpetra?
     }
 
     static void MvTimesMatAddMv( dot_type alpha, const Xpetra::MultiVector<Scalar,LO,GO,Node>& A,
-                                 const Teuchos::SerialDenseMatrix<int,dot_type>& B,
+                                 const DM& B,
                                  dot_type beta, Xpetra::MultiVector<Scalar,LO,GO,Node>& mv )
     {
 #ifdef HAVE_BELOS_XPETRA_TIMERS
@@ -213,7 +177,7 @@ namespace Belos { // should be moved to Belos or Xpetra?
       }
     }
 
-    static void MvTransMv( dot_type alpha, const Xpetra::MultiVector<Scalar,LO,GO,Node>& A, const Xpetra::MultiVector<Scalar,LO,GO,Node>& B, Teuchos::SerialDenseMatrix<int,dot_type>& C)
+    static void MvTransMv( dot_type alpha, const Xpetra::MultiVector<Scalar,LO,GO,Node>& A, const Xpetra::MultiVector<Scalar,LO,GO,Node>& B, DM& C)
     {
 #ifdef HAVE_BELOS_XPETRA_TIMERS
       Teuchos::TimeMonitor lcltimer(*mvTransMvTimer_);
@@ -297,7 +261,5 @@ namespace Belos { // should be moved to Belos or Xpetra?
   };
 
 } // end of Belos namespace
-
-#endif
 
 #endif

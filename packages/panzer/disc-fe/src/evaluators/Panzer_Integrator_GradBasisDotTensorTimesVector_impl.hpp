@@ -1,43 +1,11 @@
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //           Panzer: A partial differential equation assembly
 //       engine for strongly coupled complex multiphysics systems
-//                 Copyright (2011) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Roger P. Pawlowski (rppawlo@sandia.gov) and
-// Eric C. Cyr (eccyr@sandia.gov)
-// ***********************************************************************
+// Copyright 2011 NTESS and the Panzer contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #ifndef   __Panzer_Integrator_GradBasisDotTensorTimesVector_impl_hpp__
@@ -187,7 +155,7 @@ namespace panzer
     bool use_shared_memory = panzer::HP::inst().useSharedMemory<ScalarT>();
     if (!use_shared_memory) {
       if (Sacado::IsADType<ScalarT>::value) {
-	const auto fadSize = Kokkos::dimension_scalar(field_.get_view());
+	const auto fadSize = Sacado::dimension_scalar(field_.get_view());
 	tmp_ = PHX::View<ScalarT*>("GradBasisDotTensorTimesVector::tmp_",field_.extent(0),fadSize);
       } else {
 	tmp_ = PHX::View<ScalarT*>("GradBasisDotTensorTimesVector::tmp_",field_.extent(0));
@@ -206,14 +174,19 @@ namespace panzer
   Integrator_GradBasisDotTensorTimesVector<EvalT, Traits>::
   operator()(
     const FieldMultTag& /* tag */,
-    const Kokkos::TeamPolicy<PHX::exec_space>::member_type& team) const
+    const Kokkos::TeamPolicy<PHX::ExecutionSpace>::member_type& team) const
   {
     using panzer::EvaluatorStyle;
     const int cell = team.league_rank();
 
-    // Initialize the evaluated field.
-    const int numQP(vector_.extent(1)), numDim(vector_.extent(2)),
+    // The vector may have more components than the spatial dimension (see
+    // the Vector Data Layout); the gradient of the basis is zero in those
+    // directions and the tensor only spans the spatial dimension, so only
+    // loop over the spatial dimension.
+    const int numQP(vector_.extent(1)), numSpatialDim(basis_.extent(3)),
               numBases(basis_.extent(1));
+
+    // Initialize the evaluated field.
     if (evalStyle_ == EvaluatorStyle::EVALUATES)
       Kokkos::parallel_for(Kokkos::TeamThreadRange(team,0,numBases), [&] (const int basis) {
         field_(cell, basis) = 0.0;
@@ -225,14 +198,21 @@ namespace panzer
       // integration, looping over the bases.
       for (int qp(0); qp < numQP; ++qp)
       {
-        for (int dim(0); dim < numDim; ++dim)
+        for (int dim(0); dim < numSpatialDim; ++dim)
         {
-          tmp_(cell) = 0.0;
-          for (int dim2(0); dim2 < numDim; ++dim2)
-            tmp_(cell) += kokkosTensor_(cell, qp, dim, dim2) * vector_(cell, qp, dim2);
-	  Kokkos::parallel_for(Kokkos::TeamThreadRange(team,0,numBases), [&] (const int basis) {
-	    field_(cell, basis) += basis_(cell, basis, qp, dim) * tmp_(cell);
-	  });
+          // tmp_(cell) is shared by the team, so a single team thread (all of
+          // its vector lanes, to keep hierarchic Fad partitions intact)
+          // computes it, and barriers fence it from the reads.
+          team.team_barrier();
+          if (team.team_rank() == 0) {
+            tmp_(cell) = 0.0;
+            for (int dim2(0); dim2 < numSpatialDim; ++dim2)
+              tmp_(cell) += kokkosTensor_(cell, qp, dim, dim2) * vector_(cell, qp, dim2);
+          }
+          team.team_barrier();
+          Kokkos::parallel_for(Kokkos::TeamThreadRange(team,0,numBases), [&] (const int basis) {
+            field_(cell, basis) += basis_(cell, basis, qp, dim) * tmp_(cell);
+          });
         } // end loop over the dimensions of the vector field
       } // end loop over the quadrature points
     }
@@ -249,14 +229,15 @@ namespace panzer
   Integrator_GradBasisDotTensorTimesVector<EvalT, Traits>::
   operator()(
     const SharedFieldMultTag& /* tag */,
-    const Kokkos::TeamPolicy<PHX::exec_space>::member_type& team) const
+    const Kokkos::TeamPolicy<PHX::ExecutionSpace>::member_type& team) const
   {
     using panzer::EvaluatorStyle;
     const int cell = team.league_rank();
     const int numQP = vector_.extent(1);
-    const int numDim = vector_.extent(2);
+    // Only loop over the spatial dimension; see the non-shared operator.
+    const int numSpatialDim = basis_.extent(3);
     const int numBases = basis_.extent(1);
-    const int fadSize = Kokkos::dimension_scalar(field_.get_view());
+    const int fadSize = Sacado::dimension_scalar(field_.get_view());
 
     scratch_view tmp;
     scratch_view tmp_field;
@@ -280,14 +261,21 @@ namespace panzer
       // integration, looping over the bases.
       for (int qp(0); qp < numQP; ++qp)
       {
-        for (int dim(0); dim < numDim; ++dim)
+        for (int dim(0); dim < numSpatialDim; ++dim)
         {
-          tmp_(cell) = 0.0;
-          for (int dim2(0); dim2 < numDim; ++dim2)
-            tmp_(cell) += kokkosTensor_(cell, qp, dim, dim2) * vector_(cell, qp, dim2);
-	  Kokkos::parallel_for(Kokkos::TeamThreadRange(team,0,numBases), [&] (const int basis) {
-	    tmp_field(basis) += basis_(cell, basis, qp, dim) * tmp_(cell);
-	  });
+          // tmp(0) is shared by the team, so a single team thread (all of its
+          // vector lanes, to keep hierarchic Fad partitions intact) computes
+          // it, and barriers fence it from the reads.
+          team.team_barrier();
+          if (team.team_rank() == 0) {
+            tmp(0) = 0.0;
+            for (int dim2(0); dim2 < numSpatialDim; ++dim2)
+              tmp(0) += kokkosTensor_(cell, qp, dim, dim2) * vector_(cell, qp, dim2);
+          }
+          team.team_barrier();
+          Kokkos::parallel_for(Kokkos::TeamThreadRange(team,0,numBases), [&] (const int basis) {
+            tmp_field(basis) += basis_(cell, basis, qp, dim) * tmp(0);
+          });
         } // end loop over the dimensions of the vector field
       } // end loop over the quadrature points
     }
@@ -327,17 +315,17 @@ namespace panzer
     if (use_shared_memory) {
       int bytes;
       if (Sacado::IsADType<ScalarT>::value) {
-	const int fadSize = Kokkos::dimension_scalar(field_.get_view());
+	const int fadSize = Sacado::dimension_scalar(field_.get_view());
 	bytes = scratch_view::shmem_size(1,fadSize) + scratch_view::shmem_size(basis_.extent(1),fadSize);
       }
       else
 	bytes = scratch_view::shmem_size(1) + scratch_view::shmem_size(basis_.extent(1));
 
-      auto policy = panzer::HP::inst().teamPolicy<ScalarT,SharedFieldMultTag,PHX::Device>(workset.num_cells).set_scratch_size(0,Kokkos::PerTeam(bytes));
+      auto policy = panzer::HP::inst().teamPolicy<ScalarT,SharedFieldMultTag,PHX::ExecutionSpace>(workset.num_cells).set_scratch_size(0,Kokkos::PerTeam(bytes));
       parallel_for(this->getName(), policy, *this);
     }
     else {
-      auto policy = panzer::HP::inst().teamPolicy<ScalarT,FieldMultTag,PHX::Device>(workset.num_cells);
+      auto policy = panzer::HP::inst().teamPolicy<ScalarT,FieldMultTag,PHX::ExecutionSpace>(workset.num_cells);
       parallel_for(this->getName(), policy, *this);
     }
   } // end of evaluateFields()

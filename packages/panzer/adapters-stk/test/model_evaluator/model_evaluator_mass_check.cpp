@@ -1,43 +1,11 @@
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //           Panzer: A partial differential equation assembly
 //       engine for strongly coupled complex multiphysics systems
-//                 Copyright (2011) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Roger P. Pawlowski (rppawlo@sandia.gov) and
-// Eric C. Cyr (eccyr@sandia.gov)
-// ***********************************************************************
+// Copyright 2011 NTESS and the Panzer contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #include <Teuchos_ConfigDefs.hpp>
@@ -60,8 +28,8 @@ using Teuchos::rcp;
 #include "Panzer_Workset_Builder.hpp"
 #include "Panzer_FieldManagerBuilder.hpp"
 #include "Panzer_STKConnManager.hpp"
+#include "Panzer_NodeType.hpp"
 #include "Panzer_TpetraLinearObjFactory.hpp"
-#include "Panzer_BlockedEpetraLinearObjFactory.hpp"
 #include "Panzer_AssemblyEngine.hpp"
 #include "Panzer_AssemblyEngine_TemplateManager.hpp"
 #include "Panzer_AssemblyEngine_TemplateBuilder.hpp"
@@ -79,14 +47,12 @@ using Teuchos::rcp;
 #include "user_app_ClosureModel_Factory_TemplateBuilder.hpp"
 #include "user_app_BCStrategy_Factory.hpp"
 
-#include "Epetra_MpiComm.h"
-
 #include "Teuchos_DefaultMpiComm.hpp"
 #include "Teuchos_OpaqueWrapper.hpp"
 
-#include "Thyra_get_Epetra_Operator.hpp"
+#include "Thyra_TpetraLinearOp.hpp"
 
-#include "Epetra_CrsMatrix.h"
+#include "Tpetra_CrsMatrix.hpp"
 
 #include <cstdio> // for get char
 #include <fstream>
@@ -136,7 +102,7 @@ namespace panzer {
       Stratimikos::DefaultLinearSolverBuilder builder;
       Teuchos::RCP<Teuchos::ParameterList> validList = Teuchos::rcp(new Teuchos::ParameterList(*builder.getValidParameters()));
       builder.setParameterList(validList);
-      RCP<const Thyra::LinearOpWithSolveFactoryBase<double> > lowsFactory = builder.createLinearSolveStrategy("Amesos");
+      RCP<const Thyra::LinearOpWithSolveFactoryBase<double> > lowsFactory = builder.createLinearSolveStrategy("Amesos2");
 
       RCP<PME> me = Teuchos::rcp(new PME(fmb,rLibrary,lof,p_names,p_values,lowsFactory,gd,build_transient_support,0.0));
 
@@ -175,16 +141,17 @@ namespace panzer {
 
       out << "mass = \n" << Teuchos::describe(*mass,Teuchos::VERB_EXTREME) << std::endl;
 
-      Teuchos::RCP<const Epetra_Operator> e_op = Thyra::get_Epetra_Operator(*mass);
-      Teuchos::RCP<const Epetra_CrsMatrix> ecrs_op = Teuchos::rcp_dynamic_cast<const Epetra_CrsMatrix>(e_op);
+      using CrsMatrixType = Tpetra::CrsMatrix<double,panzer::LocalOrdinal,panzer::GlobalOrdinal,panzer::TpetraNodeType>;
+      auto tpetra_op = Teuchos::rcp_dynamic_cast<const Thyra::TpetraLinearOp<double,panzer::LocalOrdinal,panzer::GlobalOrdinal,panzer::TpetraNodeType> >(mass,true);
+      auto crs_op = Teuchos::rcp_dynamic_cast<const CrsMatrixType>(tpetra_op->getConstTpetraOperator(),true);
 
-      double *values[4];
-      int *indices[4];
+      typename CrsMatrixType::local_inds_host_view_type indices[4];
+      typename CrsMatrixType::values_host_view_type values[4];
       int numEntries[4];
-      ecrs_op->ExtractMyRowView(0,numEntries[0],values[0],indices[0]);
-      ecrs_op->ExtractMyRowView(1,numEntries[1],values[1],indices[1]);
-      ecrs_op->ExtractMyRowView(2,numEntries[2],values[2],indices[2]);
-      ecrs_op->ExtractMyRowView(3,numEntries[3],values[3],indices[3]);
+      for (int row=0; row<4; ++row) {
+        crs_op->getLocalRowView(row,indices[row],values[row]);
+        numEntries[row] = static_cast<int>(indices[row].extent(0));
+      }
 
       TEST_ASSERT(numEntries[0]==4);
       TEST_ASSERT(numEntries[1]==4);
@@ -315,7 +282,7 @@ namespace panzer {
          = globalIndexerFactory.buildGlobalIndexer(Teuchos::opaqueWrapper(MPI_COMM_WORLD),physicsBlocks,conn_manager);
 
     Teuchos::RCP<panzer::LinearObjFactory<panzer::Traits> > linObjFactory
-        = Teuchos::rcp(new panzer::BlockedEpetraLinearObjFactory<panzer::Traits,int>(mpiComm,dofManager,false));
+        = Teuchos::rcp(new panzer::TpetraLinearObjFactory<panzer::Traits,double,panzer::LocalOrdinal,panzer::GlobalOrdinal>(mpiComm,dofManager));
     lof = linObjFactory;
 
     rLibrary = Teuchos::rcp(new panzer::ResponseLibrary<panzer::Traits>(wkstContainer,dofManager,linObjFactory));

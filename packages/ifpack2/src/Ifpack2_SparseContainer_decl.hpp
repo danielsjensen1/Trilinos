@@ -1,44 +1,11 @@
-/*@HEADER
-// ***********************************************************************
-//
+// @HEADER
+// *****************************************************************************
 //       Ifpack2: Templated Object-Oriented Algebraic Preconditioner Package
-//                 Copyright (2009) Sandia Corporation
 //
-// Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
-// license for use of this work by or on behalf of the U.S. Government.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
-//
-// ***********************************************************************
-//@HEADER
-*/
+// Copyright 2009 NTESS and the Ifpack2 contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
 
 #ifndef IFPACK2_SPARSECONTAINER_DECL_HPP
 #define IFPACK2_SPARSECONTAINER_DECL_HPP
@@ -130,14 +97,12 @@ namespace Ifpack2 {
 /// to modify the extract() method, so that it translates explicitly
 /// between local row and column indices, instead of just assuming
 /// that they are the same.
-template<typename MatrixType, typename InverseType>
+template <typename MatrixType, typename InverseType>
 class SparseContainer
-: public ContainerImpl<MatrixType, typename InverseType::scalar_type>
-{
-
+  : public ContainerImpl<MatrixType, typename InverseType::scalar_type> {
   //! @name Internal type aliases (private)
   //@{
-private:
+ private:
   /// \brief The first template parameter of this class.
   ///
   /// This must be either a Tpetra::RowMatrix specialization or a
@@ -162,23 +127,24 @@ private:
   using typename Container<MatrixType>::vector_type;
   using typename Container<MatrixType>::import_type;
 
-  using InverseScalar = typename InverseType::scalar_type;
-  using InverseLocalOrdinal = typename InverseType::local_ordinal_type;
+  using InverseScalar        = typename InverseType::scalar_type;
+  using InverseLocalOrdinal  = typename InverseType::local_ordinal_type;
   using InverseGlobalOrdinal = typename InverseType::global_ordinal_type;
-  using InverseNode = typename InverseType::node_type;
+  using InverseNode          = typename InverseType::node_type;
 
   using typename ContainerImpl<MatrixType, InverseScalar>::block_crs_matrix_type;
 
   using inverse_mv_type = Tpetra::MultiVector<InverseScalar, InverseLocalOrdinal, InverseGlobalOrdinal, InverseNode>;
-  using InverseCrs = Tpetra::CrsMatrix<InverseScalar, InverseLocalOrdinal, InverseGlobalOrdinal, InverseNode>;
-  using InverseMap = typename Tpetra::Map<InverseLocalOrdinal, InverseGlobalOrdinal, InverseNode>;
-  using InverseGraph = typename InverseCrs::crs_graph_type;
+  using InverseCrs      = Tpetra::CrsMatrix<InverseScalar, InverseLocalOrdinal, InverseGlobalOrdinal, InverseNode>;
+  using InverseMap      = typename Tpetra::Map<InverseLocalOrdinal, InverseGlobalOrdinal, InverseNode>;
+  using InverseGraph    = typename InverseCrs::crs_graph_type;
   using typename Container<MatrixType>::HostView;
   using typename Container<MatrixType>::ConstHostView;
   using HostViewInverse = typename inverse_mv_type::dual_view_type::t_host;
 
   static_assert(std::is_same<MatrixType,
-                  Tpetra::RowMatrix<SC, LO, GO, NO>>::value, "Ifpack2::SparseContainer: Please use MatrixType = Tpetra::RowMatrix.");
+                             Tpetra::RowMatrix<SC, LO, GO, NO>>::value,
+                "Ifpack2::SparseContainer: Please use MatrixType = Tpetra::RowMatrix.");
 
   /// \brief The (base class) type of the input matrix.
   ///
@@ -191,7 +157,7 @@ private:
   using typename Container<MatrixType>::row_matrix_type;
   //@}
 
-public:
+ public:
   //! \name Constructor and destructor
   //@{
 
@@ -200,15 +166,15 @@ public:
   /// \param matrix [in] The original input matrix.  This Container
   ///   will construct local diagonal blocks from its rows according to
   ///   <tt>partitions</tt>.
-  /// \param partitioner [in] The Partitioner object that assigns
-  ///   local rows of the input matrix to blocks.
+  /// \param partitions [in] Partitioning of local rows into blocks.
+  /// \param importer [in] Import object for communication.
   /// \param pointIndexed [in] If the input matrix is a \c Tpetra::BlockCrsMatrix,
   ///    whether elements of \c partitions[k] identify rows within blocks (true) or
   ///    whole blocks (false).
-  SparseContainer (const Teuchos::RCP<const row_matrix_type>& matrix,
-                   const Teuchos::Array<Teuchos::Array<LO> >& partitions,
-                   const Teuchos::RCP<const import_type>& importer,
-                   bool pointIndexed);
+  SparseContainer(const Teuchos::RCP<const row_matrix_type>& matrix,
+                  const Teuchos::Array<Teuchos::Array<LO>>& partitions,
+                  const Teuchos::RCP<const import_type>& importer,
+                  bool pointIndexed);
 
   //! Destructor (declared virtual for memory safety of derived classes).
   virtual ~SparseContainer();
@@ -228,31 +194,31 @@ public:
   virtual void initialize();
 
   //! Initialize and compute all blocks.
-  virtual void compute ();
+  virtual void compute();
 
-  //! Free all per-block resources: <tt>Inverses_</tt>, and <tt>diagBlocks_</tt>. 
+  //! Free all per-block resources: <tt>Inverses_</tt>, and <tt>diagBlocks_</tt>.
   //! Called by \c BlockRelaxation when the input matrix is changed. Also calls
   //! \c Container::clearBlocks()
-  void clearBlocks ();
+  void clearBlocks();
 
   //! Compute <tt>Y := alpha * M^{-1} X + beta*Y</tt>.
   virtual void
-  apply (ConstHostView X,
-         HostView Y,
-         int blockIndex,
-         Teuchos::ETransp mode = Teuchos::NO_TRANS,
-         SC alpha = Teuchos::ScalarTraits<SC>::one(),
-         SC beta = Teuchos::ScalarTraits<SC>::zero()) const;
+  apply(ConstHostView X,
+        HostView Y,
+        int blockIndex,
+        Teuchos::ETransp mode = Teuchos::NO_TRANS,
+        SC alpha              = Teuchos::ScalarTraits<SC>::one(),
+        SC beta               = Teuchos::ScalarTraits<SC>::zero()) const;
 
   //! Compute <tt>Y := alpha * diag(D) * M^{-1} (diag(D) * X) + beta*Y</tt>.
   virtual void
-  weightedApply (ConstHostView X,
-                 HostView Y,
-                 ConstHostView W,
-                 int blockIndex,
-                 Teuchos::ETransp mode = Teuchos::NO_TRANS,
-                 SC alpha = Teuchos::ScalarTraits<SC>::one(),
-                 SC beta = Teuchos::ScalarTraits<SC>::zero()) const;
+  weightedApply(ConstHostView X,
+                HostView Y,
+                ConstHostView W,
+                int blockIndex,
+                Teuchos::ETransp mode = Teuchos::NO_TRANS,
+                SC alpha              = Teuchos::ScalarTraits<SC>::one(),
+                SC beta               = Teuchos::ScalarTraits<SC>::zero()) const;
 
   //@}
   //! \name Miscellaneous methods
@@ -268,27 +234,26 @@ public:
   //@{
 
   //! A one-line description of this object.
-  virtual std::string description () const;
+  virtual std::string description() const;
 
   //! Print the object with some verbosity level to the given FancyOStream.
   virtual void
-  describe (Teuchos::FancyOStream &out,
-            const Teuchos::EVerbosityLevel verbLevel =
-            Teuchos::Describable::verbLevel_default) const;
+  describe(Teuchos::FancyOStream& out,
+           const Teuchos::EVerbosityLevel verbLevel =
+               Teuchos::Describable::verbLevel_default) const;
   //@}
 
   /// \brief Get the name of this container type for Details::constructContainer()
   static std::string getName();
 
-private:
-
+ private:
   //! Copy constructor: Declared but not implemented, to forbid copy construction.
-  SparseContainer (const SparseContainer<MatrixType,InverseType>& rhs);
+  SparseContainer(const SparseContainer<MatrixType, InverseType>& rhs);
 
   //! Extract the submatrices identified by the local indices set by the constructor.
-  void extract ();
-  void extractGraph ();
-  void extractValues ();
+  void extract();
+  void extractGraph();
+  void extractValues();
 
   /// \brief Post-permutation, post-view version of apply().
   ///
@@ -328,11 +293,10 @@ private:
   //! Serial communicator (containing only MPI_COMM_SELF if MPI is used).
   Teuchos::RCP<Teuchos::Comm<int>> localComm_;
 
-
   //! Parameters for the InverseType linear solve operator.
   Teuchos::ParameterList List_;
 };
 
-}// namespace Ifpack2
+}  // namespace Ifpack2
 
-#endif // IFPACK2_SPARSECONTAINER_HPP
+#endif  // IFPACK2_SPARSECONTAINER_HPP

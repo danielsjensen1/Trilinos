@@ -1,4 +1,4 @@
-// Copyright(C) 1999-2024 National Technology & Engineering Solutions
+// Copyright(C) 1999-2025 National Technology & Engineering Solutions
 // of Sandia, LLC (NTESS).  Under the terms of Contract DE-NA0003525 with
 // NTESS, the U.S. Government retains certain rights in this software.
 //
@@ -58,7 +58,7 @@ namespace Ioex {
  *  parallel exodus database format.
  */
 namespace Ioex {
-  class IOEX_EXPORT DatabaseIO : public Ioex::BaseDatabaseIO
+  class IOEX_EXPORT DatabaseIO final : public Ioex::BaseDatabaseIO
   {
   public:
     DatabaseIO(Ioss::Region *region, const std::string &filename, Ioss::DatabaseUsage db_usage,
@@ -68,14 +68,16 @@ namespace Ioex {
     IOSS_NODISCARD int get_file_pointer() const override; // Open file and set exodusFilePtr.
 
   private:
-    void get_step_times_nl() override;
+    void                get_step_times_nl() override;
+    std::vector<double> get_db_step_times_nl() override;
+    std::vector<double> internal_get_step_times_nl(bool setRegionTimeSteps);
 
     bool open_input_file(bool write_message, std::string *error_msg, int *bad_count,
                          bool abort_if_error) const override;
     bool handle_output_file(bool write_message, std::string *error_msg, int *bad_count,
                             bool overwrite, bool abort_if_error) const override;
-    IOSS_NODISCARD bool check_valid_file_ptr(bool write_message, std::string *error_msg, int *bad_count,
-                              bool abort_if_error) const;
+    IOSS_NODISCARD bool check_valid_file_ptr(bool write_message, std::string *error_msg,
+                                             int *bad_count, bool abort_if_error) const;
 
     int64_t get_field_internal(const Ioss::Region *reg, const Ioss::Field &field, void *data,
                                size_t data_size) const override;
@@ -207,7 +209,8 @@ namespace Ioex {
     // ID Mapping functions.
     IOSS_NODISCARD const Ioss::Map &get_map(ex_entity_type type) const;
     IOSS_NODISCARD const Ioss::Map &get_map(Ioss::Map &entity_map, int64_t entity_count,
-                             ex_entity_type entity_type, ex_inquiry inquiry_type) const;
+                                            ex_entity_type entity_type,
+                                            ex_inquiry     inquiry_type) const;
 
     // Internal data handling
     int64_t handle_node_ids(void *ids, int64_t num_to_get) const;

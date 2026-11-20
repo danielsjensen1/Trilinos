@@ -1,43 +1,10 @@
 // @HEADER
-// ************************************************************************
-//
+// *****************************************************************************
 //                           Intrepid2 Package
-//                 Copyright (2007) Sandia Corporation
 //
-// Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
-// license for use of this work by or on behalf of the U.S. Government.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Kyungjoo Kim  (kyukim@sandia.gov), or
-//                    Mauro Perego  (mperego@sandia.gov)
-//
-// ************************************************************************
+// Copyright 2007 NTESS and the Intrepid2 contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 
@@ -94,6 +61,74 @@ namespace Test {
       *outStream << err.what() << '\n';                                 \
       *outStream << "-------------------------------------------------------------------------------" << "\n\n"; \
     }
+
+template<typename ValueType, typename DeviceType>
+struct DivProjectionNormReduceFunctor {
+  using DynRankView = Kokkos::DynRankView<ValueType,DeviceType>;
+  ordinal_type numRefCoords;
+  ordinal_type basisCardinality;
+  ordinal_type dim;
+  
+  DynRankView basisCoeffsHDiv;
+  DynRankView transformedBasisValuesAtRefCoordsOriented;
+  DynRankView transformedBasisDivsAtRefCoordsOriented;
+  DynRankView weights;
+  DynRankView jacobianAtRefCoords_det;
+  
+  DynRankView funAtRefCoords;
+  DynRankView projectedFunAtRefCoords;
+  DynRankView funDivAtRefCoordsOriented;
+  DynRankView funDivAtPhysRefCoords;
+  
+  DivProjectionNormReduceFunctor(ordinal_type numRefCoords_,
+                                 ordinal_type basisCardinality_,
+                                 ordinal_type dim_,
+                                 
+                                 DynRankView basisCoeffsHDiv_,
+                                 DynRankView transformedBasisValuesAtRefCoordsOriented_,
+                                 DynRankView transformedBasisDivsAtRefCoordsOriented_,
+                                 DynRankView weights_, DynRankView jacobianAtRefCoords_det_,
+                                 
+                                 DynRankView funAtRefCoords_, DynRankView projectedFunAtRefCoords_,
+                                 DynRankView funDivAtRefCoordsOriented_, DynRankView funDivAtPhysRefCoords_)
+  :
+  numRefCoords(numRefCoords_),
+  basisCardinality(basisCardinality_),
+  dim(dim_),
+  
+  basisCoeffsHDiv(basisCoeffsHDiv_),
+  transformedBasisValuesAtRefCoordsOriented(transformedBasisValuesAtRefCoordsOriented_),
+  transformedBasisDivsAtRefCoordsOriented(transformedBasisDivsAtRefCoordsOriented_),
+  weights(weights_),
+  jacobianAtRefCoords_det(jacobianAtRefCoords_det_),
+  
+  funAtRefCoords(funAtRefCoords_),
+  projectedFunAtRefCoords(projectedFunAtRefCoords_),
+  funDivAtRefCoordsOriented(funDivAtRefCoordsOriented_),
+  funDivAtPhysRefCoords(funDivAtPhysRefCoords_)
+  {}
+  
+  KOKKOS_INLINE_FUNCTION
+  void
+  operator()(const int &i, double &norm2Update) const {
+    for(ordinal_type j=0; j<numRefCoords; ++j) {
+      for(ordinal_type k=0; k<basisCardinality; ++k) {
+        for(ordinal_type d=0; d<dim; ++d)
+          projectedFunAtRefCoords(i,j,d) += basisCoeffsHDiv(i,k)*transformedBasisValuesAtRefCoordsOriented(i,k,j,d);
+        funDivAtRefCoordsOriented(i,j) += basisCoeffsHDiv(i,k)*transformedBasisDivsAtRefCoordsOriented(i,k,j);
+      }
+
+      for(ordinal_type d=0; d<dim; ++d) {
+        norm2Update += (funAtRefCoords(i,j,d) - projectedFunAtRefCoords(i,j,d))*
+            (funAtRefCoords(i,j,d) - projectedFunAtRefCoords(i,j,d))*
+            weights(j)*jacobianAtRefCoords_det(i,j);
+      }
+      norm2Update += (funDivAtPhysRefCoords(i,j) - funDivAtRefCoordsOriented(i,j))*
+          (funDivAtPhysRefCoords(i,j) - funDivAtRefCoordsOriented(i,j))*
+          weights(j)*jacobianAtRefCoords_det(i,j);
+    }
+  }
+};
 
 template<typename ValueType, typename DeviceType>
 int ConvergenceHex(const bool verbose) {
@@ -818,7 +853,6 @@ int ConvergenceHex(const bool verbose) {
 
         //Compute physical Dof Coordinates and Reference coordinates
         DynRankView ConstructWithLabel(physRefCoords, numElems, numRefCoords, dim);
-        DynRankView ConstructWithLabel(physDofCoords, numElems, basisCardinality, dim);
         {
           Basis_HGRAD_HEX_C1_FEM<DeviceType,ValueType,ValueType> linearBasis; //used for computing physical coordinates
           DynRankView ConstructWithLabel(linearBasisValuesAtRefCoords, numNodesPerElem, numRefCoords);
@@ -993,27 +1027,20 @@ int ConvergenceHex(const bool verbose) {
         DynRankView ConstructWithLabel(projectedFunAtRefCoords, numElems, numRefCoords, dim);
         DynRankView ConstructWithLabel(funDivAtRefCoordsOriented, numElems, numRefCoords);
 
+        /*
+         rocmcc 6.0.0 with llvm has trouble (compiler crash) when compiling
+         the KOKKOS_LAMBDA below if we also compile the corresponding H1 norm KOKKOS_LAMBDA
+         above.  So, here we try replacing with a functor in hopes of avoiding whatever collision
+         is happening.
+         */
         //compute error of projection in HDIV norm
         ValueType norm2(0);
-        Kokkos::parallel_reduce(Kokkos::RangePolicy<ExecSpaceType>(0,numElems),
-        KOKKOS_LAMBDA (const int &i, double &norm2Update) {
-          for(ordinal_type j=0; j<numRefCoords; ++j) {
-            for(ordinal_type k=0; k<basisCardinality; ++k) {
-              for(ordinal_type d=0; d<dim; ++d)
-                projectedFunAtRefCoords(i,j,d) += basisCoeffsHDiv(i,k)*transformedBasisValuesAtRefCoordsOriented(i,k,j,d);
-              funDivAtRefCoordsOriented(i,j) += basisCoeffsHDiv(i,k)*transformedBasisDivsAtRefCoordsOriented(i,k,j);
-            }
-
-            for(ordinal_type d=0; d<dim; ++d) {
-              norm2Update += (funAtRefCoords(i,j,d) - projectedFunAtRefCoords(i,j,d))*
-                  (funAtRefCoords(i,j,d) - projectedFunAtRefCoords(i,j,d))*
-                  weights(j)*jacobianAtRefCoords_det(i,j);
-            }
-            norm2Update += (funDivAtPhysRefCoords(i,j) - funDivAtRefCoordsOriented(i,j))*
-                (funDivAtPhysRefCoords(i,j) - funDivAtRefCoordsOriented(i,j))*
-                weights(j)*jacobianAtRefCoords_det(i,j);
-          }
-        },norm2);
+        using DivNormFunctor = DivProjectionNormReduceFunctor<ValueType,DeviceType>;
+        DivNormFunctor divNormFunctor(numRefCoords, basisCardinality, dim, basisCoeffsHDiv,
+                                      transformedBasisValuesAtRefCoordsOriented, transformedBasisDivsAtRefCoordsOriented,
+                                      weights, jacobianAtRefCoords_det, funAtRefCoords, projectedFunAtRefCoords,
+                                      funDivAtRefCoordsOriented, funDivAtPhysRefCoords);
+        Kokkos::parallel_reduce(Kokkos::RangePolicy<ExecSpaceType>(0,numElems),divNormFunctor,norm2);
         ExecSpaceType().fence();
         hdivNorm[iter] = std::sqrt(norm2);
         auto expected_error = useL2Projection ? hdiv_errors_L2[iter] : hdiv_errors[iter];

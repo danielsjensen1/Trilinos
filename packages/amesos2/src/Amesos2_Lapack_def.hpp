@@ -1,44 +1,10 @@
 // @HEADER
-//
-// ***********************************************************************
-//
+// *****************************************************************************
 //           Amesos2: Templated Direct Sparse Solver Package
-//                  Copyright 2011 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
-//
-// ***********************************************************************
-//
+// Copyright 2011 NTESS and the Amesos2 contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 
@@ -278,15 +244,15 @@ namespace Amesos2 {
 
       // typedef Util::get_ccs_helper<MatrixAdapter<Matrix>,
       //        scalar_type, global_ordinal_type, global_size_type> ccs_helper;
-    typedef Util::get_ccs_helper_kokkos_view<MatrixAdapter<Matrix>,
+      typedef Util::get_ccs_helper_kokkos_view<MatrixAdapter<Matrix>,
         host_value_type_array, host_ordinal_type_array, host_ordinal_type_array> ccs_helper;
 
-    ccs_helper::do_get(this->matrixA_.ptr(),
-      nzvals_view_, rowind_view_, colptr_view_, nnz_ret,
-      (is_contiguous_ == true) ? ROOTED : CONTIGUOUS_AND_ROOTED,
-      ARBITRARY,
-      this->rowIndexBase_);
-  }
+      ccs_helper::do_get(this->matrixA_.ptr(),
+        nzvals_view_, rowind_view_, colptr_view_, nnz_ret,
+        (is_contiguous_ == true) ? ROOTED : CONTIGUOUS_AND_ROOTED,
+        ARBITRARY,
+        this->rowIndexBase_);
+    }
 
     if( this->root_ ){
       // entries are initialized to zero in here:
@@ -304,10 +270,19 @@ namespace Amesos2 {
 
       // lu_.print(std::cout);
     }
+    return( true );
+  }
 
-  return( true );
-}
-
+  template <class Matrix, class Vector>
+  void
+  Lapack<Matrix,Vector>::describe_impl(Teuchos::FancyOStream &out,
+                                       const Teuchos::EVerbosityLevel verbLevel) const
+  {
+    out << " LAPACK current parameters:" << std::endl;
+    out << "  > IsContiguous = " << (is_contiguous_ ? "YES" : "NO") << std::endl;
+    out << "  > Transpose    = " << (solver_.transpose() ? "YES" : "NO") << std::endl;
+    out << std::endl;
+  }
 
   template<class Matrix, class Vector>
   const char* Lapack<Matrix,Vector>::name = "LAPACK";

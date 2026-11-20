@@ -1,44 +1,11 @@
-/*@HEADER
-// ***********************************************************************
-//
+// @HEADER
+// *****************************************************************************
 //       Ifpack2: Templated Object-Oriented Algebraic Preconditioner Package
-//                 Copyright (2009) Sandia Corporation
 //
-// Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
-// license for use of this work by or on behalf of the U.S. Government.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
-//
-// ***********************************************************************
-//@HEADER
-*/
+// Copyright 2009 NTESS and the Ifpack2 contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
 
 #ifndef IFPACK2_DENSECONTAINER_DECL_HPP
 #define IFPACK2_DENSECONTAINER_DECL_HPP
@@ -99,13 +66,12 @@ namespace Ifpack2 {
 /// between local row and column indices, instead of just assuming
 /// that they are the same.
 
-template<class MatrixType, class LocalScalarType>
+template <class MatrixType, class LocalScalarType>
 class DenseContainer
-: public ContainerImpl<MatrixType, LocalScalarType>
-{
+  : public ContainerImpl<MatrixType, LocalScalarType> {
   //! @name Internal typedefs (private)
   //@{
-private:
+ private:
   /// \brief The first template parameter of this class.
   ///
   /// This must be either a Tpetra::RowMatrix specialization or a
@@ -154,7 +120,7 @@ private:
   using block_crs_matrix_type = Tpetra::BlockCrsMatrix<SC, LO, GO, NO>;
   //@}
 
-public:
+ public:
   //! \name Constructor and destructor
   //@{
 
@@ -163,20 +129,20 @@ public:
   /// \param matrix [in] The original input matrix.  This Container
   ///   will construct local diagonal blocks from its rows according to
   ///   <tt>partitions</tt>.
-  /// \param partitioner [in] The Partitioner object that assigns
-  ///   local rows of the input matrix to blocks.
+  /// \param partitions [in] Partitioning of local rows into blocks.
+  /// \param importer [in] Import object for communication.
   /// \param pointIndexed [in] If the input matrix is a \c Tpetra::BlockCrsMatrix,
   ///    whether elements of \c partitions[k] identify rows within blocks (true) or
   ///    whole blocks (false).
-  DenseContainer (const Teuchos::RCP<const row_matrix_type>& matrix,
-                  const Teuchos::Array<Teuchos::Array<LO> >& partitions,
-                  const Teuchos::RCP<const import_type>& importer,
-                  bool pointIndexed);
+  DenseContainer(const Teuchos::RCP<const row_matrix_type>& matrix,
+                 const Teuchos::Array<Teuchos::Array<LO>>& partitions,
+                 const Teuchos::RCP<const import_type>& importer,
+                 bool pointIndexed);
 
-  DenseContainer (const DenseContainer<MatrixType, LocalScalarType>& rhs) = delete;
+  DenseContainer(const DenseContainer<MatrixType, LocalScalarType>& rhs) = delete;
 
   //! Destructor (declared virtual for memory safety of derived classes).
-  virtual ~DenseContainer ();
+  virtual ~DenseContainer();
 
   //@}
   //! \name Get and set methods
@@ -187,10 +153,10 @@ public:
   //@{
 
   //! Do all set-up operations that only require matrix structure.
-  virtual void initialize ();
+  virtual void initialize();
 
   //! Extract the local diagonal block and prepare the solver.
-  virtual void compute ();
+  virtual void compute();
 
   void clearBlocks();
 
@@ -201,34 +167,34 @@ public:
   /// \brief Print information about this object to the given output stream.
   ///
   /// operator<< uses this method.
-  virtual std::ostream& print (std::ostream& os) const;
+  virtual std::ostream& print(std::ostream& os) const;
 
   //@}
   //! @name Implementation of Teuchos::Describable
   //@{
 
   //! A one-line description of this object.
-  virtual std::string description () const;
+  virtual std::string description() const;
 
   //! Print the object with some verbosity level to the given FancyOStream.
   virtual void
-  describe (Teuchos::FancyOStream &out,
-            const Teuchos::EVerbosityLevel verbLevel =
-            Teuchos::Describable::verbLevel_default) const;
+  describe(Teuchos::FancyOStream& out,
+           const Teuchos::EVerbosityLevel verbLevel =
+               Teuchos::Describable::verbLevel_default) const;
 
   //@}
 
   /// \brief Get the name of this container type for Details::constructContainer()
   static std::string getName();
 
-private:
+ private:
   //! Populate the diagonal blocks
   void extract();
 
   /// \brief Factor the extracted submatrix.
   ///
   /// Call this after calling extract().
-  void factor ();
+  void factor();
 
   /// \brief Post-permutation, post-view version of apply().
   ///
@@ -262,6 +228,6 @@ private:
   Teuchos::Array<GO> scalarOffsets_;
 };
 
-} // namespace Ifpack2
+}  // namespace Ifpack2
 
-#endif // IFPACK2_DENSECONTAINER_DECL_HPP
+#endif  // IFPACK2_DENSECONTAINER_DECL_HPP

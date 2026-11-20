@@ -52,18 +52,6 @@ namespace stk::search
 {
 namespace impl
 {
-template <typename T>
-bool constexpr is_stk_box =
-    std::is_same_v<T, Box<typename T::value_type>> || std::is_base_of_v<Box<typename T::value_type>, T>;
-
-template <typename T>
-bool constexpr is_stk_sphere =
-    std::is_same_v<T, Sphere<typename T::value_type>> || std::is_base_of_v<Sphere<typename T::value_type>, T>;
-
-template <typename T>
-bool constexpr is_stk_point =
-    std::is_same_v<T, Point<typename T::value_type>> || std::is_base_of_v<Point<typename T::value_type>, T>;
-
 template <typename T, typename = void>
 struct StkToArborX {
 };
@@ -158,27 +146,6 @@ struct StkToArborX<T, std::enable_if_t<is_stk_sphere<T>>> {
 
   ArborXType data;
 };
-
-template <typename StkSourceType, typename ArborXViewType>
-void convert_and_init_bounding_boxes(StkSourceType const& src, ArborXViewType const& view)
-{
-  if constexpr (!Kokkos::is_view_v<StkSourceType>) {
-    auto viewHost = Kokkos::create_mirror_view(view);
-
-    for (std::size_t i = 0; i < viewHost.extent(0); ++i) {
-      auto init = src[i].first;
-      viewHost(i) = StkToArborX<decltype(init)>(init);
-    }
-    Kokkos::deep_copy(view, viewHost);
-  } else {
-    using ExecSpace = typename StkSourceType::execution_space;
-    Kokkos::parallel_for(
-        Kokkos::RangePolicy<ExecSpace>(0, view.extent(0)), KOKKOS_LAMBDA(const int i) {
-          auto init = src(i).box;
-          view(i) = StkToArborX<decltype(init)>(init);
-        });
-  }
-}
 
 }  // namespace impl
 }  // namespace stk::search

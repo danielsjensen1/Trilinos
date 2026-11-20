@@ -1,3 +1,13 @@
+// @HEADER
+// *****************************************************************************
+//           Panzer: A partial differential equation assembly
+//       engine for strongly coupled complex multiphysics systems
+//
+// Copyright 2011 NTESS and the Panzer contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
+
 #ifndef MINIEM_SACADO_KOKKOS_RANDOM_HPP
 #define MINIEM_SACADO_KOKKOS_RANDOM_HPP
 
@@ -7,6 +17,12 @@
 
 namespace Kokkos {
 
+  /** \brief Specializes Kokkos::rand for panzer::Traits::FadType,
+    * drawing random values from the underlying base scalar's generator
+    * and wrapping them as (non-differentiated) Fad values. Needed so
+    * Kokkos random number generation can be used directly in AD
+    * (Jacobian/Tangent) evaluation types.
+    */
   template<class Generator>
   struct rand<Generator,panzer::Traits::FadType> {
     typedef panzer::Traits::FadType Scalar;

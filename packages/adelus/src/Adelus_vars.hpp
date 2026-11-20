@@ -1,46 +1,11 @@
 /*
 //@HEADER
-// ************************************************************************
+// *****************************************************************************
+//                        Adelus
 //
-//                        Adelus v. 1.0
-//       Copyright (2020) National Technology & Engineering
-//               Solutions of Sandia, LLC (NTESS).
-//
-// Under the terms of Contract DE-NA0003525 with NTESS,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of NTESS nor the names of the contributors may be
-// used to endorse or promote products derived from this software without
-// specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY NTESS "AS IS" AND ANY EXPRESS OR IMPLIED
-// WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
-// MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
-// IN NO EVENT SHALL NTESS OR THE CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
-// INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-// (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
-// SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-// HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-// STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-// IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE 
-// POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Vinh Dang (vqdang@sandia.gov)
-//                    Joseph Kotulski (jdkotul@sandia.gov)
-//                    Siva Rajamanickam (srajama@sandia.gov)
-//
-// ************************************************************************
+// Copyright 2020 NTESS and the Adelus contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 //@HEADER
 */
 
@@ -77,20 +42,20 @@ class AdelusHandle {
 
   int my_first_row;  // proc position in a row
   int my_first_col;  // proc position in a col
-  
+
   int my_rows;       // num of rows I own
   int my_cols;       // num of cols I own
-  
+
   int nrhs;          // number of right hand sides in the matrix
   int my_rhs;        // number of right hand sides that I own
-  
+
   int blksz;         // block size for matrix update (matrix-matrix multiply)
                      // (e.g. blksz = 128 for GPU, or blksz = 96 for CPU)
 
-  int myrow;         // process id in the col_comm 
+  int myrow;         // process id in the col_comm
   int mycol;         // process id in the row_comm
 
-
+  bool isMpiGPUAware;
 
  public:
   AdelusHandle( const int comm_id_,
@@ -131,6 +96,9 @@ class AdelusHandle {
     // Distribution for the rhs on myrank
     my_rhs = nrhs / nprocs_row;
     if (my_first_col < nrhs % nprocs_row) my_rhs++;
+
+     // Probe GPU-aware MPI environment variable
+     isMpiGPUAware = probeMpiIsGPUAware(); fprintf(stderr, "Rank %d, Probe ADELUS_USE_GPU_AWARE_MPI env var: %d\n", myrank, isMpiGPUAware);
   }
 
   ~AdelusHandle(){}
@@ -176,7 +144,7 @@ class AdelusHandle {
 
   KOKKOS_INLINE_FUNCTION
   int get_my_first_col() const { return my_first_col; }
-  
+
   KOKKOS_INLINE_FUNCTION
   int get_my_rows() const { return my_rows; }
 
@@ -185,12 +153,15 @@ class AdelusHandle {
 
   KOKKOS_INLINE_FUNCTION
   int get_nrhs() const { return nrhs; }
-  
+
   KOKKOS_INLINE_FUNCTION
   int get_my_rhs() const { return my_rhs; }
 
   KOKKOS_INLINE_FUNCTION
   int get_blksz() const { return blksz; }
+
+  KOKKOS_INLINE_FUNCTION
+  bool get_gpuawarempi_behavior() const { return isMpiGPUAware; }
 };
 
 }//namespace Adelus

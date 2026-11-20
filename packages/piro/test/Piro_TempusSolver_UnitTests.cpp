@@ -1,53 +1,21 @@
-/*
 // @HEADER
-// ************************************************************************
-//
+// *****************************************************************************
 //        Piro: Strategy package for embedded analysis capabilitites
-//                  Copyright (2010) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Andy Salinger (agsalin@sandia.gov), Sandia
-// National Laboratories.
-//
-// ************************************************************************
+// Copyright 2010 NTESS and the Piro contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
-*/
 
 #include "Piro_ConfigDefs.hpp"
+
+#include "Tpetra_Core.hpp"
 
 #ifdef HAVE_PIRO_TEMPUS
 #include "Piro_TempusSolver.hpp"
 #include "Tempus_StepperFactory.hpp"
 #include "Piro_ObserverToTempusIntegrationObserverAdapter.hpp"
+#include "Piro_Test_MockTempusObserver.hpp"
 
 #ifdef HAVE_PIRO_NOX
 #include "Piro_NOXSolver.hpp"
@@ -58,14 +26,14 @@
 #include "Piro_Test_MockObserver.hpp"
 #include "Piro_TempusIntegrator.hpp"
 
-#include "MockModelEval_A.hpp"
+#include "MockModelEval_A_Tpetra.hpp"
+#include "Piro_StratimikosUtils.hpp"
+#include "Teuchos_YamlParameterListCoreHelpers.hpp"
 
-#include "Thyra_EpetraModelEvaluator.hpp"
 #include "Thyra_ModelEvaluatorHelpers.hpp"
 
 #include "Thyra_DefaultNominalBoundsOverrideModelEvaluator.hpp"
-
-#include "Thyra_AmesosLinearOpWithSolveFactory.hpp"
+#include "Thyra_VectorStdOps.hpp"
 
 #include "Teuchos_UnitTestHarness.hpp"
 
@@ -86,29 +54,27 @@ namespace Thyra {
 
 // Setup support
 
-const RCP<EpetraExt::ModelEvaluator> epetraModelNew()
+RCP<Thyra::ModelEvaluator<double> > defaultModelNew()
 {
-#ifdef HAVE_MPI
-  const MPI_Comm comm = MPI_COMM_WORLD;
-#else /*HAVE_MPI*/
-  const int comm = 0;
-#endif /*HAVE_MPI*/
-  return rcp(new MockModelEval_A(comm));
-}
+  auto comm = Tpetra::getDefaultComm();
+  auto model = rcp(new MockModelEval_A_Tpetra(comm));
 
-const RCP<Thyra::ModelEvaluatorDefaultBase<double> > thyraModelNew(const RCP<EpetraExt::ModelEvaluator> &epetraModel)
-{
-  const RCP<Thyra::LinearOpWithSolveFactoryBase<double> > lowsFactory(new Thyra::AmesosLinearOpWithSolveFactory);
-  return epetraModelEvaluator(epetraModel, lowsFactory);
-}
+  std::string inputFile = "input_tempus_be_nox_solver.yaml";
+  auto piroParams = rcp(new Teuchos::ParameterList("Piro Parameters"));
+  Teuchos::updateParametersFromYamlFile(inputFile, piroParams.ptr());
 
-RCP<Thyra::ModelEvaluatorDefaultBase<double> > defaultModelNew()
-{
-  return thyraModelNew(epetraModelNew());
+  auto stratParams = Piro::extractStratimikosParams(piroParams);
+
+  Stratimikos::DefaultLinearSolverBuilder linearSolverBuilder;
+  linearSolverBuilder.setParameterList(stratParams);
+
+  auto lowsFactory = createLinearSolveStrategy(linearSolverBuilder);
+
+  return rcp(new Thyra::DefaultModelEvaluatorWithSolveFactory<double>(model, lowsFactory));
 }
 
 const RCP<TempusSolver<double> > solverNew(
-    const RCP<Thyra::ModelEvaluatorDefaultBase<double> > &thyraModel,
+    const RCP<Thyra::ModelEvaluator<double> > &thyraModel,
     double finalTime, 
     const std::string sens_method_string)
 {
@@ -127,7 +93,8 @@ const RCP<TempusSolver<double> > solverNew(
   SENS_METHOD sens_method; 
   if (sens_method_string == "None") sens_method = Piro::NONE; 
   else if (sens_method_string == "Forward") sens_method = Piro::FORWARD; 
-  else if (sens_method_string == "Adjoint") sens_method = Piro::ADJOINT; 
+  else if (sens_method_string == "Adjoint") sens_method = Piro::ADJOINT;
+  else TEUCHOS_ASSERT(false);
   Teuchos::RCP<Piro::TempusIntegrator<double> > integrator 
       = Teuchos::rcp(new Piro::TempusIntegrator<double>(tempusPL, thyraModel, sens_method));
   const RCP<Thyra::NonlinearSolverBase<double> > stepSolver = Teuchos::null;
@@ -140,7 +107,7 @@ const RCP<TempusSolver<double> > solverNew(
 }
 
 const RCP<TempusSolver<double> > solverNew(
-    const RCP<Thyra::ModelEvaluatorDefaultBase<double> > &thyraModel,
+    const RCP<Thyra::ModelEvaluator<double> > &thyraModel,
     double initialTime,
     double finalTime,
     const RCP<Piro::ObserverBase<double> > &observer,
@@ -161,7 +128,8 @@ const RCP<TempusSolver<double> > solverNew(
   SENS_METHOD sens_method; 
   if (sens_method_string == "None") sens_method = Piro::NONE; 
   else if (sens_method_string == "Forward") sens_method = Piro::FORWARD; 
-  else if (sens_method_string == "Adjoint") sens_method = Piro::ADJOINT; 
+  else if (sens_method_string == "Adjoint") sens_method = Piro::ADJOINT;
+  else TEUCHOS_ASSERT(false);
   Teuchos::RCP<Piro::TempusIntegrator<double> > integrator 
       = Teuchos::rcp(new Piro::TempusIntegrator<double>(tempusPL, thyraModel, sens_method));
   const RCP<const Tempus::SolutionHistory<double> > solutionHistory = integrator->getSolutionHistory();
@@ -180,7 +148,7 @@ const RCP<TempusSolver<double> > solverNew(
 }
 
 const RCP<TempusSolver<double> > solverNew(
-    const RCP<Thyra::ModelEvaluatorDefaultBase<double> > &thyraModel,
+    const RCP<Thyra::ModelEvaluator<double> > &thyraModel,
     double initialTime,
     double finalTime,
     double fixedTimeStep,
@@ -202,13 +170,15 @@ const RCP<TempusSolver<double> > solverNew(
   tempusPL->sublist("Demo Stepper").set("Zero Initial Guess", false);
   tempusPL->sublist("Demo Stepper").set("Solver Name", "Demo Solver");
   tempusPL->sublist("Demo Stepper").sublist("Demo Solver").sublist("NOX").sublist("Direction").set("Method","Newton");
+
   Teuchos::RCP<Piro::TempusIntegrator<double> > integrator = Teuchos::rcp(new Piro::TempusIntegrator<double>(tempusPL, thyraModel));
   const RCP<const Tempus::SolutionHistory<double> > solutionHistory = integrator->getSolutionHistory();
   const RCP<const Tempus::TimeStepControl<double> > timeStepControl = integrator->getTimeStepControl();
   SENS_METHOD sens_method; 
   if (sens_method_string == "None") sens_method = Piro::NONE; 
   else if (sens_method_string == "Forward") sens_method = Piro::FORWARD; 
-  else if (sens_method_string == "Adjoint") sens_method = Piro::ADJOINT; 
+  else if (sens_method_string == "Adjoint") sens_method = Piro::ADJOINT;
+  else TEUCHOS_ASSERT(false);
   const Teuchos::RCP<Tempus::IntegratorObserver<double> > tempusObserver 
       = Teuchos::rcp(new ObserverToTempusIntegrationObserverAdapter<double>(solutionHistory, 
 			      timeStepControl, observer, false, false, sens_method));
@@ -237,7 +207,7 @@ const double tol = 1.0e-8;
 
 TEUCHOS_UNIT_TEST(Piro_TempusSolver, TimeZero_Solution)
 {
-  const RCP<Thyra::ModelEvaluatorDefaultBase<double> > model = defaultModelNew();
+  const auto model = defaultModelNew();
   const double finalTime = 0.0;
 
   const RCP<TempusSolver<double> > solver = solverNew(model, finalTime, "None");
@@ -264,7 +234,7 @@ TEUCHOS_UNIT_TEST(Piro_TempusSolver, TimeZero_Solution)
 
 TEUCHOS_UNIT_TEST(Piro_TempusSolver, TimeZero_Response)
 {
-  const RCP<Thyra::ModelEvaluatorDefaultBase<double> > model = defaultModelNew();
+  const auto model = defaultModelNew();
 
   const int responseIndex = 0;
 
@@ -340,7 +310,7 @@ TEUCHOS_UNIT_TEST(Piro_TempusSolver, TimeZero_NoDgDp_NoResponseSensitivity)
 
 TEUCHOS_UNIT_TEST(Piro_TempusSolver, ObserveInitialCondition)
 {
-  const RCP<Thyra::ModelEvaluatorDefaultBase<double> > model = defaultModelNew();
+  const auto model = defaultModelNew();
   const RCP<MockObserver<double> > observer(new MockObserver<double>);
   const double timeStamp = 2.0;
 
@@ -369,14 +339,25 @@ TEUCHOS_UNIT_TEST(Piro_TempusSolver, ObserveInitialCondition)
 
 TEUCHOS_UNIT_TEST(Piro_TempusSolver, ObserveFinalSolution)
 {
-  const RCP<Thyra::ModelEvaluatorDefaultBase<double> > model = defaultModelNew();
+  const auto model = defaultModelNew();
   const RCP<MockObserver<double> > observer(new MockObserver<double>);
   const double initialTime = 0.0;
   const double finalTime = 0.1;
   const double timeStepSize = 0.05;
 
-  const RCP<TempusSolver<double> > solver =
-    solverNew(model, initialTime, finalTime, timeStepSize, observer, "None");
+  const RCP<ParameterList> appParams(new ParameterList("params"));
+  Teuchos::updateParametersFromYamlFile("input_tempus_be_nox_solver.yaml",appParams.ptr());
+
+  auto& tsc = appParams->sublist("Tempus").sublist("Demo Integrator").sublist("Time Step Control");
+  tsc.set("Initial Time", initialTime);
+  tsc.set("Final Time", finalTime);
+  tsc.set("Minimum Time Step", timeStepSize/10);
+  tsc.set("Initial Time Step", timeStepSize);
+  tsc.set("Maximum Time Step", timeStepSize);
+
+  RCP<Thyra::ModelEvaluator<double>> adjointModel = Teuchos::null;
+  RCP<ObserverBase<double>> piro_obs = observer;
+  auto solver = tempusSolver(appParams,model,adjointModel,piro_obs);
 
   const Thyra::MEB::InArgs<double> inArgs = solver->getNominalValues();
 
@@ -395,5 +376,143 @@ TEUCHOS_UNIT_TEST(Piro_TempusSolver, ObserveFinalSolution)
 
   TEST_FLOATING_EQUALITY(observer->lastStamp(), finalTime, tol);
 }
+
+TEUCHOS_UNIT_TEST(Piro_TempusSolver, ObserveFinalSolutionNoWrapper)
+{
+  const auto model = defaultModelNew();
+  auto observer = Teuchos::rcp(new MockTempusObserver<double>());
+
+  const double initialTime = 0.0;
+  const double finalTime = 0.1;
+  const double timeStepSize = 0.05;
+
+  const RCP<ParameterList> appParams(new ParameterList("params"));
+  Teuchos::updateParametersFromYamlFile("input_tempus_be_nox_solver.yaml",appParams.ptr());
+
+  auto& tsc = appParams->sublist("Tempus").sublist("Demo Integrator").sublist("Time Step Control");
+  tsc.set("Initial Time", initialTime);
+  tsc.set("Final Time", finalTime);
+  tsc.set("Minimum Time Step", timeStepSize/10);
+  tsc.set("Initial Time Step", timeStepSize);
+  tsc.set("Maximum Time Step", timeStepSize);
+
+  RCP<Thyra::ModelEvaluator<double>> adjointModel = Teuchos::null;
+  RCP<ObserverBase<double>> piro_obs = observer;
+  auto solver = tempusSolver(appParams,model,adjointModel,piro_obs);
+
+  // Check that the piro integrator did NOT wrap our observer in a tempus adapter
+  auto piro_integrator = solver->getPiroTempusIntegrator();
+  auto tempus_integrator = piro_integrator->getIntegrator();
+  auto basic_integrator = Teuchos::rcp_dynamic_cast<const Tempus::IntegratorBasic<double>>(tempus_integrator);
+  auto nonconst_basic_integrator = Teuchos::rcp_const_cast<Tempus::IntegratorBasic<double>>(basic_integrator);
+  auto tempus_observer = nonconst_basic_integrator->getObserver();
+  TEST_ASSERT (tempus_observer==observer);
+
+  // Proceed like the test above
+  const Thyra::MEB::InArgs<double> inArgs = solver->getNominalValues();
+
+  Thyra::MEB::OutArgs<double> outArgs = solver->createOutArgs();
+  const int solutionResponseIndex = solver->Ng() - 1;
+  const RCP<Thyra::VectorBase<double> > solution =
+    Thyra::createMember(solver->get_g_space(solutionResponseIndex));
+  outArgs.set_g(solutionResponseIndex, solution);
+
+  solver->evalModel(inArgs, outArgs);
+
+  TEST_COMPARE_FLOATING_ARRAYS(
+      arrayFromVector(*observer->lastSolution()),
+      arrayFromVector(*solution),
+      tol);
+
+  TEST_FLOATING_EQUALITY(observer->lastStamp(), finalTime, tol);
+}
+
+// The initial state is made consistent (e.g., the algebraic components of a DAE) by the
+// function set with setConsistentInitialStateFunction, for the parameters of evalModel
+TEUCHOS_UNIT_TEST(Piro_TempusSolver, ConsistentInitialState)
+{
+  const auto model = defaultModelNew();
+  const double finalTime = 0.0;
+  const RCP<TempusSolver<double> > solver = solverNew(model, finalTime, "None");
+
+  // Parameters different from the nominal ones
+  Thyra::MEB::InArgs<double> inArgs = solver->getNominalValues();
+  const RCP<Thyra::VectorBase<double> > p = inArgs.get_p(0)->clone_v();
+  Thyra::assign(p.ptr(), 1.5);
+  inArgs.set_p(0, p);
+
+  const RCP<const Thyra::VectorBase<double> > nominalState = model->getNominalValues().get_x();
+
+  // "Consistent" initial state: x0 <- 2 x0 + 1
+  int numCalls = 0;
+  solver->setConsistentInitialStateFunction(
+    [&](const RCP<Thyra::ModelEvaluator<double> >& icModel,
+        const Thyra::MEB::InArgs<double>& icInArgs,
+        Thyra::VectorBase<double>& x0) {
+      ++numCalls;
+      TEST_ASSERT(icModel.get() == model.get());
+      TEST_EQUALITY_CONST(icInArgs.get_t(), 0.0);
+      TEST_COMPARE_FLOATING_ARRAYS(arrayFromVector(*icInArgs.get_p(0)), arrayFromVector(*p), tol);
+      // Each evaluation starts from the nominal initial state
+      TEST_COMPARE_FLOATING_ARRAYS(arrayFromVector(x0), arrayFromVector(*nominalState), tol);
+      Thyra::Vt_S(Teuchos::ptrFromRef(x0), 2.0);
+      Thyra::Vp_S(Teuchos::ptrFromRef(x0), 1.0);
+    });
+
+  const RCP<Thyra::VectorBase<double> > expected = nominalState->clone_v();
+  Thyra::Vt_S(expected.ptr(), 2.0);
+  Thyra::Vp_S(expected.ptr(), 1.0);
+
+  const int solutionResponseIndex = solver->Ng() - 1;
+  for (int eval = 1; eval <= 2; ++eval) {
+    Thyra::MEB::OutArgs<double> outArgs = solver->createOutArgs();
+    const RCP<Thyra::VectorBase<double> > solution =
+      Thyra::createMember(solver->get_g_space(solutionResponseIndex));
+    outArgs.set_g(solutionResponseIndex, solution);
+
+    solver->evalModel(inArgs, outArgs);
+
+    TEST_EQUALITY(numCalls, eval);
+    TEST_COMPARE_FLOATING_ARRAYS(arrayFromVector(*solution), arrayFromVector(*expected), tol);
+  }
+}
+
+
+// An initial state set with setInitialState is used as it is
+TEUCHOS_UNIT_TEST(Piro_TempusSolver, ConsistentInitialState_SetInitialState)
+{
+  const auto model = defaultModelNew();
+  const double finalTime = 0.0;
+  const RCP<TempusSolver<double> > solver = solverNew(model, finalTime, "None");
+
+  int numCalls = 0;
+  solver->setConsistentInitialStateFunction(
+    [&numCalls](const RCP<Thyra::ModelEvaluator<double> >&,
+                const Thyra::MEB::InArgs<double>&,
+                Thyra::VectorBase<double>& x0) {
+      ++numCalls;
+      Thyra::assign(Teuchos::ptrFromRef(x0), 5.0);
+    });
+
+  const RCP<Thyra::VectorBase<double> > initialState = model->getNominalValues().get_x()->clone_v();
+  Thyra::assign(initialState.ptr(), 7.0);
+  solver->setInitialState(0.0, initialState);
+
+  const Thyra::MEB::InArgs<double> inArgs = solver->getNominalValues();
+  Thyra::MEB::OutArgs<double> outArgs = solver->createOutArgs();
+  const int solutionResponseIndex = solver->Ng() - 1;
+  const RCP<Thyra::VectorBase<double> > solution =
+    Thyra::createMember(solver->get_g_space(solutionResponseIndex));
+  outArgs.set_g(solutionResponseIndex, solution);
+
+  solver->evalModel(inArgs, outArgs);
+
+  TEST_EQUALITY_CONST(numCalls, 0);
+  TEST_COMPARE_FLOATING_ARRAYS(arrayFromVector(*solution), arrayFromVector(*initialState), tol);
+}
+
+
+// The Tempus-driven objective with a consistent initial state is tested in
+// Piro_ThyraProductME_Tempus_FinalObjective_UnitTests.cpp (one process, explicit adjoint model).
 
 #endif /* HAVE_PIRO_TEMPUS */

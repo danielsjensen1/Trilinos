@@ -1,44 +1,10 @@
 // @HEADER
-//
-// ***********************************************************************
-//
+// *****************************************************************************
 //           Amesos2: Templated Direct Sparse Solver Package
-//                  Copyright 2011 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
-//
-// ***********************************************************************
-//
+// Copyright 2011 NTESS and the Amesos2 contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 /**
@@ -121,6 +87,10 @@ public:
   typedef Kokkos::View<SLUD::int_t*, HostExecSpaceType>   host_size_type_array;
   typedef Kokkos::View<SLUD::int_t*, HostExecSpaceType>   host_ordinal_type_array;
   typedef Kokkos::View<slu_type*,    HostExecSpaceType>   host_value_type_array;
+
+  typedef Tpetra::Map<local_ordinal_type,
+                      global_ordinal_type,
+                      node_type>                          map_type;
 
   /// \name Constructor/Destructor methods
   //@{
@@ -280,6 +250,14 @@ private:
   bool loadA_impl(EPhase current_phase);
 
 
+  /** 
+   * \brief Prints the status information about the current solver with some level
+   * of verbosity
+   */
+  void describe_impl(Teuchos::FancyOStream &out,
+                     const Teuchos::EVerbosityLevel verbLevel) const;
+
+
   // struct holds all data necessary to make a superlu factorization or solve call
   mutable struct SLUData {
     SLUD::SuperMatrix A;
@@ -311,7 +289,7 @@ private:
 
     Teuchos::Array<magnitude_type> R, C;       // equilibration scalings
     Teuchos::Array<magnitude_type> R1, C1;     // row-permutation scalings
-    Teuchos::Array<SLUD::int_t>    perm_r, perm_c;
+    Teuchos::Array<SLUD::perm_int_t> perm_r, perm_c;
 
     SLUD::DiagScale_t equed;    ///< Whether/what kind of equilibration to use/has been used
     bool rowequ, colequ;        ///< whether row/col equilibration has been applied to AC
@@ -322,6 +300,7 @@ private:
   // The following Arrays are persisting storage arrays for A, X, and B
   /// Stores the values of the nonzero entries for SuperLU_DIST
   host_value_type_array nzvals_view_;
+  host_value_type_array nzvals_temp_;
   /// Stores the row indices of the nonzero entries
   host_ordinal_type_array colind_view_;
   /// Stores the location in \c Ai_ and Aval_ that starts row j
@@ -332,18 +311,20 @@ private:
   mutable Teuchos::Array<slu_type> xvals_;
 
   /// \c true if this processor is in SuperLU_DISTS's 2D process grid
+  int myRank;
+  int numProcs;
   bool in_grid_;
   bool same_symbolic_;
   bool force_symbfact_;
   mutable bool same_solve_struct_; // may be modified in solve_impl, but still `logically const'
 
   /// Maps rows of the matrix to processors in the SuperLU_DIST processor grid
-  Teuchos::RCP<const Tpetra::Map<local_ordinal_type,
-                                 global_ordinal_type,
-                                 node_type> > superlu_rowmap_;
+  Teuchos::RCP<const map_type> superlu_rowmap_;
+  Teuchos::RCP<const map_type> superlu_contig_rowmap_;
+  Teuchos::RCP<const map_type> superlu_contig_colmap_;
 
   bool is_contiguous_;
-
+  int debug_level_;
 };                              // End class Superludist
 
 

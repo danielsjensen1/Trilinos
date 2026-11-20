@@ -1,44 +1,10 @@
 // @HEADER
-// ************************************************************************
-//
+// *****************************************************************************
 //                           Intrepid2 Package
-//                 Copyright (2007) Sandia Corporation
 //
-// Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
-// license for use of this work by or on behalf of the U.S. Government.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Kyungjoo Kim  (kyukim@sandia.gov),
-//                    Mauro Perego  (mperego@sandia.gov), or
-//                    Nate Roberts  (nvrober@sandia.gov)
-//
-// ************************************************************************
+// Copyright 2007 NTESS and the Intrepid2 contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 /** \file   Intrepid2_Basis.hpp
@@ -58,9 +24,11 @@
 #include "Intrepid2_CellTopologyTags.hpp"
 #include "Intrepid2_TensorPoints.hpp"
 #include "Shards_CellTopology.hpp"
+#include "Intrepid2_CellData.hpp"
 #include <Teuchos_RCPDecl.hpp>
 #include <Kokkos_Core.hpp>
 
+#include <memory>
 #include <vector>
 
 namespace Intrepid2 {
@@ -104,7 +72,7 @@ using HostBasisPtr = BasisPtr<typename Kokkos::HostSpace::device_type, OutputTyp
               some conversion mechanisms defined elsewhere, a LayoutLeft view (the default for Cuda views in
               Kokkos) or a LayoutRight view (the default on most other platforms).  This does introduce some
               additional complexity when Views need to be allocated for temporary storage; see the method
-              \ref getMatchingViewWithLabel() provided in \ref Intrepid_Utils.hpp.
+              \ref createMatchingDynRankView() provided in \ref Intrepid_Utils.hpp.
    
       \remark To limit memory use by factory-type objects (basis factories will be included in future
               releases of Intrepid2), tag data is not initialized by basis ctors,
@@ -198,14 +166,14 @@ using HostBasisPtr = BasisPtr<typename Kokkos::HostSpace::device_type, OutputTyp
      */
     ordinal_type basisDegree_;
 
-    /** \brief  Base topology of the cells for which the basis is defined. See
+    /** \brief Identifier of the base topology of the cells for which the basis is defined. See
          the <a href="https://trilinos.org/packages/shards/">Shards</a> package
          for definition of base cell topology.  For TensorBasis subclasses, by default this the cell topology that is extruded (i.e., it is a lower-dimensional CellTopology than
          the space on which the tensor basis is defined).  This allows tensor bases to be defined in higher dimensions than shards::CellTopology supports.  TensorBasis subclasses can
-         opt to use an equivalent shards CellTopology for basisCellTopology_, as well as using Intrepid2's tagging for tensor bases in dimensions up to 3, by calling
+         opt to use an equivalent shards CellTopology for base topology, as well as using Intrepid2's tagging for tensor bases in dimensions up to 3, by calling
          TensorBasis::setShardsTopologyAndTags().
     */
-    shards::CellTopology basisCellTopology_;
+    unsigned basisCellTopologyKey_;
 
     /** \brief  Type of the basis
      */
@@ -234,7 +202,7 @@ using HostBasisPtr = BasisPtr<typename Kokkos::HostSpace::device_type, OutputTyp
         \li     ordinalToTag_[DodOrd][2] = ordinal of the specified DoF relative to the subcell
         \li     ordinalToTag_[DofOrd][3] = total number of DoFs associated with the subcell
     */
-    OrdinalTypeArray2DHost ordinalToTag_;
+    mutable OrdinalTypeArray2DHost ordinalToTag_;
 
     /** \brief  DoF tag to ordinal lookup table.
 
@@ -247,7 +215,18 @@ using HostBasisPtr = BasisPtr<typename Kokkos::HostSpace::device_type, OutputTyp
 
         \li     tagToOrdinal_[subcDim][subcOrd][subcDofOrd] = Degree-of-freedom ordinal
     */
-    OrdinalTypeArray3DHost tagToOrdinal_;
+    mutable OrdinalTypeArray3DHost tagToOrdinal_;
+
+    /** \brief  Ensures that the dense tag tables (<var>ordinalToTag_</var>, <var>tagToOrdinal_</var>) are filled.
+
+        The default does nothing: most bases fill the tables at construction.  Derived classes that defer construction of
+        the tables (e.g., Basis_TensorBasis) override this; they are responsible for making it thread-safe.
+
+        Basis itself must not hold host-only members (e.g., std::shared_ptr or std::mutex): bases are copy-constructed on
+        device for team-level getValues() (see copy_virtual_class_to_device()), and the implicit copy constructor of such
+        a member cannot run there.  State for lazy initialization therefore lives in the derived classes that need it.
+     */
+    virtual void requireTags() const {}
 
     /** \brief  Fills <var>ordinalToTag_</var> and <var>tagToOrdinal_</var> by basis-specific tag data
 
@@ -271,11 +250,12 @@ using HostBasisPtr = BasisPtr<typename Kokkos::HostSpace::device_type, OutputTyp
                             const ordinal_type       posScDim,
                             const ordinal_type       posScOrd,
                             const ordinal_type       posDfOrd ) {
-      // Create ordinalToTag
-      ordinalToTag = OrdinalTypeView2D("ordinalToTag", basisCard, tagSize);
+      // The tables are host views, filled here with plain loops rather than with Kokkos::deep_copy(): Basis_TensorBasis
+      // calls this lazily from const queries, which may come from inside an OpenMP parallel region, where dispatching a
+      // kernel on the OpenMP execution space (as deep_copy() of a nonzero value does) aborts.
 
-      // Initialize with -1
-      Kokkos::deep_copy( ordinalToTag, -1 );
+      // Create ordinalToTag; every entry is set below
+      ordinalToTag = OrdinalTypeView2D(Kokkos::view_alloc("ordinalToTag", Kokkos::WithoutInitializing), basisCard, tagSize);
 
       // Copy tags
       for (ordinal_type i=0;i<basisCard;++i)
@@ -301,11 +281,12 @@ using HostBasisPtr = BasisPtr<typename Kokkos::HostSpace::device_type, OutputTyp
           maxDfOrd = tags(i*tagSize + posDfOrd);
       ++maxDfOrd;
 
-      // Create tagToOrdinal
-      tagToOrdinal = OrdinalTypeView3D("tagToOrdinal", maxScDim, maxScOrd, maxDfOrd);
-
-      // Initialize with -1
-      Kokkos::deep_copy( tagToOrdinal, -1 );
+      // Create tagToOrdinal, and initialize with -1
+      tagToOrdinal = OrdinalTypeView3D(Kokkos::view_alloc("tagToOrdinal", Kokkos::WithoutInitializing), maxScDim, maxScOrd, maxDfOrd);
+      for (ordinal_type i=0;i<maxScDim;++i)
+        for (ordinal_type j=0;j<maxScOrd;++j)
+          for (ordinal_type k=0;k<maxDfOrd;++k)
+            tagToOrdinal(i, j, k) = -1;
 
       // Overwrite elements of the array corresponding to tags with local DoF Id's, leave all other = -1
       for (ordinal_type i=0;i<basisCard;++i)
@@ -410,6 +391,61 @@ using HostBasisPtr = BasisPtr<typename Kokkos::HostSpace::device_type, OutputTyp
         TensorData<Scalar,DeviceType> tensorData(data);
         return BasisValues<Scalar,DeviceType>(tensorData);
       }
+    }
+
+
+    /** \brief  Return the size of the scratch space, in bytes, needed for using the team-level implementation of getValues.
+
+        Warning, <var>inputPoints</var> is only used to deduce the type of the points where to evaluate basis functions.
+        The rank of </var>inputPoints</var> and its size are not relevant, however, 
+        when using DFAD types, </var>inputPoints</var> cannot be empty, 
+        otherwise the size of the scracth space needed won't be deduced correctly.
+
+        \param  perThreadeSize    [out] - size of the scratch space beeded per thread
+        \param  inputPoints       [in]  - inputPoints
+        \param  operatorType      [in]  - operator type (OPERATOR_VALUE, OPERATOR_GRAD, OPERATOR_DIV, OPERATOR_CURL)
+        
+    */
+    virtual
+    void getScratchSpaceSize(       ordinal_type& perThreadSpaceSize,
+                                const PointViewType inputPoints,
+                                const EOperator operatorType = OPERATOR_VALUE) const {
+      INTREPID2_TEST_FOR_EXCEPTION_DEVICE_SAFE( true, std::logic_error,
+                                    ">>> ERROR (Basis::getValuesScratchSpace): this method is not supported or should be overridden accordingly by derived classes.");
+    }
+
+
+    /** \brief  Team-level evaluation of basis functions on a <strong>reference cell</strong>.
+
+        Returns values of <var>operatorType</var> acting on basis functions for a set of
+        points in the <strong>reference cell</strong> for which the basis is defined.
+
+        The interface allow also to select basis functions associated to a particular entity. 
+        As an example, if <var>subcellDim==1</var> (edges) and <var>subcellOrdinal==0</var>, <var>outputValues</var> will contain all the basis functions associated with the first edge.
+        <var>outputValues</var> will contain all the cell basis functions when the default value (-1) is used for <var>subcellDim</var> and <var>subcellOrdinal</var>
+
+        \param  outputValues      [out] - variable rank array with the basis values
+        \param  inputPoints       [in]  - rank-2 array (P,D) with the evaluation points
+        \param  operatorType      [in]  - the operator acting on the basis functions
+        \param  teamMember        [in]  - team member of the Kokkos::TemaPolicy
+        \param  threadScratchLevel[in]  - scratch level for thread scratch
+        \param  subcellDim        [in]  - the dimension of the subcells, the default values of -1 returns basis functions associated to subcells of all dimensions
+        \param  subcellOrdinal    [in]  - the ordinal of the subcell, the default values of -1 returns basis functions associated to subcells of all ordinals
+
+        \remark This function is supposed to be called within a TeamPolicy kernel. 
+                The size of the required scratch space is determined by the getScratchSpaceSize function.
+    */
+    KOKKOS_INLINE_FUNCTION
+    virtual
+    void getValues(       OutputViewType /* outputValues */,
+                    const PointViewType  /* inputPoints */,
+                    const EOperator /* operatorType */,
+                    const typename Kokkos::TeamPolicy<ExecutionSpace>::member_type& teamMember,
+                    const int threadScratchLevel, 
+                    const ordinal_type subcellDim=-1,
+                    const ordinal_type subcellOrdinal=-1) const {
+      INTREPID2_TEST_FOR_EXCEPTION_DEVICE_SAFE( true, std::logic_error,
+                                    ">>> ERROR (Basis::getValues): this method is not supported or should be overridden accordingly by derived classes.");
     }
 
     /** \brief  Evaluation of a FEM basis on a <strong>reference cell</strong>.
@@ -810,7 +846,7 @@ using HostBasisPtr = BasisPtr<typename Kokkos::HostSpace::device_type, OutputTyp
     */
     shards::CellTopology
     getBaseCellTopology() const {
-      return basisCellTopology_;
+      return getCellTopologyData(basisCellTopologyKey_);
     }
 
 
@@ -840,9 +876,10 @@ using HostBasisPtr = BasisPtr<typename Kokkos::HostSpace::device_type, OutputTyp
      
      \return the number of DoFs associated with the specified subcell.
      */
-    ordinal_type
+    virtual ordinal_type
     getDofCount( const ordinal_type subcDim,
                  const ordinal_type subcOrd ) const {
+      this->requireTags();
       if ( subcDim >= 0   &&   subcDim < static_cast<ordinal_type>(tagToOrdinal_.extent(0)) &&
            subcOrd >= 0   &&   subcOrd < static_cast<ordinal_type>(tagToOrdinal_.extent(1)) )
       {
@@ -866,10 +903,11 @@ using HostBasisPtr = BasisPtr<typename Kokkos::HostSpace::device_type, OutputTyp
 
         \return the DoF ordinal corresponding to the specified DoF tag data.
     */
-    ordinal_type
+    virtual ordinal_type
     getDofOrdinal( const ordinal_type subcDim,
                    const ordinal_type subcOrd,
                    const ordinal_type subcDofOrd ) const {
+      this->requireTags();
       // this should be abort and able to be called as a device function
 #ifdef HAVE_INTREPID2_DEBUG
       INTREPID2_TEST_FOR_EXCEPTION( subcDim < 0 || subcDim >= static_cast<ordinal_type>(tagToOrdinal_.extent(0)), std::out_of_range,
@@ -901,6 +939,7 @@ using HostBasisPtr = BasisPtr<typename Kokkos::HostSpace::device_type, OutputTyp
     /** \brief DoF tag to ordinal data structure */
     const OrdinalTypeArray3DHost
     getAllDofOrdinal() const {
+      requireTags();
       return tagToOrdinal_;
     }
 
@@ -915,8 +954,9 @@ using HostBasisPtr = BasisPtr<typename Kokkos::HostSpace::device_type, OutputTyp
         \li     element [2] = tag field 2  ->  ordinal of the specified DoF relative to the subcell
         \li     element [3] = tag field 3  ->  total number of DoFs associated with the subcell
     */
-    const OrdinalTypeArrayStride1DHost
+    virtual const OrdinalTypeArrayStride1DHost
     getDofTag( const ordinal_type dofOrd ) const {
+      this->requireTags();
 #ifdef HAVE_INTREPID2_DEBUG
       INTREPID2_TEST_FOR_EXCEPTION( dofOrd < 0 || dofOrd >= static_cast<ordinal_type>(ordinalToTag_.extent(0)), std::out_of_range,
                                     ">>> ERROR (Basis::getDofTag): dofOrd is out of range");
@@ -933,8 +973,9 @@ using HostBasisPtr = BasisPtr<typename Kokkos::HostSpace::device_type, OutputTyp
         \li     element [DofOrd][2] = tag field 2 for the DoF with the specified ordinal
         \li     element [DofOrd][3] = tag field 3 for the DoF with the specified ordinal
     */
-    const OrdinalTypeArray2DHost
+    virtual const OrdinalTypeArray2DHost
     getAllDofTags() const {
+      this->requireTags();
       return ordinalToTag_;
     }
 

@@ -1,133 +1,66 @@
-//@HEADER
-// ************************************************************************
-//
-//                        Kokkos v. 4.0
-//       Copyright (2022) National Technology & Engineering
-//               Solutions of Sandia, LLC (NTESS).
-//
-// Under the terms of Contract DE-NA0003525 with NTESS,
-// the U.S. Government retains certain rights in this software.
-//
-// Part of Kokkos, under the Apache License v2.0 with LLVM Exceptions.
-// See https://kokkos.org/LICENSE for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-//
-//@HEADER
+// SPDX-FileCopyrightText: Copyright Contributors to the Kokkos project
 
 #ifndef KOKKOS_IMPL_ERROR_HPP
 #define KOKKOS_IMPL_ERROR_HPP
 
 #include <string>
-#include <iosfwd>
+#include <string_view>
+#include <stdexcept>
+#include <sstream>
 #include <Kokkos_Macros.hpp>
 #include <Kokkos_Abort.hpp>
 #include <Kokkos_Assert.hpp>
 
-namespace Kokkos {
-namespace Impl {
+namespace Kokkos::Impl {
 
-[[noreturn]] void throw_runtime_exception(const std::string &msg);
+[[noreturn]] void throw_runtime_exception(const std::string& msg);
+[[noreturn]] void throw_bad_alloc(std::string_view memory_space_name,
+                                  std::size_t size, std::string_view label);
+void log_warning(const std::string& msg);
 
-void log_warning(const std::string &msg);
+std::string human_memory_size(size_t bytes);
 
-std::string human_memory_size(size_t arg_bytes);
+}  // namespace Kokkos::Impl
 
-}  // namespace Impl
+namespace Kokkos::Experimental {
 
-namespace Experimental {
+/// Exception thrown when a Kokkos memory allocation fails.
+///
+/// Inherits from std::runtime_error for backward compatibility — existing
+/// catch blocks that catch std::runtime_error still work.  Provides structured
+/// access to the memory space, requested allocation size, and label of the
+/// allocation that failed.
+class BadAlloc : public std::runtime_error {
+  std::string m_memory_space_name;
+  std::size_t m_allocation_size;
+  std::string m_label;
 
-class RawMemoryAllocationFailure : public std::bad_alloc {
- public:
-  enum class FailureMode {
-    OutOfMemoryError,
-    AllocationNotAligned,
-    InvalidAllocationSize,
-    MaximumCudaUVMAllocationsExceeded,
-    Unknown
-  };
-  enum class AllocationMechanism {
-    StdMalloc,
-#ifdef KOKKOS_ENABLE_DEPRECATED_CODE_4
-    PosixMemAlign KOKKOS_DEPRECATED,
-    PosixMMap KOKKOS_DEPRECATED,
-    IntelMMAlloc KOKKOS_DEPRECATED,
-#endif
-    CudaMalloc,
-    CudaMallocManaged,
-    CudaHostAlloc,
-    HIPMalloc,
-    HIPHostMalloc,
-    HIPMallocManaged,
-    SYCLMallocDevice,
-    SYCLMallocShared,
-    SYCLMallocHost,
-    OpenACCMalloc,
-  };
-
- private:
-  size_t m_attempted_size;
-  size_t m_attempted_alignment;
-  FailureMode m_failure_mode;
-  AllocationMechanism m_mechanism;
+  static std::string make_message(std::string_view memory_space_name,
+                                  std::size_t size, std::string_view label) {
+    std::stringstream ss;
+    ss << "Kokkos ERROR: " << memory_space_name
+       << " memory space failed to allocate "
+       << Kokkos::Impl::human_memory_size(size) << " (label=\"" << label
+       << "\").";
+    return ss.str();
+  }
 
  public:
-  RawMemoryAllocationFailure(
-      size_t arg_attempted_size, size_t arg_attempted_alignment,
-      FailureMode arg_failure_mode = FailureMode::OutOfMemoryError,
-      AllocationMechanism arg_mechanism =
-          AllocationMechanism::StdMalloc) noexcept
-      : m_attempted_size(arg_attempted_size),
-        m_attempted_alignment(arg_attempted_alignment),
-        m_failure_mode(arg_failure_mode),
-        m_mechanism(arg_mechanism) {}
+  BadAlloc(std::string_view memory_space_name, std::size_t size,
+           std::string_view label)
+      : std::runtime_error(make_message(memory_space_name, size, label)),
+        m_memory_space_name(memory_space_name),
+        m_allocation_size(size),
+        m_label(label) {}
 
-  RawMemoryAllocationFailure() noexcept = delete;
-
-  RawMemoryAllocationFailure(RawMemoryAllocationFailure const &) noexcept =
-      default;
-  RawMemoryAllocationFailure(RawMemoryAllocationFailure &&) noexcept = default;
-
-  RawMemoryAllocationFailure &operator             =(
-      RawMemoryAllocationFailure const &) noexcept = default;
-  RawMemoryAllocationFailure &operator             =(
-      RawMemoryAllocationFailure &&) noexcept = default;
-
-  ~RawMemoryAllocationFailure() noexcept override = default;
-
-  [[nodiscard]] const char *what() const noexcept override {
-    if (m_failure_mode == FailureMode::OutOfMemoryError) {
-      return "Memory allocation error: out of memory";
-    } else if (m_failure_mode == FailureMode::AllocationNotAligned) {
-      return "Memory allocation error: allocation result was under-aligned";
-    }
-
-    return nullptr;  // unreachable
+  const std::string& memory_space_name() const noexcept {
+    return m_memory_space_name;
   }
-
-  [[nodiscard]] size_t attempted_size() const noexcept {
-    return m_attempted_size;
-  }
-
-  [[nodiscard]] size_t attempted_alignment() const noexcept {
-    return m_attempted_alignment;
-  }
-
-  [[nodiscard]] AllocationMechanism allocation_mechanism() const noexcept {
-    return m_mechanism;
-  }
-
-  [[nodiscard]] FailureMode failure_mode() const noexcept {
-    return m_failure_mode;
-  }
-
-  void print_error_message(std::ostream &o) const;
-  [[nodiscard]] std::string get_error_message() const;
-
-  virtual void append_additional_error_information(std::ostream &) const {}
+  std::size_t allocation_size() const noexcept { return m_allocation_size; }
+  const std::string& label() const noexcept { return m_label; }
 };
 
-}  // end namespace Experimental
+}  // namespace Kokkos::Experimental
 
-}  // namespace Kokkos
-
-#endif /* #ifndef KOKKOS_IMPL_ERROR_HPP */
+#endif

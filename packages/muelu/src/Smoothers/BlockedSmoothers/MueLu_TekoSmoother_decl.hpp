@@ -1,48 +1,10 @@
 // @HEADER
-//
-// ***********************************************************************
-//
+// *****************************************************************************
 //        MueLu: A package for multigrid based preconditioning
-//                  Copyright 2012 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact
-//                    Jonathan Hu       (jhu@sandia.gov)
-//                    Andrey Prokopenko (aprokop@sandia.gov)
-//                    Ray Tuminaro      (rstumin@sandia.gov)
-//                    Tobias Wiesner    (tawiesn@sandia.gov)
-//
-// ***********************************************************************
-//
+// Copyright 2012 NTESS and the MueLu contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #ifndef MUELU_TEKOSMOOTHER_DECL_HPP_
@@ -97,6 +59,11 @@ class TekoSmoother : public SmootherPrototype<Scalar, LocalOrdinal, GlobalOrdina
     : type_("Teko smoother") {
     TEUCHOS_TEST_FOR_EXCEPTION(true, Exceptions::RuntimeError, "MueLu::TekoSmoother: Teko can only be used with SC=double. For more information refer to the doxygen documentation of TekoSmoother.");
   };
+
+  TekoSmoother(const Teuchos::ParameterList & /*paramList*/)
+    : type_("Teko smoother") {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, Exceptions::RuntimeError, "MueLu::TekoSmoother: Teko can only be used with SC=double. For more information refer to the doxygen documentation of TekoSmoother.");
+  }
 
   //! Destructor
   virtual ~TekoSmoother() {}
@@ -203,6 +170,20 @@ class TekoSmoother<double, int, GlobalOrdinal, Node> : public SmootherPrototype<
     , tekoParams_(Teuchos::null)
     , inverseOp_(Teuchos::null){};
 
+  /*! @brief Constructor
+   */
+  TekoSmoother(const Teuchos::ParameterList &paramList)
+    : type_("Teko smoother")
+    , A_(Teuchos::null)
+    , bA_(Teuchos::null)
+    , bThyOp_(Teuchos::null)
+    , tekoParams_(Teuchos::null)
+    , inverseOp_(Teuchos::null) {
+    this->SetParameter("Inverse Type", paramList.getEntry("Inverse Type"));
+    const auto &tekoSettings = paramList.sublist("Inverse Factory Library");
+    tekoParams_              = Teuchos::make_rcp<Teuchos::ParameterList>(tekoSettings);
+  };
+
   //! Destructor
   virtual ~TekoSmoother() {}
   //@}
@@ -212,7 +193,7 @@ class TekoSmoother<double, int, GlobalOrdinal, Node> : public SmootherPrototype<
   RCP<const ParameterList> GetValidParameterList() const {
     RCP<ParameterList> validParamList = rcp(new ParameterList());
 
-    validParamList->set<RCP<const FactoryBase> >("A", null, "Generating factory of the matrix A");
+    validParamList->set<RCP<const FactoryBase>>("A", null, "Generating factory of the matrix A");
     validParamList->set<std::string>("Inverse Type", "", "Name of parameter list within 'Teko parameters' containing the Teko smoother parameters.");
 
     return validParamList;
@@ -238,7 +219,7 @@ class TekoSmoother<double, int, GlobalOrdinal, Node> : public SmootherPrototype<
       this->GetOStream(Warnings0) << "MueLu::TekoSmoother::Setup(): Setup() has already been called";
 
     // extract blocked operator A from current level
-    A_  = Factory::Get<RCP<Matrix> >(currentLevel, "A");  // A needed for extracting map extractors
+    A_  = Factory::Get<RCP<Matrix>>(currentLevel, "A");  // A needed for extracting map extractors
     bA_ = Teuchos::rcp_dynamic_cast<BlockedCrsMatrix>(A_);
     TEUCHOS_TEST_FOR_EXCEPTION(bA_.is_null(), Exceptions::BadCast,
                                "MueLu::TekoSmoother::Build: input matrix A is not of type BlockedCrsMatrix.");
@@ -247,7 +228,7 @@ class TekoSmoother<double, int, GlobalOrdinal, Node> : public SmootherPrototype<
     TEUCHOS_TEST_FOR_EXCEPTION(bThyOp_.is_null(), Exceptions::BadCast,
                                "MueLu::TekoSmoother::Build: Could not extract thyra operator from BlockedCrsMatrix.");
 
-    Teuchos::RCP<const Thyra::LinearOpBase<Scalar> > thyOp = Teuchos::rcp_dynamic_cast<const Thyra::LinearOpBase<Scalar> >(bThyOp_);
+    Teuchos::RCP<const Thyra::LinearOpBase<Scalar>> thyOp = Teuchos::rcp_dynamic_cast<const Thyra::LinearOpBase<Scalar>>(bThyOp_);
     TEUCHOS_TEST_FOR_EXCEPTION(thyOp.is_null(), Exceptions::BadCast,
                                "MueLu::TekoSmoother::Build: Downcast of Thyra::BlockedLinearOpBase to Teko::LinearOp failed.");
 
@@ -275,51 +256,64 @@ class TekoSmoother<double, int, GlobalOrdinal, Node> : public SmootherPrototype<
 
   @param X initial guess
   @param B right-hand side
-  @param InitialGuessIsZero This option has no effect.
+  @param InitialGuessIsZero whether the initial guess is zero
   */
-  void Apply(MultiVector &X, const MultiVector &B, bool /* InitialGuessIsZero */ = false) const {
-    TEUCHOS_TEST_FOR_EXCEPTION(this->IsSetup() == false, Exceptions::RuntimeError,
+  void Apply(MultiVector &X, const MultiVector &B, bool InitialGuessIsZero = false) const {
+    TEUCHOS_TEST_FOR_EXCEPTION(!this->IsSetup(), Exceptions::RuntimeError,
                                "MueLu::TekoSmoother::Apply(): Setup() has not been called");
 
-    Teuchos::RCP<const Teuchos::Comm<int> > comm = X.getMap()->getComm();
-
-    Teuchos::RCP<const MapExtractor> rgMapExtractor = bA_->getRangeMapExtractor();
+    auto comm           = X.getMap()->getComm();
+    auto rgMapExtractor = bA_->getRangeMapExtractor();
     TEUCHOS_TEST_FOR_EXCEPT(Teuchos::is_null(rgMapExtractor));
 
-    // copy initial solution vector X to Ptr<Thyra::MultiVectorBase> YY
+    using STS = Teuchos::ScalarTraits<Scalar>;
 
-    // create a Thyra RHS vector
-    Teuchos::RCP<Thyra::MultiVectorBase<Scalar> > thyB = Thyra::createMembers(Teuchos::rcp_dynamic_cast<const Thyra::VectorSpaceBase<Scalar> >(bThyOp_->productRange()), Teuchos::as<int>(B.getNumVectors()));
-    Teuchos::RCP<Thyra::ProductMultiVectorBase<Scalar> > thyProdB =
-        Teuchos::rcp_dynamic_cast<Thyra::ProductMultiVectorBase<Scalar> >(thyB);
-    TEUCHOS_TEST_FOR_EXCEPTION(thyProdB.is_null(), Exceptions::BadCast,
-                               "MueLu::TekoSmoother::Apply: Failed to cast range space to product range space.");
+    auto createProductMultiVector = [](const Teuchos::RCP<const Thyra::VectorSpaceBase<Scalar>> &space,
+                                       int numVecs,
+                                       const char *castErrorMsg) {
+      auto mv     = Thyra::createMembers(space, numVecs);
+      auto prodMv = Teuchos::rcp_dynamic_cast<Thyra::ProductMultiVectorBase<Scalar>>(mv);
+      TEUCHOS_TEST_FOR_EXCEPTION(prodMv.is_null(), Exceptions::BadCast, castErrorMsg);
+      return std::make_pair(mv, prodMv);
+    };
 
-    // copy RHS vector B to Thyra::MultiVectorBase thyProdB
-    Xpetra::ThyraUtils<Scalar, LocalOrdinal, GlobalOrdinal, Node>::updateThyra(Teuchos::rcpFromRef(B), rgMapExtractor, thyProdB);
+    auto solveWithThyra = [&](const Teuchos::RCP<const Xpetra::MultiVector<Scalar, LocalOrdinal, GlobalOrdinal, Node>> &rhs,
+                              bool initializeFromX,
+                              const typename STS::magnitudeType alphaX) {
+      auto [thyB, thyProdB] = createProductMultiVector(
+          Teuchos::rcp_dynamic_cast<const Thyra::VectorSpaceBase<Scalar>>(bThyOp_->productRange()),
+          Teuchos::as<int>(rhs->getNumVectors()),
+          "MueLu::TekoSmoother::Apply: Failed to cast range space to product range space.");
 
-    // create a Thyra SOL vector
-    Teuchos::RCP<Thyra::MultiVectorBase<Scalar> > thyX = Thyra::createMembers(Teuchos::rcp_dynamic_cast<const Thyra::VectorSpaceBase<Scalar> >(bThyOp_->productDomain()), Teuchos::as<int>(X.getNumVectors()));
-    Teuchos::RCP<Thyra::ProductMultiVectorBase<Scalar> > thyProdX =
-        Teuchos::rcp_dynamic_cast<Thyra::ProductMultiVectorBase<Scalar> >(thyX);
-    TEUCHOS_TEST_FOR_EXCEPTION(thyProdX.is_null(), Exceptions::BadCast,
-                               "MueLu::TekoSmoother::Apply: Failed to cast domain space to product domain space.");
+      Xpetra::ThyraUtils<Scalar, LocalOrdinal, GlobalOrdinal, Node>::updateThyra(rhs, rgMapExtractor, thyProdB);
 
-    // copy RHS vector X to Thyra::MultiVectorBase thyProdX
-    Xpetra::ThyraUtils<Scalar, LocalOrdinal, GlobalOrdinal, Node>::updateThyra(Teuchos::rcpFromRef(X), rgMapExtractor, thyProdX);
+      auto [thyX, thyProdX] = createProductMultiVector(
+          Teuchos::rcp_dynamic_cast<const Thyra::VectorSpaceBase<Scalar>>(bThyOp_->productDomain()),
+          Teuchos::as<int>(X.getNumVectors()),
+          "MueLu::TekoSmoother::Apply: Failed to cast domain space to product domain space.");
 
-    inverseOp_->apply(
-        Thyra::NOTRANS,
-        *thyB,       // const MultiVectorBase<Scalar> &X,
-        thyX.ptr(),  // const Ptr<MultiVectorBase<Scalar> > &Y,
-        1.0,
-        0.0);
+      if (initializeFromX) {
+        Xpetra::ThyraUtils<Scalar, LocalOrdinal, GlobalOrdinal, Node>::updateThyra(Teuchos::rcpFromRef(X), rgMapExtractor, thyProdX);
+      }
 
-    // copy back content of Ptr<Thyra::MultiVectorBase> thyX into X
-    Teuchos::RCP<Xpetra::MultiVector<Scalar, LocalOrdinal, GlobalOrdinal, Node> > XX =
-        Xpetra::ThyraUtils<Scalar, LocalOrdinal, GlobalOrdinal, Node>::toXpetra(thyX, comm);
+      inverseOp_->apply(
+          Thyra::NOTRANS,
+          *thyB,
+          thyX.ptr(),
+          STS::one(),
+          STS::zero());
 
-    X.update(Teuchos::ScalarTraits<Scalar>::one(), *XX, Teuchos::ScalarTraits<Scalar>::zero());
+      auto XX = Xpetra::ThyraUtils<Scalar, LocalOrdinal, GlobalOrdinal, Node>::toXpetra(thyX, comm);
+      X.update(STS::one(), *XX, alphaX);
+    };
+
+    if (InitialGuessIsZero) {
+      solveWithThyra(Teuchos::rcpFromRef(B), /*initializeFromX=*/true, STS::zero());
+      return;
+    }
+
+    auto residual = Utilities::Residual(*A_, X, B);
+    solveWithThyra(residual, /*initializeFromX=*/false, STS::one());
   }
   //@}
 
@@ -363,7 +357,7 @@ class TekoSmoother<double, int, GlobalOrdinal, Node> : public SmootherPrototype<
   //! block operator
   RCP<Matrix> A_;  // < ! internal blocked operator "A" generated by AFact_
   RCP<BlockedCrsMatrix> bA_;
-  RCP<const Thyra::BlockedLinearOpBase<Scalar> > bThyOp_;
+  RCP<const Thyra::BlockedLinearOpBase<Scalar>> bThyOp_;
 
   //! Teko parameters
   RCP<ParameterList> tekoParams_;  // < ! parameter list containing Teko parameters. These parameters are not administrated by the factory and not validated.

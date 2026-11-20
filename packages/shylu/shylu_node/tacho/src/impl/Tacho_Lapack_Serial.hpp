@@ -1,20 +1,12 @@
 // clang-format off
-/* =====================================================================================
-Copyright 2022 National Technology & Engineering Solutions of Sandia, LLC (NTESS).
-Under the terms of Contract DE-NA0003525 with NTESS, the U.S. Government retains
-certain rights in this software.
-
-SCR#:2790.0
-
-This file is part of Tacho. Tacho is open source software: you can redistribute it
-and/or modify it under the terms of BSD 2-Clause License
-(https://opensource.org/licenses/BSD-2-Clause). A copy of the licese is also
-provided under the main directory
-
-Questions? Kyungjoo Kim at <kyukim@sandia.gov,https://github.com/kyungjoo-kim>
-
-Sandia National Laboratories, Albuquerque, NM, USA
-===================================================================================== */
+// @HEADER
+// *****************************************************************************
+//                            Tacho package
+//
+// Copyright 2022 NTESS and the Tacho contributors.
+// SPDX-License-Identifier: BSD-2-Clause
+// *****************************************************************************
+// @HEADER
 // clang-format on
 #ifndef __TACHO_LAPACK_SERIAL_HPP__
 #define __TACHO_LAPACK_SERIAL_HPP__
@@ -31,8 +23,8 @@ template <typename T> struct LapackSerial {
 #if 0
   struct Impl {
     template <typename MemberType>
-    static KOKKOS_INLINE_FUNCTION void sytrf_lower(const MemberType &member, const int m, T *__restrict__ A,
-                                                   const int as0, const int as1, int *__restrict__ ipiv, int *info) {
+    static KOKKOS_INLINE_FUNCTION void sytrf_lower(const MemberType &member, const int m, T *KOKKOS_RESTRICT A,
+                                                   const int as0, const int as1, int *KOKKOS_RESTRICT ipiv, int *info) {
       *info = 0;
       if (m <= 0)
         return;
@@ -48,9 +40,9 @@ template <typename T> struct LapackSerial {
       for (int p = 0; p < m; ++p) {
         const int iend = m - p - 1;
 
-        T *__restrict__ alpha11 = A + (p)*as0 + (p)*as1,
-          *__restrict__ a21 = A + (p + 1) * as0 + (p)     * as1,
-          *__restrict__ A22 = A + (p + 1) * as0 + (p + 1) * as1;
+        T *KOKKOS_RESTRICT alpha11 = A + (p)*as0 + (p)*as1,
+          *KOKKOS_RESTRICT a21 = A + (p + 1) * as0 + (p)     * as1,
+          *KOKKOS_RESTRICT A22 = A + (p + 1) * as0 + (p + 1) * as1;
 
         mag_type lambda1(0);
         int idx(0);
@@ -131,39 +123,11 @@ template <typename T> struct LapackSerial {
         member.team_barrier();
       }
     }
-
-    template <typename MemberType>
-    static KOKKOS_INLINE_FUNCTION void sytrf_lower_nopiv(const MemberType &member, const int m, T *__restrict__ A,
-                                                         const int as0, const int as1, int *info) {
-      *info = 0;
-      if (m <= 0)
-        return;
-
-      // typedef ArithTraits<T> arith_traits;
-      for (int p = 0; p < m; ++p) {
-        const int iend = m - p - 1;
-
-        T *__restrict__ alpha11 = A + (p)*as0 + (p)*as1, *__restrict__ a21 = A + (p + 1) * as0 + (p)*as1,
-                        *__restrict__ A22 = A + (p + 1) * as0 + (p + 1) * as1;
-
-        const auto alpha = *alpha11; // arith_traits::real(*alpha11);
-        Kokkos::parallel_for(Kokkos::TeamVectorRange(member, iend), [&](const int &i) { a21[i * as0] /= alpha; });
-        member.team_barrier();
-        Kokkos::parallel_for(Kokkos::TeamThreadRange(member, iend), [&](const int &i) {
-          const T aa = a21[i * as0];
-          Kokkos::parallel_for(Kokkos::ThreadVectorRange(member, i + 1), [&](const int &j) {
-            const T bb = a21[j * as0];
-            A22[i * as0 + j * as1] -= alpha * aa * bb;
-          });
-        });
-        member.team_barrier();
-      }
-    }
   };
 
   template <typename MemberType>
   static KOKKOS_INLINE_FUNCTION void potrf(const MemberType &member, const char uplo, const int m,
-                                           /* */ T *__restrict__ A, const int lda, int *info) {
+                                           /* */ T *KOKKOS_RESTRICT A, const int lda, int *info) {
     switch (uplo) {
     case 'U':
     case 'u': {
@@ -182,9 +146,9 @@ template <typename T> struct LapackSerial {
 
   template <typename MemberType>
   static KOKKOS_INLINE_FUNCTION void sytrf(const MemberType &member, const char uplo, const int m,
-                                           /* */ T *__restrict__ A, const int lda,
-                                           /* */ int *__restrict__ P,
-                                           /* */ T *__restrict__ W, int *info) {
+                                           /* */ T *KOKKOS_RESTRICT A, const int lda,
+                                           /* */ int *KOKKOS_RESTRICT P,
+                                           /* */ T *KOKKOS_RESTRICT W, int *info) {
     switch (uplo) {
     case 'U':
     case 'u': {
@@ -202,6 +166,7 @@ template <typename T> struct LapackSerial {
   }
 #endif
 
+  // uplo = upper
   inline static int potrf(const char uplo, const int m, T *A, const int lda, int *info) {
 
     *info = 0;
@@ -237,13 +202,51 @@ template <typename T> struct LapackSerial {
     return 0;
   }
 
+  // uplo = upper
+  inline static int sytrf_nopiv(const char uplo, const bool conjugate, const int m, const double tol, T *A, const int lda, int *info) {
+      
+    *info = 0; 
+    if (m <= 0) 
+      return 0;
+          
+    typedef ArithTraits<T> arith_traits;
+    const T zero(0);
+
+    for (int i = 0; i < m; ++i) {
+      // check pivot
+      if (arith_traits::abs(A[i + i*lda]) <= tol) { // including zero pivots with tol=0.0
+        A[i + i*lda] = zero; // mark it with zero
+        // zero out off-diagonal (assuming we hit null-space)
+        for (int j = i+1; j < m; j++) { A[i + j*lda] = zero; }
+        (*info) ++;
+      } else if (A[i + i*lda] == zero) {
+        (*info) = - (i+1);
+        return *info;
+      } else {
+        T alpha = A[i + i*lda];
+  
+        // scale
+        for (int j = i+1; j < m; j++) { A[i + j*lda] /= alpha; }
+    
+        // update
+        for (int j = i+1; j < m; j++) {
+          const T aa = alpha * A[i + j*lda];
+          for (int l = i+1; l <= j; l++) {
+            const T bb = (conjugate ? arith_traits::conj(A[i + l*lda]) : A[i + l*lda]);
+            A[l + j*lda] -= aa * bb;
+          }
+        }
+      }
+    }   
+    return *info;
+  }
+
   inline static int getrf(const int m, const int n, T *  A,
                           const int lda, int * ipiv, int *info) {
 
     *info = 0;
     if (m <= 0 || n <= 0)
       return *info;
-
 
     using arith_traits = ArithTraits<T>;
     using mag_type = typename arith_traits::mag_type;

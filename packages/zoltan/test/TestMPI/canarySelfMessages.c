@@ -1,3 +1,11 @@
+// @HEADER
+// *****************************************************************************
+//  Zoltan Toolkit for Load-balancing, Partitioning, Ordering and Coloring
+//
+// Copyright 2012 NTESS and the Zoltan contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
 /* MPI distributions in some version of Ubuntu and FreeBSD do not handle
  * self messages correctly.  Errors then appear in Zoltan in the Comm package,
  * or in PHG's building of the hypergraph.  If this test fails, there is 
@@ -62,6 +70,12 @@ int main(int narg, char**arg)
     printf("%d procs_from %d vals_from %d %s \n",
            my_proc, procs_from[i], vals_from[i], 
            (vals_from[i] < 0 ? "FAIL FAIL FAIL" : " "));
+
+  free(vals_from);
+  free(vals_to);
+  free(procs_from);
+  free(procs_to);
+  free(req);
 
   MPI_Comm_free(&comm);
   MPI_Finalize();

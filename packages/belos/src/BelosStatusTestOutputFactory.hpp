@@ -1,43 +1,11 @@
-//@HEADER
-// ************************************************************************
-//
+// @HEADER
+// *****************************************************************************
 //                 Belos: Block Linear Solvers Package
-//                  Copyright 2004 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
-//
-// ************************************************************************
-//@HEADER
+// Copyright 2004-2016 NTESS and the Belos contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
 //
 
 #ifndef BELOS_STATUS_TEST_OUTPUT_FACTORY_HPP
@@ -54,7 +22,6 @@
 #include "BelosStatusTestUserOutput.hpp"
 #include "BelosStatusTestGeneralOutput.hpp"
 
-
 namespace Belos {
 
   /*!
@@ -66,7 +33,7 @@ namespace Belos {
     class needs to be used from the solver managers. It also hides the generation of new StatusTestOutput
     classes from the solver managers.
   */
-template <class ScalarType, class MV, class OP>
+template <class ScalarType, class MV, class OP, class DM = DefaultDenseMatrix<int,ScalarType>>
 class StatusTestOutputFactory {
 
  public:
@@ -81,7 +48,7 @@ class StatusTestOutputFactory {
    * @param[in] outputStyle A ::OutputType value which defines the style of output requested by the user.
    * @param[in] taggedTests: map tag names of status tests to status tests (optional, default = Teuchos::null)
    */
-  StatusTestOutputFactory( int outputStyle, Teuchos::RCP<std::map<std::string,Teuchos::RCP<StatusTest<ScalarType,MV,OP> > > > taggedTests = Teuchos::null )
+  StatusTestOutputFactory( int outputStyle, Teuchos::RCP<std::map<std::string,Teuchos::RCP<StatusTest<ScalarType,MV,OP,DM> > > > taggedTests = Teuchos::null )
     : outputStyle_(outputStyle),
       taggedTests_(taggedTests)
   {}
@@ -108,45 +75,45 @@ class StatusTestOutputFactory {
    * @param[in] printStates A combination of ::StatusType values for which the output may be printed. Default: ::Passed (attempt to print whenever checkStatus() will return ::Passed)
    *
    */
-   Teuchos::RCP<StatusTestOutput<ScalarType,MV,OP> > create(const Teuchos::RCP<OutputManager<ScalarType> > &printer,
-                                                            Teuchos::RCP<StatusTest<ScalarType,MV,OP> > test,
+   Teuchos::RCP<StatusTestOutput<ScalarType,MV,OP,DM> > create(const Teuchos::RCP<OutputManager<ScalarType> > &printer,
+                                                            Teuchos::RCP<StatusTest<ScalarType,MV,OP,DM> > test,
                                                             int mod,
                                                             int printStates)
     {
-      Teuchos::RCP<StatusTestOutput<ScalarType,MV,OP> > outputTest;
+      Teuchos::RCP<StatusTestOutput<ScalarType,MV,OP,DM> > outputTest;
 
       switch( outputStyle_ ) {
 
       case General:
         if (mod > 0) {
-          outputTest = Teuchos::rcp( new StatusTestGeneralOutput<ScalarType,MV,OP>( printer, test, mod, printStates ) );
+          outputTest = Teuchos::rcp( new StatusTestGeneralOutput<ScalarType,MV,OP,DM>( printer, test, mod, printStates ) );
         }
         else {
-          outputTest = Teuchos::rcp( new StatusTestGeneralOutput<ScalarType,MV,OP>( printer, test, 1 ) );
+          outputTest = Teuchos::rcp( new StatusTestGeneralOutput<ScalarType,MV,OP,DM>( printer, test, 1 ) );
         }
         break;
       case Brief:
         if (mod > 0) {
-          outputTest = Teuchos::rcp( new StatusTestResNormOutput<ScalarType,MV,OP>( printer, test, mod, printStates ) );
+          outputTest = Teuchos::rcp( new StatusTestResNormOutput<ScalarType,MV,OP,DM>( printer, test, mod, printStates ) );
         }
         else {
-          outputTest = Teuchos::rcp( new StatusTestResNormOutput<ScalarType,MV,OP>( printer, test, 1 ) );
+          outputTest = Teuchos::rcp( new StatusTestResNormOutput<ScalarType,MV,OP,DM>( printer, test, 1 ) );
         }
         break;
       case User:
         if (mod > 0) {
-          outputTest = Teuchos::rcp( new StatusTestUserOutput<ScalarType,MV,OP>( printer, test, taggedTests_, mod, printStates ) );
+          outputTest = Teuchos::rcp( new StatusTestUserOutput<ScalarType,MV,OP,DM>( printer, test, taggedTests_, mod, printStates ) );
         }
         else {
-          outputTest = Teuchos::rcp( new StatusTestUserOutput<ScalarType,MV,OP>( printer, test, taggedTests_, 1 ) );
+          outputTest = Teuchos::rcp( new StatusTestUserOutput<ScalarType,MV,OP,DM>( printer, test, taggedTests_, 1 ) );
         }
         break;
       default: //Default to General if invalid outputStyle_ given.
         if (mod > 0) {
-          outputTest = Teuchos::rcp( new StatusTestGeneralOutput<ScalarType,MV,OP>( printer, test, mod, printStates ) );
+          outputTest = Teuchos::rcp( new StatusTestGeneralOutput<ScalarType,MV,OP,DM>( printer, test, mod, printStates ) );
         }
         else {
-          outputTest = Teuchos::rcp( new StatusTestGeneralOutput<ScalarType,MV,OP>( printer, test, 1 ) );
+          outputTest = Teuchos::rcp( new StatusTestGeneralOutput<ScalarType,MV,OP,DM>( printer, test, 1 ) );
         }
         break;
       }
@@ -162,14 +129,27 @@ class StatusTestOutputFactory {
   // Which type of StatusTestOutput class
   int outputStyle_;
 
-  Teuchos::RCP<std::map<std::string,Teuchos::RCP<StatusTest<ScalarType,MV,OP> > > > taggedTests_;
+  Teuchos::RCP<std::map<std::string,Teuchos::RCP<StatusTest<ScalarType,MV,OP,DM> > > > taggedTests_;
 
   // Hide the default constructor and copy constructor
   StatusTestOutputFactory( void ) {}
-  StatusTestOutputFactory( const StatusTestOutputFactory<ScalarType,MV,OP>& ) {}
+  StatusTestOutputFactory( const StatusTestOutputFactory<ScalarType,MV,OP,DM>& ) {}
 
 };
 
 } // end of Belos namespace
+
+#ifdef HAVE_BELOS_TPETRA
+#include "BelosTpetraETIHelpers.hpp"
+
+#define BELOS_TPETRA_STATUSTESTOUTPUTFACTORY_NOEXTERN_CALL(SC, LO, GO, NT)            \
+  BELOS_TPETRA_CALL(Belos::StatusTestOutputFactory, SC, LO, GO, NT)
+
+#define BELOS_TPETRA_STATUSTESTOUTPUTFACTORY_EXTERN_CALL(SC, LO, GO, NT)              \
+  BELOS_TPETRA_EXTERN_CALL(Belos::StatusTestOutputFactory, SC, LO, GO, NT)
+
+TPETRA_INSTANTIATE_SLGN_NO_ORDINAL_SCALAR(BELOS_TPETRA_STATUSTESTOUTPUTFACTORY_EXTERN_CALL)
+#endif
+
 
 #endif /* BELOS_STATUS_TEST_OUTPUT_FACTORY_HPP */

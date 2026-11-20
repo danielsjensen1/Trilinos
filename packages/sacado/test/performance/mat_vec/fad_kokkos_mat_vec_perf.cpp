@@ -1,34 +1,14 @@
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //                           Sacado Package
-//                 Copyright (2006) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// This library is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as
-// published by the Free Software Foundation; either version 2.1 of the
-// License, or (at your option) any later version.
-//
-// This library is distributed in the hope that it will be useful, but
-// WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-// Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public
-// License along with this library; if not, write to the Free Software
-// Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301
-// USA
-// Questions? Contact David M. Gay (dmgay@sandia.gov) or Eric T. Phipps
-// (etphipp@sandia.gov).
-//
-// ***********************************************************************
+// Copyright 2006 NTESS and the Sacado contributors.
+// SPDX-License-Identifier: LGPL-2.1-or-later
+// *****************************************************************************
 // @HEADER
 
-#define SACADO_VIEW_CUDA_HIERARCHICAL 1
-//#define SACADO_VIEW_CUDA_HIERARCHICAL_DFAD 1
+#define SACADO_GPU_HIERARCHICAL 1
+//#define SACADO_GPU_HIERARCHICAL_DFAD 1
 //#define SACADO_KOKKOS_USE_MEMORY_POOL 1
 #define SACADO_ALIGN_SFAD 1
 
@@ -67,7 +47,7 @@ void run_mat_vec(const ViewTypeA& A, const ViewTypeB& b, const ViewTypeC& c) {
   );
 }
 
-#if defined(SACADO_VIEW_CUDA_HIERARCHICAL_DFAD)
+#if defined(SACADO_GPU_HIERARCHICAL_DFAD)
 
 template <typename ViewTypeA, typename ViewTypeB, typename ViewTypeC>
 void run_mat_vec_hierarchical(const ViewTypeA& A, const ViewTypeB& b,
@@ -108,12 +88,12 @@ void run_mat_vec_hierarchical(const ViewTypeA& A, const ViewTypeB& b,
   );
 }
 
-#elif defined(SACADO_VIEW_CUDA_HIERARCHICAL)
+#elif defined(SACADO_GPU_HIERARCHICAL)
 
 template <typename ViewTypeA, typename ViewTypeB, typename ViewTypeC>
 void run_mat_vec_hierarchical(const ViewTypeA& A, const ViewTypeB& b,
                               const ViewTypeC& c) {
-  typedef typename Kokkos::ThreadLocalScalarType<ViewTypeC>::type scalar_type;
+  typedef typename Sacado::ThreadLocalScalarType<ViewTypeC>::type scalar_type;
   typedef typename ViewTypeC::execution_space execution_space;
 
 #if defined (KOKKOS_ENABLE_CUDA)
@@ -193,7 +173,7 @@ check_val(const ViewTypeA& A, const ViewTypeB& b, const ViewTypeC& c)
 {
   const double tol = 1.0e-14;
   typedef typename ViewTypeC::value_type value_type;
-  typename ViewTypeC::HostMirror h_c = Kokkos::create_mirror_view(c);
+  typename ViewTypeC::host_mirror_type h_c = Kokkos::create_mirror_view(c);
   Kokkos::deep_copy(h_c, c);
   const size_t m = A.extent(0);
   const size_t n = A.extent(1);
@@ -212,11 +192,11 @@ check_deriv(const ViewTypeA& A, const ViewTypeB& b, const ViewTypeC& c)
 {
   const double tol = 1.0e-14;
   typedef typename ViewTypeC::value_type value_type;
-  typename ViewTypeC::HostMirror h_c = Kokkos::create_mirror_view(c);
+  typename ViewTypeC::host_mirror_type h_c = Kokkos::create_mirror_view(c);
   Kokkos::deep_copy(h_c, c);
   const size_t m = A.extent(0);
   const size_t n = A.extent(1);
-  const size_t p = Kokkos::dimension_scalar(A);
+  const size_t p = Sacado::dimension_scalar(A);
   for (size_t i=0; i<m; ++i) {
     for (size_t j=0; j<p; ++j) {
       value_type t = (j == p-1 ? n : 2*n);
@@ -288,7 +268,7 @@ do_time_fad_hierarchical(const size_t m, const size_t n, const size_t p,
   typedef Kokkos::View<FadType*,  ViewArgs...> ViewTypeC;
   typedef typename ViewTypeA::execution_space execution_space;
 
-#if defined(SACADO_VIEW_CUDA_HIERARCHICAL)
+#if defined(SACADO_GPU_HIERARCHICAL)
 #if defined (KOKKOS_ENABLE_CUDA)
   const bool is_cuda = std::is_same<execution_space, Kokkos::Cuda>::value;
   const int FadStride = is_cuda ? 32 : 1;
@@ -313,10 +293,10 @@ do_time_fad_hierarchical(const size_t m, const size_t n, const size_t p,
   const size_t pa = p;
 #endif
 
-#if defined(SACADO_VIEW_CUDA_HIERARCHICAL) || defined(SACADO_VIEW_CUDA_HIERARCHICAL_DFAD)
-  typedef Kokkos::LayoutContiguous<typename ViewTypeA::array_layout,FadStride> ConLayoutA;
-  typedef Kokkos::LayoutContiguous<typename ViewTypeB::array_layout,FadStride> ConLayoutB;
-  typedef Kokkos::LayoutContiguous<typename ViewTypeC::array_layout,FadStride> ConLayoutC;
+#if defined(SACADO_GPU_HIERARCHICAL) || defined(SACADO_GPU_HIERARCHICAL_DFAD)
+  typedef Sacado::LayoutContiguous<typename ViewTypeA::array_layout,FadStride> ConLayoutA;
+  typedef Sacado::LayoutContiguous<typename ViewTypeB::array_layout,FadStride> ConLayoutB;
+  typedef Sacado::LayoutContiguous<typename ViewTypeC::array_layout,FadStride> ConLayoutC;
 #else
   typedef typename ViewTypeA::array_layout ConLayoutA;
   typedef typename ViewTypeB::array_layout ConLayoutB;

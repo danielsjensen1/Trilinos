@@ -1,43 +1,11 @@
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //           Panzer: A partial differential equation assembly
 //       engine for strongly coupled complex multiphysics systems
-//                 Copyright (2011) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Roger P. Pawlowski (rppawlo@sandia.gov) and
-// Eric C. Cyr (eccyr@sandia.gov)
-// ***********************************************************************
+// Copyright 2011 NTESS and the Panzer contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #ifndef   __Panzer_Integrator_DivBasisTimesScalar_impl_hpp__
@@ -53,7 +21,7 @@
 #include "Intrepid2_FunctionSpaceTools.hpp"
 
 // Kokkos
-#include "Kokkos_ViewFactory.hpp"
+#include "Sacado_Fad_Kokkos_ViewFactory.hpp"
 
 // Panzer
 #include "Panzer_BasisIRLayout.hpp"
@@ -82,8 +50,7 @@ namespace panzer
     :
     evalStyle_(evalStyle),
     multiplier_(multiplier),
-    basisName_(basis.name()),
-    use_shared_memory(false)
+    basisName_(basis.name())
   {
     using PHX::View;
     using panzer::BASIS;
@@ -186,7 +153,7 @@ namespace panzer
     typename Traits::SetupData sd,
     PHX::FieldManager<Traits>& /* fm */)
   {
-    using Kokkos::createDynRankView;
+    using Sacado::createDynRankView;
     using panzer::getBasisIndex;
 
     auto kokkosFieldMults_h = Kokkos::create_mirror_view(kokkosFieldMults_);
@@ -201,7 +168,7 @@ namespace panzer
     bool use_shared_memory = panzer::HP::inst().useSharedMemory<ScalarT>();
     if (!use_shared_memory) {
       if (Sacado::IsADType<ScalarT>::value) {
-	const auto fadSize = Kokkos::dimension_scalar(field_.get_view());
+	const auto fadSize = Sacado::dimension_scalar(field_.get_view());
 	tmp_ = PHX::View<ScalarT*>("panzer::Integrator::DivBasisTimesScalar::tmp_",field_.extent(0),fadSize);
       } else {
 	tmp_ = PHX::View<ScalarT*>("panzer::Integrator::DivBasisTimesScalar::tmp_",field_.extent(0));
@@ -224,7 +191,7 @@ namespace panzer
   Integrator_DivBasisTimesScalar<EvalT, Traits>::
   operator()(
     const FieldMultTag<NUM_FIELD_MULT>& /* tag */,
-    const Kokkos::TeamPolicy<PHX::exec_space>::member_type& team) const
+    const Kokkos::TeamPolicy<PHX::ExecutionSpace>::member_type& team) const
   {
     using panzer::EvaluatorStyle;
     const int cell = team.league_rank();
@@ -239,28 +206,28 @@ namespace panzer
 
     // The following if-block is for the sake of optimization depending on the
     // number of field multipliers.
-    if (NUM_FIELD_MULT == 0)
+    if constexpr (NUM_FIELD_MULT == 0)
     {
       // Loop over the quadrature points, scale the integrand by the
       // multiplier, and then perform the actual integration, looping over the
       // bases.
       for (int qp(0); qp < numQP; ++qp)
       {
-	Kokkos::parallel_for(Kokkos::TeamThreadRange(team,0,numBases), [&] (const int basis) {
+        Kokkos::parallel_for(Kokkos::TeamThreadRange(team,0,numBases), [&] (const int basis) {
           field_(cell, basis) += basis_(cell, basis, qp) * multiplier_ * scalar_(cell, qp);
-	});
+        });
       } // end loop over the quadrature points
     }
-    else if (NUM_FIELD_MULT == 1)
+    else if constexpr (NUM_FIELD_MULT == 1)
     {
       // Loop over the quadrature points, scale the integrand by the multiplier
       // and the single field multiplier, and then perform the actual
       // integration, looping over the bases.
       for (int qp(0); qp < numQP; ++qp)
       {
-	Kokkos::parallel_for(Kokkos::TeamThreadRange(team,0,numBases), [&] (const int basis) {
+        Kokkos::parallel_for(Kokkos::TeamThreadRange(team,0,numBases), [&] (const int basis) {
           field_(cell, basis) += basis_(cell, basis, qp) * multiplier_ * scalar_(cell, qp) * kokkosFieldMults_(0)(cell, qp);
-	});
+        });
       } // end loop over the quadrature points
     }
     else
@@ -272,13 +239,19 @@ namespace panzer
       const int numFieldMults(kokkosFieldMults_.extent(0));
       for (int qp(0); qp < numQP; ++qp)
       {
-	team.team_barrier();
-	tmp_(cell) = 1.0;
-        for (int fm(0); fm < numFieldMults; ++fm)
-          tmp_(cell) *= kokkosFieldMults_(fm)(cell, qp);
-	Kokkos::parallel_for(Kokkos::TeamThreadRange(team,0,numBases),[&] (const int& basis) {
-	    field_(cell, basis) += basis_(cell, basis, qp) * multiplier_ * scalar_(cell, qp) * tmp_(cell);
-	  });
+        // tmp_(cell) is shared by the team, so a single team thread (all of
+        // its vector lanes, to keep hierarchic Fad partitions intact) computes
+        // the product, and barriers fence it from the reads.
+        team.team_barrier();
+        if (team.team_rank() == 0) {
+          tmp_(cell) = 1.0;
+          for (int fm(0); fm < numFieldMults; ++fm)
+            tmp_(cell) *= kokkosFieldMults_(fm)(cell, qp);
+        }
+        team.team_barrier();
+        Kokkos::parallel_for(Kokkos::TeamThreadRange(team,0,numBases),[&] (const int& basis) {
+          field_(cell, basis) += basis_(cell, basis, qp) * multiplier_ * scalar_(cell, qp) * tmp_(cell);
+        });
       } // end loop over the quadrature points
     } // end if (NUM_FIELD_MULT == something)
   } // end of operator()
@@ -295,13 +268,13 @@ namespace panzer
   Integrator_DivBasisTimesScalar<EvalT, Traits>::
   operator()(
     const SharedFieldMultTag<NUM_FIELD_MULT>& /* tag */,
-    const Kokkos::TeamPolicy<PHX::exec_space>::member_type& team) const
+    const Kokkos::TeamPolicy<PHX::ExecutionSpace>::member_type& team) const
   {
     using panzer::EvaluatorStyle;
     const int cell = team.league_rank();
     const int numQP = scalar_.extent(1);
     const int numBases = basis_.extent(1);
-    const int fadSize = Kokkos::dimension_scalar(field_.get_view());
+    const int fadSize = Sacado::dimension_scalar(field_.get_view());
 
     scratch_view tmp;
     scratch_view tmp_field;
@@ -321,32 +294,28 @@ namespace panzer
 
     // The following if-block is for the sake of optimization depending on the
     // number of field multipliers.
-    if (NUM_FIELD_MULT == 0)
+    if constexpr (NUM_FIELD_MULT == 0)
     {
       // Loop over the quadrature points, scale the integrand by the
       // multiplier, and then perform the actual integration, looping over the
       // bases.
       for (int qp(0); qp < numQP; ++qp)
       {
-	team.team_barrier();
-	tmp(0) = multiplier_ * scalar_(cell, qp);
-	Kokkos::parallel_for(Kokkos::TeamThreadRange(team,0,numBases),[&] (const int& basis) {
-	  tmp_field(basis) += basis_(cell, basis, qp) * tmp(0);
-	});
+        Kokkos::parallel_for(Kokkos::TeamThreadRange(team,0,numBases),[&] (const int& basis) {
+          tmp_field(basis) += basis_(cell, basis, qp) * multiplier_ * scalar_(cell, qp);
+        });
       } // end loop over the quadrature points
     }
-    else if (NUM_FIELD_MULT == 1)
+    else if constexpr (NUM_FIELD_MULT == 1)
     {
       // Loop over the quadrature points, scale the integrand by the multiplier
       // and the single field multiplier, and then perform the actual
       // integration, looping over the bases.
       for (int qp(0); qp < numQP; ++qp)
       {
-	team.team_barrier();
-        tmp(0) = multiplier_ * scalar_(cell, qp) * kokkosFieldMults_(0)(cell, qp);
-	Kokkos::parallel_for(Kokkos::TeamThreadRange(team,0,numBases),[&] (const int& basis) {
-	  tmp_field(basis) += basis_(cell, basis, qp) * tmp(0);
-	});
+        Kokkos::parallel_for(Kokkos::TeamThreadRange(team,0,numBases),[&] (const int& basis) {
+          tmp_field(basis) += basis_(cell, basis, qp) * multiplier_ * scalar_(cell, qp) * kokkosFieldMults_(0)(cell, qp);
+        });
       } // end loop over the quadrature points
     }
     else
@@ -358,14 +327,19 @@ namespace panzer
       const int numFieldMults = kokkosFieldMults_.extent(0);
       for (int qp(0); qp < numQP; ++qp)
       {
-	team.team_barrier();
-        ScalarT fieldMultsTotal(1); // need shared mem here
-        for (int fm(0); fm < numFieldMults; ++fm)
-          fieldMultsTotal *= kokkosFieldMults_(fm)(cell, qp);
-        tmp(0) = multiplier_ * scalar_(cell, qp) * fieldMultsTotal;
-	Kokkos::parallel_for(Kokkos::TeamThreadRange(team,0,numBases),[&] (const int& basis) {
-	  tmp_field(basis) += basis_(cell, basis, qp) * tmp(0);
-	});
+        // tmp(0) is shared by the team, so a single team thread (all of its
+        // vector lanes, to keep hierarchic Fad partitions intact) computes it,
+        // and barriers fence it from the reads.
+        team.team_barrier();
+        if (team.team_rank() == 0) {
+          tmp(0) = multiplier_ * scalar_(cell, qp);
+          for (int fm(0); fm < numFieldMults; ++fm)
+            tmp(0) *= kokkosFieldMults_(fm)(cell, qp);
+        }
+        team.team_barrier();
+        Kokkos::parallel_for(Kokkos::TeamThreadRange(team,0,numBases),[&] (const int& basis) {
+          tmp_field(basis) += basis_(cell, basis, qp) * tmp(0);
+        });
       } // end loop over the quadrature points
     } // end if (NUM_FIELD_MULT == something)
 
@@ -400,12 +374,12 @@ namespace panzer
     // Grab the basis information.
     basis_ = this->wda(workset).bases[basisIndex_]->weighted_div_basis;
 
-    use_shared_memory = panzer::HP::inst().useSharedMemory<ScalarT>();
+    bool use_shared_memory = panzer::HP::inst().useSharedMemory<ScalarT>();
 
     if (use_shared_memory) {
       int bytes;
       if (Sacado::IsADType<ScalarT>::value) {
-	const int fadSize = Kokkos::dimension_scalar(field_.get_view());
+	const int fadSize = Sacado::dimension_scalar(field_.get_view());
 	bytes = scratch_view::shmem_size(1,fadSize) + scratch_view::shmem_size(basis_.extent(1),fadSize);
       }
       else
@@ -415,13 +389,13 @@ namespace panzer
       // number of field multipliers.  The parallel_fors will loop over the cells
       // in the Workset and execute operator()() above.
       if (fieldMults_.size() == 0) {
-	auto policy = panzer::HP::inst().teamPolicy<ScalarT,SharedFieldMultTag<0>,PHX::Device>(workset.num_cells).set_scratch_size(0,Kokkos::PerTeam(bytes));
+	auto policy = panzer::HP::inst().teamPolicy<ScalarT,SharedFieldMultTag<0>,PHX::ExecutionSpace>(workset.num_cells).set_scratch_size(0,Kokkos::PerTeam(bytes));
 	parallel_for(this->getName(), policy, *this);
       } else if (fieldMults_.size() == 1) {
-	auto policy = panzer::HP::inst().teamPolicy<ScalarT,SharedFieldMultTag<1>,PHX::Device>(workset.num_cells).set_scratch_size(0,Kokkos::PerTeam(bytes));
+	auto policy = panzer::HP::inst().teamPolicy<ScalarT,SharedFieldMultTag<1>,PHX::ExecutionSpace>(workset.num_cells).set_scratch_size(0,Kokkos::PerTeam(bytes));
 	parallel_for(this->getName(), policy, *this);
       } else {
-	auto policy = panzer::HP::inst().teamPolicy<ScalarT,SharedFieldMultTag<-1>,PHX::Device>(workset.num_cells).set_scratch_size(0,Kokkos::PerTeam(bytes));
+	auto policy = panzer::HP::inst().teamPolicy<ScalarT,SharedFieldMultTag<-1>,PHX::ExecutionSpace>(workset.num_cells).set_scratch_size(0,Kokkos::PerTeam(bytes));
 	parallel_for(this->getName(), policy, *this);
       }
     }
@@ -430,13 +404,13 @@ namespace panzer
       // number of field multipliers.  The parallel_fors will loop over the cells
       // in the Workset and execute operator()() above.
       if (fieldMults_.size() == 0) {
-	auto policy = panzer::HP::inst().teamPolicy<ScalarT,FieldMultTag<0>,PHX::Device>(workset.num_cells);
+	auto policy = panzer::HP::inst().teamPolicy<ScalarT,FieldMultTag<0>,PHX::ExecutionSpace>(workset.num_cells);
 	parallel_for(this->getName(), policy, *this);
       } else if (fieldMults_.size() == 1) {
-	auto policy = panzer::HP::inst().teamPolicy<ScalarT,FieldMultTag<1>,PHX::Device>(workset.num_cells);
+	auto policy = panzer::HP::inst().teamPolicy<ScalarT,FieldMultTag<1>,PHX::ExecutionSpace>(workset.num_cells);
 	parallel_for(this->getName(), policy, *this);
       } else {
-	auto policy = panzer::HP::inst().teamPolicy<ScalarT,FieldMultTag<-1>,PHX::Device>(workset.num_cells);
+	auto policy = panzer::HP::inst().teamPolicy<ScalarT,FieldMultTag<-1>,PHX::ExecutionSpace>(workset.num_cells);
 	parallel_for(this->getName(), policy, *this);
       }
     }

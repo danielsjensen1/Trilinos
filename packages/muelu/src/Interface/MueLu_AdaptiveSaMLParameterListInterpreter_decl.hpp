@@ -1,3 +1,12 @@
+// @HEADER
+// *****************************************************************************
+//        MueLu: A package for multigrid based preconditioning
+//
+// Copyright 2012 NTESS and the MueLu contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
+
 /*
  * MueLu_AdaptiveSaMLParamterListInterpreter_decl.hpp
  *
@@ -59,7 +68,7 @@ namespace MueLu {
 // void CreateSublists(const ParameterList &List, ParameterList &newList);
 
 /*!
-  @class AdaptiveSAMLParameterListInterpreter class.
+  @class AdaptiveSAMLParameterListInterpreter
   @brief Class that accepts ML-style parameters and builds a MueLu preconditioner.
   This interpreter uses the same default values as ML. This allows to compare ML/MueLu results
 */

@@ -1,44 +1,11 @@
-/*@HEADER
-// ***********************************************************************
-//
+// @HEADER
+// *****************************************************************************
 //       Ifpack2: Templated Object-Oriented Algebraic Preconditioner Package
-//                 Copyright (2009) Sandia Corporation
 //
-// Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
-// license for use of this work by or on behalf of the U.S. Government.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
-//
-// ***********************************************************************
-//@HEADER
-*/
+// Copyright 2009 NTESS and the Ifpack2 contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
 
 /// @file Ifpack2_Preconditioner.hpp
 
@@ -96,22 +63,21 @@ namespace Ifpack2 {
 /// allocated information, and reinitializes the preconditioner. Every
 /// time compute() is called, the object recomputes the actual values of
 /// the preconditioner.
-template<class Scalar =
-           Tpetra::Operator<>::scalar_type,
-         class LocalOrdinal =
-           typename Tpetra::Operator<Scalar>::local_ordinal_type,
-         class GlobalOrdinal =
-           typename Tpetra::Operator<Scalar, LocalOrdinal>::global_ordinal_type,
-         class Node =
-           typename Tpetra::Operator<Scalar, LocalOrdinal, GlobalOrdinal>::node_type>
-class Preconditioner :
-  virtual public Tpetra::Operator<Scalar, LocalOrdinal, GlobalOrdinal, Node> {
-public:
+template <class Scalar =
+              Tpetra::Operator<>::scalar_type,
+          class LocalOrdinal =
+              typename Tpetra::Operator<Scalar>::local_ordinal_type,
+          class GlobalOrdinal =
+              typename Tpetra::Operator<Scalar, LocalOrdinal>::global_ordinal_type,
+          class Node =
+              typename Tpetra::Operator<Scalar, LocalOrdinal, GlobalOrdinal>::node_type>
+class Preconditioner : virtual public Tpetra::Operator<Scalar, LocalOrdinal, GlobalOrdinal, Node> {
+ public:
   //! The type of the magnitude (absolute value) of a matrix entry.
   typedef typename Teuchos::ScalarTraits<Scalar>::magnitudeType magnitude_type;
 
   //! Destructor.
-  virtual ~Preconditioner(){}
+  virtual ~Preconditioner() {}
 
   /// @name Methods implementing Tpetra::Operator.
   //@{
@@ -120,36 +86,36 @@ public:
   ///
   /// The domain Map describes the distribution of valid input vectors
   /// X to the apply() method.
-  virtual Teuchos::RCP<const Tpetra::Map<LocalOrdinal,GlobalOrdinal,Node> >
-  getDomainMap () const = 0;
+  virtual Teuchos::RCP<const Tpetra::Map<LocalOrdinal, GlobalOrdinal, Node> >
+  getDomainMap() const = 0;
 
   /// @brief The range Map of this operator.
   ///
   /// The range Map describes the distribution of valid output vectors
   /// Y to the apply() method.
-  virtual Teuchos::RCP<const Tpetra::Map<LocalOrdinal,GlobalOrdinal,Node> >
-  getRangeMap () const = 0;
+  virtual Teuchos::RCP<const Tpetra::Map<LocalOrdinal, GlobalOrdinal, Node> >
+  getRangeMap() const = 0;
 
   /// @brief Apply the preconditioner to X, putting the result in Y.
   ///
   /// If the result of applying this preconditioner to a vector X is
-  /// \f$F \cdot X$\f$, then this method computes \f$\beta Y + \alpha F \cdot X\f$.
+  /// \f$F \cdot X\f$, then this method computes \f$\beta Y + \alpha F \cdot X\f$.
   /// The typical case is \f$\beta = 0\f$ and \f$\alpha = 1\f$.
   virtual void
-  apply (const Tpetra::MultiVector<Scalar,LocalOrdinal,GlobalOrdinal,Node> &X,
-         Tpetra::MultiVector<Scalar,LocalOrdinal,GlobalOrdinal,Node> &Y,
-         Teuchos::ETransp mode = Teuchos::NO_TRANS,
-         Scalar alpha = Teuchos::ScalarTraits<Scalar>::one(),
-         Scalar beta = Teuchos::ScalarTraits<Scalar>::zero()) const = 0;
+  apply(const Tpetra::MultiVector<Scalar, LocalOrdinal, GlobalOrdinal, Node> &X,
+        Tpetra::MultiVector<Scalar, LocalOrdinal, GlobalOrdinal, Node> &Y,
+        Teuchos::ETransp mode = Teuchos::NO_TRANS,
+        Scalar alpha          = Teuchos::ScalarTraits<Scalar>::one(),
+        Scalar beta           = Teuchos::ScalarTraits<Scalar>::zero()) const = 0;
   //@}
 
   //! Set this preconditioner's parameters.
-  virtual void setParameters (const Teuchos::ParameterList& List) = 0;
+  virtual void setParameters(const Teuchos::ParameterList &List) = 0;
 
-  virtual bool supportsZeroStartingSolution () { return false; };
+  virtual bool supportsZeroStartingSolution() { return false; };
 
   //! Set this preconditioner's parameters.
-  virtual void setZeroStartingSolution (bool zeroStartingSolution) { TEUCHOS_ASSERT(false); };
+  virtual void setZeroStartingSolution(bool /*zeroStartingSolution*/) { TEUCHOS_ASSERT(false); };
 
   /// @brief Set up the graph structure of this preconditioner.
   ///
@@ -180,7 +146,7 @@ public:
   virtual bool isComputed() const = 0;
 
   //! The input matrix given to the constructor.
-  virtual Teuchos::RCP<const Tpetra::RowMatrix<Scalar,LocalOrdinal,GlobalOrdinal,Node> > getMatrix() const = 0;
+  virtual Teuchos::RCP<const Tpetra::RowMatrix<Scalar, LocalOrdinal, GlobalOrdinal, Node> > getMatrix() const = 0;
 
   //! The number of calls to initialize().
   virtual int getNumInitialize() const = 0;
@@ -201,6 +167,6 @@ public:
   virtual double getApplyTime() const = 0;
 };
 
-}//namespace Ifpack2
+}  // namespace Ifpack2
 
-#endif // IFPACK2_PRECONDITIONER_HPP
+#endif  // IFPACK2_PRECONDITIONER_HPP

@@ -1,20 +1,12 @@
 // clang-format off
-/* =====================================================================================
-Copyright 2022 National Technology & Engineering Solutions of Sandia, LLC (NTESS).
-Under the terms of Contract DE-NA0003525 with NTESS, the U.S. Government retains
-certain rights in this software.
-
-SCR#:2790.0
-
-This file is part of Tacho. Tacho is open source software: you can redistribute it
-and/or modify it under the terms of BSD 2-Clause License
-(https://opensource.org/licenses/BSD-2-Clause). A copy of the licese is also
-provided under the main directory
-
-Questions? Kyungjoo Kim at <kyukim@sandia.gov,https://github.com/kyungjoo-kim>
-
-Sandia National Laboratories, Albuquerque, NM, USA
-===================================================================================== */
+// @HEADER
+// *****************************************************************************
+//                            Tacho package
+//
+// Copyright 2022 NTESS and the Tacho contributors.
+// SPDX-License-Identifier: BSD-2-Clause
+// *****************************************************************************
+// @HEADER
 // clang-format on
 /// \file Tacho_SymbolicTools.hpp
 /// \author Kyungjoo Kim (kyukim@sandia.gov)
@@ -215,7 +207,7 @@ void SymbolicTools::computeSupernodes(const ordinal_type m, const size_type_arra
     if (parent(i) >= 0)
       ++count(parent(i));
 
-  // parent has more than a child, it becomes a supernode candidate
+  // parent has more than one child, it becomes a supernode candidate
   // roots are supernodes
   for (ordinal_type i = 0; i < m; ++i)
     if (count(i) > 1 || parent(i) < 0)
@@ -223,7 +215,7 @@ void SymbolicTools::computeSupernodes(const ordinal_type m, const size_type_arra
 
   // accumulate subtree sizes in count.
   for (ordinal_type i = 0; i < m; ++i)
-    count(i) = 1;
+    count(i) = 1; // include itself (# of immediate child + me)
   for (ordinal_type i = 0; i < m; ++i)
     if (parent(i) >= 0)
       count(parent(i)) += count(i);
@@ -232,11 +224,12 @@ void SymbolicTools::computeSupernodes(const ordinal_type m, const size_type_arra
   for (ordinal_type i = 0; i < m; ++i) {
     const ordinal_type ii = perm(i);
     for (size_type p = ap(ii); p < ap(ii + 1); ++p) {
-      const ordinal_type j = peri(aj(p));
-      if (i < j) {
-        const ordinal_type k = prev(j);
-        if (k < (i - count(i) + 1))
+      const ordinal_type j = peri(aj(p)); // j col id of nonzeros in ith row = one of i's ancestors (higher in e-tree)
+      if (i < j) { // upper
+        const ordinal_type k = prev(j); // k updated j last, or zero if j has not been updated
+        if (k < (i - count(i) + 1)) {
           flag(i) = true;
+        }
         prev(j) = i;
       }
     }
@@ -248,23 +241,25 @@ void SymbolicTools::computeSupernodes(const ordinal_type m, const size_type_arra
     flag(k) = true; // supernodes begin
 
     ordinal_type supernode_size = 0;
-    ordinal_type supernode_size_threshold = m; // max supernode threshold (todo: not used, but could pass in as arg)
+    ordinal_type supernode_max_size_threshold = m; // max supernode threshold (todo: not used, but could pass in as arg)
     for (ordinal_type i = 0; i < m; ++i)
     {
       supernode_size ++;
-      if (flag(i) || supernode_size >= supernode_size_threshold) {
+      if (flag(i) || supernode_size >= supernode_max_size_threshold) {
         supernode_size = 0;
         k ++;
       }
     }
-    supernodes = ordinal_type_array(do_not_initialize_tag("supernodes"), k + 1);
 
     // record supernodes
+    supernodes = ordinal_type_array(do_not_initialize_tag("supernodes"), k + 1);
+    supernodes(0) = 0;
+
     k = 0;
     supernode_size = 0;
     for (ordinal_type i = 0; i < m; ++i) {
       supernode_size ++;
-      if (flag(i) || supernode_size >= supernode_size_threshold) {
+      if (flag(i) || supernode_size >= supernode_max_size_threshold) {
         supernode_size = 0;
         supernodes(k++) = i;
       }
@@ -673,6 +668,7 @@ SymbolicTools::SymbolicTools(const ordinal_type m, const size_type_array &ap, co
                              const ordinal_type_array &perm, const ordinal_type_array &peri)
     : _m(m), _ap(ap), _aj(aj), _perm(perm), _peri(peri) {}
 
+ordinal_type SymbolicTools::NumNonzerosU() const { return stat.nnz_u; }
 ordinal_type SymbolicTools::NumSupernodes() const { return _supernodes.extent(0) - 1; }
 ordinal_type_array SymbolicTools::Supernodes() const { return _supernodes; }
 size_type_array SymbolicTools::gidSuperPanelPtr() const { return _gid_super_panel_ptr; }
@@ -1053,6 +1049,7 @@ void SymbolicTools::evaporateSymbolicFactors(const ordinal_type_array &aw, const
   if (verbose) {
     printf("Summary: EvaporateSymbolicFactors\n");
     printf("=================================\n");
+    printf( "  Using %d ~ %d DoFs / grid\n",minval, maxval);
 
     // const double kilo(1024);
     switch (verbose) {

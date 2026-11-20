@@ -1,51 +1,15 @@
 // @HEADER
-//
-// ***********************************************************************
-//
+// *****************************************************************************
 //        MueLu: A package for multigrid based preconditioning
-//                  Copyright 2012 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact
-//                    Jonathan Hu       (jhu@sandia.gov)
-//                    Andrey Prokopenko (aprokop@sandia.gov)
-//                    Ray Tuminaro      (rstumin@sandia.gov)
-//
-// ***********************************************************************
-//
+// Copyright 2012 NTESS and the MueLu contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
-#include <Teuchos_UnitTestRepository.hpp>
 
+#include <Teuchos_UnitTestRepository.hpp>
 #include "MueLu_TestHelpers_kokkos.hpp"
+#include <filesystem>
 
 namespace MueLuTests {
 
@@ -54,28 +18,30 @@ Xpetra::Parameters TestHelpers_kokkos::Parameters::xpetraParameters = Xpetra::Pa
 
 }  // namespace MueLuTests
 
-namespace MueLuTests {
-namespace TestHelpers_kokkos {
+namespace MueLuTests::TestHelpers_kokkos {
 
+// Use <filesystem> to list files in the directory matching the filter
 ArrayRCP<std::string> GetFileList(const std::string& dirPath, const std::string& filter) {
   RCP<std::vector<std::string> > files = rcp(new std::vector<std::string>());
 
-  DIR* dir = opendir(dirPath.c_str());
-  TEUCHOS_TEST_FOR_EXCEPTION(dir == NULL, MueLu::Exceptions::RuntimeError, "GetFileList(\"" + dirPath + "\") : " + strerror(errno));
-
-  struct dirent* dirEntry;
-  while ((dirEntry = readdir(dir)) != NULL) {
-    std::string dirEntryS(dirEntry->d_name);
-
-    size_t pos = dirEntryS.rfind(filter);
-    if (pos != std::string::npos && pos + filter.size() == dirEntryS.size())
-      files->push_back(std::string(dirEntryS));
+  // Use filesystem to iterate over the directory
+  try {
+    for (const auto& entry : std::filesystem::directory_iterator(dirPath)) {
+      if (entry.is_regular_file()) {
+        std::string fileName = entry.path().filename().string();
+        // Apply the filter
+        size_t pos = fileName.rfind(filter);
+        if (pos != std::string::npos && pos + filter.size() == fileName.size()) {
+          files->push_back(fileName);
+        }
+      }
+    }
+  } catch (const std::filesystem::filesystem_error& e) {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, MueLu::Exceptions::RuntimeError,
+                               "GetFileList(\"" + dirPath + "\") : " + e.what());
   }
-
-  closedir(dir);
 
   return arcp(files);
 }
 
-}  // namespace TestHelpers_kokkos
-}  // namespace MueLuTests
+}  // namespace MueLuTests::TestHelpers_kokkos

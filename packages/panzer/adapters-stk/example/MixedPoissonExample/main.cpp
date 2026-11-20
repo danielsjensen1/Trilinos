@@ -1,43 +1,11 @@
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //           Panzer: A partial differential equation assembly
 //       engine for strongly coupled complex multiphysics systems
-//                 Copyright (2011) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Roger P. Pawlowski (rppawlo@sandia.gov) and
-// Eric C. Cyr (eccyr@sandia.gov)
-// ***********************************************************************
+// Copyright 2011 NTESS and the Panzer contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #include <Teuchos_ConfigDefs.hpp>
@@ -149,6 +117,8 @@ int main(int argc,char * argv[])
      bool check_order_for_shared_mem = true;
      bool stacked_timer_output = true;
      bool time_monitor_output = false;
+     bool variable_coefficient = false;
+     bool anisotropic_tensor = false;
 
      Teuchos::CommandLineProcessor clp;
      clp.throwExceptions(false);
@@ -168,6 +138,10 @@ int main(int argc,char * argv[])
      clp.setOption("check-order","no-check-order",&check_order_for_shared_mem);
      clp.setOption("stacked-timer-output","no-stacked-timer-output",&stacked_timer_output);
      clp.setOption("time-monitor-output","no-time-monitor-output",&time_monitor_output);
+     clp.setOption("variable-coefficient","no-variable-coefficient",&variable_coefficient,
+                   "Weight the div-div term by k=(1+x)(1+y)(1+z), applied as three field multipliers");
+     clp.setOption("anisotropic-tensor","no-anisotropic-tensor",&anisotropic_tensor,
+                   "Use a constant, full, SPD tensor K in the (K grad phi, grad q) term");
 
      // parse commandline argument
      Teuchos::CommandLineProcessor::EParseCommandLineReturn r_parse= clp.parse( argc, argv );
@@ -240,6 +214,8 @@ int main(int argc,char * argv[])
         testInitialization(hgrad_basis_order,
                            hdiv_basis_order,
                            ipb, eBlockNames, bcs);
+        ipb->sublist("MixedPoisson Physics").set("Variable Coefficient",variable_coefficient);
+        ipb->sublist("MixedPoisson Physics").set("Anisotropic Tensor",anisotropic_tensor);
 
         const panzer::CellData volume_cell_data(workset_size, mesh->getCellTopology("eblock-0_0_0"));
 
@@ -390,6 +366,20 @@ int main(int argc,char * argv[])
         closure_models.sublist("solid").sublist("SOURCE").set<std::string>("Type","SINE SOURCE");
           // SOURCE field is required by the MixedPoissonEquationSet
 
+       if (variable_coefficient) {
+         closure_models.sublist("solid").sublist("SOURCE").set("Weighted",true);
+         const char* names[] = {"COEFF_X","COEFF_Y","COEFF_Z"};
+         for (int d = 0; d < 3; ++d) {
+           closure_models.sublist("solid").sublist(names[d]).set<std::string>("Type","LINEAR COEFFICIENT");
+           closure_models.sublist("solid").sublist(names[d]).set<int>("Direction",d);
+         }
+       }
+
+       if (anisotropic_tensor) {
+         closure_models.sublist("solid").sublist("SOURCE").set("Anisotropic",true);
+         closure_models.sublist("solid").sublist("K_TENSOR").set<std::string>("Type","ANISOTROPIC TENSOR");
+       }
+
        // required for error calculation
        closure_models.sublist("solid").sublist("PHI_ERROR").set<std::string>("Type","ERROR_CALC");
        closure_models.sublist("solid").sublist("PHI_ERROR").set<std::string>("Field A","PHI");
@@ -467,11 +457,12 @@ int main(int argc,char * argv[])
 
      // solve linear system
      /////////////////////////////////////////////////////////////
-
+     stackedTimer->start("Solve system");
      if(useTpetra)
         solveTpetraSystem(*container);
      else
         solveEpetraSystem(*container);
+     stackedTimer->stop("Solve system");
 
      // output data (optional)
      /////////////////////////////////////////////////////////////
@@ -601,9 +592,9 @@ void solveTpetraSystem(panzer::LinearObjContainer & container)
   typedef Tpetra::Operator<double,int,panzer::GlobalOrdinal> OP;
   typedef Belos::LinearProblem<double,MV, OP> ProblemType;
   Teuchos::RCP<ProblemType> problem(new ProblemType(tp_container.get_A(), tp_container.get_x(), tp_container.get_f()));
-  auto prec = Ifpack2::Factory::create<Tpetra::RowMatrix<double,int,panzer::GlobalOrdinal>>("RELAXATION",tp_container.get_A(),4);
+  auto prec = Ifpack2::Factory::create<Tpetra::RowMatrix<double,int,panzer::GlobalOrdinal>>("RELAXATION",tp_container.get_A());
   Teuchos::ParameterList precParams;
-  precParams.set("relaxation: type", "Gauss-Seidel");
+  precParams.set("relaxation: type", "Jacobi");
   prec->setParameters(precParams);
   prec->initialize();
   prec->compute();

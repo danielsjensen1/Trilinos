@@ -1,43 +1,11 @@
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //           Panzer: A partial differential equation assembly
 //       engine for strongly coupled complex multiphysics systems
-//                 Copyright (2011) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Roger P. Pawlowski (rppawlo@sandia.gov) and
-// Eric C. Cyr (eccyr@sandia.gov)
-// ***********************************************************************
+// Copyright 2011 NTESS and the Panzer contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #ifndef __Panzer_STK_SetupLOWSFactory_hpp__
@@ -65,7 +33,11 @@
 
 namespace panzer_stk {
 
-/** Build LOWS factory. */
+/** \brief Convenience overload accepting a generic panzer::ConnManager,
+  * which must actually be a panzer_stk::STKConnManager; dynamic-casts
+  * conn_manager and delegates to the panzer_stk::STKConnManager
+  * overload of buildLOWSFactory() below.
+  */
 Teuchos::RCP<Thyra::LinearOpWithSolveFactoryBase<double> >
 buildLOWSFactory(bool blockedAssembly,
                  const Teuchos::RCP<const panzer::GlobalIndexer> & globalIndexer,
@@ -73,26 +45,42 @@ buildLOWSFactory(bool blockedAssembly,
                  int spatialDim,
                  const Teuchos::RCP<const Teuchos::MpiComm<int> > & mpi_comm,
                  const Teuchos::RCP<Teuchos::ParameterList> & strat_params,
-                 #ifdef PANZER_HAVE_TEKO 
+                 #ifdef PANZER_HAVE_TEKO
                  const Teuchos::RCP<Teko::RequestHandler> & req_handler=Teuchos::null,
-                 #endif 
+                 #endif
                  bool writeCoordinates=false,
                  bool writeTopo=false,
                  const Teuchos::RCP<const panzer::GlobalIndexer> & auxGlobalIndexer=Teuchos::null,
                  bool useCoordinates=true
                  );
 
-/** Build LOWS factory. */
-Teuchos::RCP<Thyra::LinearOpWithSolveFactoryBase<double> > 
+/** \brief Builds a Thyra LOWS (linear-op-with-solve) factory from a
+  * Stratimikos parameter list, configured for the given global indexer
+  * and STK connection manager.
+  *
+  * \param[in] blockedAssembly true if the linear system is assembled in blocked form (one block per physics/DOF group).
+  * \param[in] globalIndexer the DOF manager describing the linear system's unknowns.
+  * \param[in] stkConn_manager the mesh connection manager.
+  * \param[in] spatialDim the spatial dimension of the mesh.
+  * \param[in] mpi_comm the MPI communicator to build the solver on.
+  * \param[in] strat_params the Stratimikos parameter list describing the requested solver/preconditioner.
+  * \param[in] req_handler (only if PANZER_HAVE_TEKO) an optional Teko request handler; a default one is created if null.
+  * \param[in] writeCoordinates if true, writes mesh coordinates to file (e.g. for preconditioner setup diagnostics).
+  * \param[in] writeTopo if true, writes the mesh topology to file.
+  * \param[in] auxGlobalIndexer an optional auxiliary DOF manager, e.g. for preconditioners needing extra unknowns.
+  * \param[in] useCoordinates if true, supplies mesh coordinates to the solver/preconditioner (e.g. for algebraic multigrid).
+  * \return the constructed LOWS factory.
+  */
+Teuchos::RCP<Thyra::LinearOpWithSolveFactoryBase<double> >
 buildLOWSFactory(bool blockedAssembly,
                  const Teuchos::RCP<const panzer::GlobalIndexer> & globalIndexer,
                  const Teuchos::RCP<panzer_stk::STKConnManager> & stkConn_manager,
                  int spatialDim,
                  const Teuchos::RCP<const Teuchos::MpiComm<int> > & mpi_comm,
                  const Teuchos::RCP<Teuchos::ParameterList> & strat_params,
-                 #ifdef PANZER_HAVE_TEKO 
+                 #ifdef PANZER_HAVE_TEKO
                  const Teuchos::RCP<Teko::RequestHandler> & req_handler,
-                 #endif 
+                 #endif
                  bool writeCoordinates=false,
                  bool writeTopo=false,
                  const Teuchos::RCP<const panzer::GlobalIndexer> & auxGlobalIndexer=Teuchos::null,

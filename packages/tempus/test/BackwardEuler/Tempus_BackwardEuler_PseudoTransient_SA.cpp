@@ -1,10 +1,11 @@
-// @HEADER
-// ****************************************************************************
-//                Tempus: Copyright (2017) Sandia Corporation
+//@HEADER
+// *****************************************************************************
+//          Tempus: Time Integration and Sensitivity Analysis Package
 //
-// Distributed under BSD 3-clause license (See accompanying file Copyright.txt)
-// ****************************************************************************
-// @HEADER
+// Copyright 2017 NTESS and the Tempus contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+//@HEADER
 
 #include "Teuchos_UnitTestHarness.hpp"
 #include "Teuchos_XMLParameterListHelpers.hpp"
@@ -32,10 +33,21 @@ using Teuchos::ParameterList;
 using Teuchos::RCP;
 using Teuchos::sublist;
 
+// NOX row sum scaling for the stepper of the SteadyQuadratic parameters
+void setRowSumScaling(ParameterList &pl)
+{
+  pl.sublist("Default Stepper")
+      .sublist("Default Solver")
+      .sublist("NOX")
+      .sublist("Thyra Group Options")
+      .set("Function Scaling", "Row Sum");
+}
+
 // ************************************************************
 // ************************************************************
 void test_pseudotransient_fsa(const bool use_dfdp_as_tangent,
-                              Teuchos::FancyOStream &out, bool &success)
+                              Teuchos::FancyOStream &out, bool &success,
+                              const bool use_row_sum_scaling = false)
 {
   // Read params from .xml file
   RCP<ParameterList> pList =
@@ -51,9 +63,11 @@ void test_pseudotransient_fsa(const bool use_dfdp_as_tangent,
   RCP<ParameterList> pl  = sublist(pList, "Tempus", true);
   ParameterList &sens_pl = pl->sublist("Sensitivities");
   sens_pl.set("Use DfDp as Tangent", use_dfdp_as_tangent);
-  sens_pl.set("Reuse State Linear Solver", true);
+  // With row sum scaling, the sensitivity integrator has its own solver
+  sens_pl.set("Reuse State Linear Solver", !use_row_sum_scaling);
   sens_pl.set("Force W Update", true);  // Have to do this because for this
   // model the solver seems to be overwriting the matrix
+  if (use_row_sum_scaling) setRowSumScaling(*pl);
 
   // Setup the Integrator
   RCP<Tempus::IntegratorPseudoTransientForwardSensitivity<double> > integrator =
@@ -93,9 +107,19 @@ TEUCHOS_UNIT_TEST(BackwardEuler, SteadyQuadratic_PseudoTransient_FSA_Tangent)
   test_pseudotransient_fsa(true, out, success);
 }
 
+// NOX row sum scaling: the state and sensitivity integrators are created from
+// the same parameters, in which the NOX solver of the state stepper stores its
+// row sum scaling objects (in the state residual space).  The sensitivity
+// integrator must not use them.
+TEUCHOS_UNIT_TEST(BackwardEuler, SteadyQuadratic_PseudoTransient_FSA_RowSumScaling)
+{
+  test_pseudotransient_fsa(false, out, success, true);
+}
+
 // ************************************************************
 // ************************************************************
-TEUCHOS_UNIT_TEST(BackwardEuler, SteadyQuadratic_PseudoTransient_ASA)
+void test_pseudotransient_asa(Teuchos::FancyOStream &out, bool &success,
+                              const bool use_row_sum_scaling = false)
 {
   // Read params from .xml file
   RCP<ParameterList> pList =
@@ -109,10 +133,17 @@ TEUCHOS_UNIT_TEST(BackwardEuler, SteadyQuadratic_PseudoTransient_ASA)
   // Setup sensitivities
   RCP<ParameterList> pl = sublist(pList, "Tempus", true);
   // ParameterList& sens_pl = pl->sublist("Sensitivities");
+  if (use_row_sum_scaling) setRowSumScaling(*pl);
 
-  // Setup the Integrator
+  // Setup the Integrator.  The implicit adjoint operator does not provide the
+  // row sums needed by row sum scaling, so use an explicit adjoint model: the
+  // model is scalar, hence it is its own adjoint.
   RCP<Tempus::IntegratorPseudoTransientAdjointSensitivity<double> > integrator =
-      Tempus::integratorPseudoTransientAdjointSensitivity<double>(pl, model);
+      use_row_sum_scaling
+          ? Tempus::integratorPseudoTransientAdjointSensitivity<double>(
+                pl, model, model)
+          : Tempus::integratorPseudoTransientAdjointSensitivity<double>(pl,
+                                                                        model);
 
   // Integrate to timeMax
   bool integratorStatus = integrator->advanceTime();
@@ -135,6 +166,20 @@ TEUCHOS_UNIT_TEST(BackwardEuler, SteadyQuadratic_PseudoTransient_ASA)
 
   TEST_FLOATING_EQUALITY(x, x_exact, 1.0e-6);
   TEST_FLOATING_EQUALITY(dxdb, dxdb_exact, 1.0e-6);
+}
+
+TEUCHOS_UNIT_TEST(BackwardEuler, SteadyQuadratic_PseudoTransient_ASA)
+{
+  test_pseudotransient_asa(out, success);
+}
+
+// NOX row sum scaling: the state and adjoint integrators are created from the
+// same parameters, in which the NOX solver of the state stepper stores its row
+// sum scaling objects (in the state residual space).  The adjoint integrator
+// must not use them.
+TEUCHOS_UNIT_TEST(BackwardEuler, SteadyQuadratic_PseudoTransient_ASA_RowSumScaling)
+{
+  test_pseudotransient_asa(out, success, true);
 }
 
 }  // namespace Tempus_Test

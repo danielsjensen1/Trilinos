@@ -1,43 +1,11 @@
-//@HEADER
-// ************************************************************************
-//
+// @HEADER
+// *****************************************************************************
 //                 Belos: Block Linear Solvers Package
-//                  Copyright 2004 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
-//
-// ************************************************************************
-//@HEADER
+// Copyright 2004-2016 NTESS and the Belos contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
 
 #ifndef __Belos_OrthoManagerFactory_hpp
 #define __Belos_OrthoManagerFactory_hpp
@@ -78,7 +46,7 @@ namespace Belos {
   /// multivector), MV is the multivector type, and OP is the operator
   /// type.  For example: Scalar=double, MV=Epetra_MultiVector, and
   /// OP=Epetra_Operator.
-  template<class Scalar, class MV, class OP>
+  template<class Scalar, class MV, class OP, class DM = DefaultDenseMatrix<int, Scalar>>
   class OrthoManagerFactory {
   private:
     //! List of valid OrthoManager names.
@@ -190,22 +158,22 @@ namespace Belos {
     getDefaultParameters (const std::string& name) const
     {
       if (name == "DGKS") {
-	return Belos::getDGKSDefaultParameters<Scalar, MV, OP> ();
+	return Belos::getDGKSDefaultParameters<Scalar, MV, OP, DM> ();
       }
 #ifdef HAVE_BELOS_TSQR
       else if (name == "TSQR") {
-	TsqrMatOrthoManager<Scalar, MV, OP> orthoMan;
+	TsqrMatOrthoManager<Scalar, MV, OP, DM> orthoMan;
 	return orthoMan.getValidParameters ();
       }
 #endif // HAVE_BELOS_TSQR
       else if (name == "ICGS") {
-	return Belos::getICGSDefaultParameters<Scalar, MV, OP> ();
+	return Belos::getICGSDefaultParameters<Scalar, MV, OP, DM> ();
       }
       else if (name == "IMGS") {
-	return Belos::getIMGSDefaultParameters<Scalar, MV, OP> ();
+	return Belos::getIMGSDefaultParameters<Scalar, MV, OP, DM> ();
       }
       else if (name == "Simple") {
-	SimpleOrthoManager<Scalar, MV> orthoMan;
+	SimpleOrthoManager<Scalar, MV, DM> orthoMan;
 	return orthoMan.getValidParameters ();
       }
       else {
@@ -238,22 +206,22 @@ namespace Belos {
     getFastParameters (const std::string& name) const
     {
       if (name == "DGKS") {
-	return Belos::getDGKSFastParameters<Scalar, MV, OP> ();
+	return Belos::getDGKSFastParameters<Scalar, MV, OP, DM> ();
       }
 #ifdef HAVE_BELOS_TSQR
       else if (name == "TSQR") {
-	TsqrMatOrthoManager<Scalar, MV, OP> orthoMan; 
+	TsqrMatOrthoManager<Scalar, MV, OP, DM> orthoMan; 
 	return orthoMan.getFastParameters ();
       }
 #endif // HAVE_BELOS_TSQR
       else if (name == "ICGS") {
-	return Belos::getICGSFastParameters<Scalar, MV, OP> ();
+	return Belos::getICGSFastParameters<Scalar, MV, OP, DM> ();
       }
       else if (name == "IMGS") {
-	return Belos::getIMGSFastParameters<Scalar, MV, OP> ();
+	return Belos::getIMGSFastParameters<Scalar, MV, OP, DM> ();
       }
       else if (name == "Simple") {
-	SimpleOrthoManager<Scalar, MV> orthoMan;
+	SimpleOrthoManager<Scalar, MV, DM> orthoMan;
 	return orthoMan.getFastParameters ();
       }
       else {
@@ -288,7 +256,7 @@ namespace Belos {
     ///   parameter list with embedded documentation is available for
     ///   each MatOrthoManager subclass that this factory knows how to
     ///   make.
-    Teuchos::RCP<Belos::MatOrthoManager<Scalar, MV, OP> >
+    Teuchos::RCP<Belos::MatOrthoManager<Scalar, MV, OP, DM> >
     makeMatOrthoManager (const std::string& ortho, 
 			 const Teuchos::RCP<const OP>& M,
 			 const Teuchos::RCP<OutputManager<Scalar> >& /* outMan */,
@@ -305,21 +273,21 @@ namespace Belos {
       using Teuchos::rcp;
 
       if (ortho == "DGKS") {
-	typedef DGKSOrthoManager<Scalar, MV, OP> ortho_type;
+	typedef DGKSOrthoManager<Scalar, MV, OP, DM> ortho_type;
 	return rcp (new ortho_type (params, label, M));
       }
 #ifdef HAVE_BELOS_TSQR
       else if (ortho == "TSQR") {
-	typedef TsqrMatOrthoManager<Scalar, MV, OP> ortho_type;
+	typedef TsqrMatOrthoManager<Scalar, MV, OP, DM> ortho_type;
 	return rcp (new ortho_type (params, label, M));
       }
 #endif // HAVE_BELOS_TSQR
       else if (ortho == "ICGS") {
-	typedef ICGSOrthoManager<Scalar, MV, OP> ortho_type;
+	typedef ICGSOrthoManager<Scalar, MV, OP, DM> ortho_type;
 	return rcp (new ortho_type (params, label, M));
       }
       else if (ortho == "IMGS") {
-	typedef IMGSOrthoManager<Scalar, MV, OP> ortho_type;
+	typedef IMGSOrthoManager<Scalar, MV, OP, DM> ortho_type;
 	return rcp (new ortho_type (params, label, M));
       } 
       else if (ortho == "Simple") {
@@ -352,7 +320,7 @@ namespace Belos {
     ///   setting up the specific OrthoManager subclass.
     ///
     /// \return OrthoManager instance.
-    Teuchos::RCP<Belos::OrthoManager<Scalar, MV> >
+    Teuchos::RCP<Belos::OrthoManager<Scalar, MV, DM> >
     makeOrthoManager (const std::string& ortho, 
 		      const Teuchos::RCP<const OP>& M,
 		      const Teuchos::RCP<OutputManager<Scalar> >& outMan,
@@ -369,7 +337,7 @@ namespace Belos {
 				   "SimpleOrthoManager is not yet supported "
 				   "when the operator M is nontrivial (i.e., "
 				   "M != null).");
-	return rcp (new SimpleOrthoManager<Scalar, MV> (outMan, label, params));
+	return rcp (new SimpleOrthoManager<Scalar, MV, DM> (outMan, label, params));
       }
 #ifdef HAVE_BELOS_TSQR
       // TsqrMatOrthoManager has to store more things and do more work
@@ -381,7 +349,7 @@ namespace Belos {
       // TsqrMatOrthoManager would still be correct; this is just an
       // optimization.
       else if (ortho == "TSQR" && M.is_null()) {
-	return rcp (new TsqrOrthoManager<Scalar, MV> (params, label));
+	return rcp (new TsqrOrthoManager<Scalar, MV, DM> (params, label));
       }
 #endif // HAVE_BELOS_TSQR
       else {

@@ -1,44 +1,10 @@
 // @HEADER
-// ************************************************************************
-//
+// *****************************************************************************
 //                           Intrepid2 Package
-//                 Copyright (2007) Sandia Corporation
 //
-// Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
-// license for use of this work by or on behalf of the U.S. Government.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Kyungjoo Kim  (kyukim@sandia.gov),
-//                    Mauro Perego  (mperego@sandia.gov), or
-//                    Nate Roberts  (nvrober@sandia.gov),
-//
-// ************************************************************************
+// Copyright 2007 NTESS and the Intrepid2 contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 /** \file   Intrepid2_CellGeometry.hpp
@@ -209,7 +175,7 @@ namespace Intrepid2
         
         int cellTypeModulus = uniformJacobianModulus();
         
-        data = getMatchingViewWithLabel(pointComponentView, "CellGeometryProvider: Jacobian data", cellTypeModulus, spaceDim, spaceDim);
+        data = Impl::createMatchingDynRankView(pointComponentView, "CellGeometryProvider: Jacobian data", cellTypeModulus, spaceDim, spaceDim);
       }
       else
       {
@@ -218,7 +184,7 @@ namespace Intrepid2
         variationType[D2_DIM] = BLOCK_PLUS_DIAGONAL;
         blockPlusDiagonalLastNonDiagonal = -1;
         
-        data = getMatchingViewWithLabel(pointComponentView, "CellGeometryProvider: Jacobian data", spaceDim);
+        data = Impl::createMatchingDynRankView(pointComponentView, "CellGeometryProvider: Jacobian data", spaceDim);
       }
     }
     else if (cellGeometryType_ == TENSOR_GRID)
@@ -235,7 +201,7 @@ namespace Intrepid2
         variationType[D1_DIM]    = GENERAL;
         variationType[D2_DIM]    = GENERAL;
         
-        data = getMatchingViewWithLabel(data, "CellGeometryProvider: Jacobian data", numCells_, spaceDim, spaceDim);
+        data = Impl::createMatchingDynRankView(data, "CellGeometryProvider: Jacobian data", numCells_, spaceDim, spaceDim);
       }
       else
       {
@@ -246,12 +212,12 @@ namespace Intrepid2
         {
           // no point variation
           variationType[POINT_DIM] = CONSTANT;
-          data = getMatchingViewWithLabel(data, "CellGeometryProvider: Jacobian data", numCellsWorkset, spaceDim, spaceDim);
+          data = Impl::createMatchingDynRankView(data, "CellGeometryProvider: Jacobian data", numCellsWorkset, spaceDim, spaceDim);
         }
         else
         {
           variationType[POINT_DIM] = GENERAL;
-          data = getMatchingViewWithLabel(data, "CellGeometryProvider: Jacobian data", numCellsWorkset, pointsPerCell, spaceDim, spaceDim);
+          data = Impl::createMatchingDynRankView(data, "CellGeometryProvider: Jacobian data", numCellsWorkset, pointsPerCell, spaceDim, spaceDim);
         }
       }
     }
@@ -262,7 +228,7 @@ namespace Intrepid2
       variationType[POINT_DIM] = GENERAL;
       variationType[D1_DIM]    = GENERAL;
       variationType[D2_DIM]    = GENERAL;
-      data = getMatchingViewWithLabel(data, "CellGeometryProvider: Jacobian data", numCellsWorkset, pointsPerCell, spaceDim, spaceDim);
+      data = Impl::createMatchingDynRankView(data, "CellGeometryProvider: Jacobian data", numCellsWorkset, pointsPerCell, spaceDim, spaceDim);
     }
     else
     {
@@ -369,8 +335,8 @@ namespace Intrepid2
 
           // TODO: find an allocation-free way to do this… (consider modifying CellTools::setJacobian() to support affine case.)
           const int onePoint = 1;
-          auto testPointView = getMatchingViewWithLabel(dataView3, "CellGeometryProvider: test point", onePoint, spaceDim);
-          auto tempData      = getMatchingViewWithLabel(dataView3, "CellGeometryProvider: temporary Jacobian data", numCellsWorkset, onePoint, spaceDim, spaceDim);
+          auto testPointView = Impl::createMatchingDynRankView(dataView3, "CellGeometryProvider: test point", onePoint, spaceDim);
+          auto tempData      = Impl::createMatchingDynRankView(dataView3, "CellGeometryProvider: temporary Jacobian data", numCellsWorkset, onePoint, spaceDim, spaceDim);
           
           Kokkos::deep_copy(testPointView, 0.0);
           
@@ -437,6 +403,9 @@ namespace Intrepid2
     numCells_ *= numCellsPerGridCell(subdivisionStrategy_);
     
     shards::CellTopology cellTopo; // will register with HostMemberLookup below
+    using BasisFamily = DerivedNodalBasisFamily<DeviceType,PointScalar,PointScalar>;
+    const int linearPolyOrder = 1;
+    BasisPtr basisForNodes;
     if (subdivisionStrategy_ == NO_SUBDIVISION)
     {
       // hypercube
@@ -445,18 +414,27 @@ namespace Intrepid2
       if (spaceDim == 1)
       {
         cellTopo = shards::CellTopology(shards::getCellTopologyData<shards::Line<> >());
+        basisForNodes = getBasis<BasisFamily>(cellTopo, FUNCTION_SPACE_HGRAD, linearPolyOrder);
       }
       else if (spaceDim == 2)
       {
         cellTopo = shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<> >());
+        basisForNodes = getBasis<BasisFamily>(cellTopo, FUNCTION_SPACE_HGRAD, linearPolyOrder);
       }
       else if (spaceDim == 3)
       {
         cellTopo = shards::CellTopology(shards::getCellTopologyData<shards::Hexahedron<> >());
+        basisForNodes = getBasis<BasisFamily>(cellTopo, FUNCTION_SPACE_HGRAD, linearPolyOrder);
       }
       else
       {
-        // TODO: Once shards supports higher-dimensional hypercubes, initialize cellTopo accordingly
+        INTREPID2_TEST_FOR_EXCEPTION(nodeOrdering_ == HYPERCUBE_NODE_ORDER_CLASSIC_SHARDS, std::invalid_argument,
+                                     "Classic Shards node ordering is only defined for hypercubes through space dimension 3");
+        // Shards does not provide topologies above 3D, so cellTopology() is left invalid (a default-constructed
+        // shards::CellTopology), and operations that require it (e.g., orientations) fail.  The uniform-grid path is
+        // affine, and still supplies coordinates and Jacobians for higher-dimensional tensor-product cells; the node
+        // basis is a tensor product of linear H(grad) line bases.
+        basisForNodes = getHypercubeBasis_HGRAD<BasisFamily>(linearPolyOrder, spaceDim);
       }
     }
     else
@@ -466,20 +444,19 @@ namespace Intrepid2
       if (spaceDim == 2)
       {
         cellTopo = shards::CellTopology(shards::getCellTopologyData<shards::Triangle<> >());
+        basisForNodes = getBasis<BasisFamily>(cellTopo, FUNCTION_SPACE_HGRAD, linearPolyOrder);
       }
       else if (spaceDim == 3)
       {
         cellTopo = shards::CellTopology(shards::getCellTopologyData<shards::Tetrahedron<> >());
+        basisForNodes = getBasis<BasisFamily>(cellTopo, FUNCTION_SPACE_HGRAD, linearPolyOrder);
       }
       else
       {
-        // TODO: Once shards supports higher-dimensional simplices, initialize cellTopo_ accordingly
+        INTREPID2_TEST_FOR_EXCEPTION(true, std::invalid_argument,
+                                     "Uniform-grid simplex subdivision is only supported in space dimensions 2 and 3");
       }
     }
-    
-    using BasisFamily = DerivedNodalBasisFamily<DeviceType,PointScalar,PointScalar>;
-    const int linearPolyOrder = 1;
-    BasisPtr basisForNodes = getBasis<BasisFamily>(cellTopo, FUNCTION_SPACE_HGRAD, linearPolyOrder);
     
     if (nodeOrdering_ == HYPERCUBE_NODE_ORDER_CLASSIC_SHARDS)
     {
@@ -874,8 +851,8 @@ namespace Intrepid2
             const int numPoints = points.extent_int(1);
             const int numFields = basisForNodes->getCardinality();
             
-            auto cellBasisGradientsView = getMatchingViewWithLabel(points, "CellGeometryProvider: cellBasisGradients", numCells, numFields, numPoints, spaceDim);
-            auto basisGradientsView     = getMatchingViewWithLabel(points, "CellGeometryProvider: basisGradients", numFields, numPoints, spaceDim);
+            auto cellBasisGradientsView = Impl::createMatchingDynRankView(points, "CellGeometryProvider: cellBasisGradients", numCells, numFields, numPoints, spaceDim);
+            auto basisGradientsView     = Impl::createMatchingDynRankView(points, "CellGeometryProvider: basisGradients", numFields, numPoints, spaceDim);
             
             for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
             {
@@ -957,7 +934,7 @@ namespace Intrepid2
           // and/or very high polynomial order.)
           
           auto firstPointComponentView = points.getTensorComponent(0); // (P,D0)
-          auto basisGradientsView = getMatchingViewWithLabel(firstPointComponentView, "CellGeometryProvider: temporary basisGradients", numFields, numPoints, spaceDim);
+          auto basisGradientsView = Impl::createMatchingDynRankView(firstPointComponentView, "CellGeometryProvider: temporary basisGradients", numFields, numPoints, spaceDim);
           
           using ExecutionSpace = typename DeviceType::execution_space;
           auto policy = Kokkos::MDRangePolicy<ExecutionSpace,Kokkos::Rank<3>>({0,0,0},{numFields,numPoints,spaceDim});
@@ -1016,6 +993,8 @@ namespace Intrepid2
   void CellGeometry<PointScalar,spaceDim,DeviceType>::initializeOrientations()
   {
     using HostExecSpace = Kokkos::DefaultHostExecutionSpace;
+    INTREPID2_TEST_FOR_EXCEPTION(this->cellTopology().getCellTopologyData() == nullptr, std::invalid_argument,
+                                 "CellGeometry: orientations require a cell topology, which is not defined for space dimensions above 3");
     
     const bool isGridType = (cellGeometryType_ == TENSOR_GRID) || (cellGeometryType_ == UNIFORM_GRID);
     const int numOrientations = isGridType ? numCellsPerGridCell(subdivisionStrategy_) : numCells();

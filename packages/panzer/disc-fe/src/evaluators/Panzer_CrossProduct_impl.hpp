@@ -1,43 +1,11 @@
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //           Panzer: A partial differential equation assembly
 //       engine for strongly coupled complex multiphysics systems
-//                 Copyright (2011) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Roger P. Pawlowski (rppawlo@sandia.gov) and
-// Eric C. Cyr (eccyr@sandia.gov)
-// ***********************************************************************
+// Copyright 2011 NTESS and the Panzer contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #ifndef PANZER_EVALUATOR_CrossProduct_IMPL_HPP
@@ -47,6 +15,7 @@
 
 #include "Panzer_PointRule.hpp"
 #include "Panzer_Workset_Utilities.hpp"
+#include "Panzer_HierarchicParallelism.hpp"
 
 #include "Teuchos_RCP.hpp"
 
@@ -106,21 +75,30 @@ CrossProduct<EvalT, Traits>::
 evaluateFields(
   typename Traits::EvalData workset)
 { 
+  auto a = vec_a.get_static_view();
+  auto b = vec_b.get_static_view();
+  auto a_cross_b = vec_a_cross_vec_b.get_static_view();
+  const int l_num_pts = num_pts;
+
+  auto policy = panzer::HP::inst().teamPolicy<ScalarT,PHX::ExecutionSpace>(workset.num_cells);
+
   if(useScalarField) {
-    for (index_t cell = 0; cell < workset.num_cells; ++cell) {
-      for (int p = 0; p < num_pts; ++p) {
-        vec_a_cross_vec_b(cell,p) = vec_a(cell,p,0)*vec_b(cell,p,1)-vec_a(cell,p,1)*vec_b(cell,p,0);
-      }
-    }
+    Kokkos::parallel_for("panzer::CrossProduct 2D",policy,KOKKOS_LAMBDA (const Kokkos::TeamPolicy<PHX::ExecutionSpace>::member_type& team) {
+      const int cell = team.league_rank();
+      Kokkos::parallel_for(Kokkos::TeamThreadRange(team,0,l_num_pts), [&] (const int p) {
+        a_cross_b(cell,p) = a(cell,p,0)*b(cell,p,1)-a(cell,p,1)*b(cell,p,0);
+      });
+    });
   }
   else {
-    for (index_t cell = 0; cell < workset.num_cells; ++cell) {
-      for (int p = 0; p < num_pts; ++p) {
-        vec_a_cross_vec_b(cell,p,0) =   vec_a(cell,p,1)*vec_b(cell,p,2)-vec_a(cell,p,2)*vec_b(cell,p,1);
-        vec_a_cross_vec_b(cell,p,1) = -(vec_a(cell,p,0)*vec_b(cell,p,2)-vec_a(cell,p,2)*vec_b(cell,p,0));
-        vec_a_cross_vec_b(cell,p,2) =   vec_a(cell,p,0)*vec_b(cell,p,1)-vec_a(cell,p,1)*vec_b(cell,p,0);
-      }
-    }
+    Kokkos::parallel_for("panzer::CrossProduct 3D",policy,KOKKOS_LAMBDA (const Kokkos::TeamPolicy<PHX::ExecutionSpace>::member_type& team) {
+      const int cell = team.league_rank();
+      Kokkos::parallel_for(Kokkos::TeamThreadRange(team,0,l_num_pts), [&] (const int p) {
+        a_cross_b(cell,p,0) =   a(cell,p,1)*b(cell,p,2)-a(cell,p,2)*b(cell,p,1);
+        a_cross_b(cell,p,1) = -(a(cell,p,0)*b(cell,p,2)-a(cell,p,2)*b(cell,p,0));
+        a_cross_b(cell,p,2) =   a(cell,p,0)*b(cell,p,1)-a(cell,p,1)*b(cell,p,0);
+      });
+    });
   }
 }
 

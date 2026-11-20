@@ -1,10 +1,11 @@
-// @HEADER
-// ****************************************************************************
-//                Tempus: Copyright (2017) Sandia Corporation
+//@HEADER
+// *****************************************************************************
+//          Tempus: Time Integration and Sensitivity Analysis Package
 //
-// Distributed under BSD 3-clause license (See accompanying file Copyright.txt)
-// ****************************************************************************
-// @HEADER
+// Copyright 2017 NTESS and the Tempus contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+//@HEADER
 
 #include "Teuchos_UnitTestHarness.hpp"
 #include "Teuchos_XMLParameterListHelpers.hpp"
@@ -22,6 +23,7 @@
 
 #include "../TestModels/SinCosModel.hpp"
 #include "../TestUtils/Tempus_ConvergenceTestUtils.hpp"
+#include "../TestUtils/Tempus_AdjointResponseTestUtils.hpp"
 
 #include <fstream>
 #include <vector>
@@ -255,6 +257,68 @@ TEUCHOS_UNIT_TEST(ExplicitRK, SinCos_ASA)
   }
 
   Teuchos::TimeMonitor::summarize();
+}
+
+// ************************************************************
+// ************************************************************
+// Adjoint sensitivities of the time-integrated response
+// J = int_{t0}^{T} x(t) dt, with RK Explicit 4 Stage.
+TEUCHOS_UNIT_TEST(ExplicitRK, SinCos_ASA_TimeIntegral)
+{
+  std::vector<double> StepSize, ErrorNorm;
+  double order = 0.0;
+  computeSinCosAdjointResponseErrors(
+      "Tempus_ExplicitRK_SinCos.xml",
+      [](ParameterList& pl) {
+        pl.sublist("Demo Stepper").set("Stepper Type", "RK Explicit 4 Stage");
+        pl.sublist("Demo Stepper")
+            .set("Initial Condition Consistency", "None");
+        pl.sublist("Demo Stepper")
+            .set("Initial Condition Consistency Check", false);
+        pl.sublist("Sensitivities").set("Mass Matrix Is Identity", true);
+        ParameterList& interp_pl = pl.sublist("Demo Integrator")
+                                       .sublist("Solution History")
+                                       .sublist("Interpolator");
+        interp_pl.set("Interpolator Type", "Lagrange");
+        interp_pl.set("Order", 3);
+      },
+      "Time Integral", std::vector<double>(), 5, 0.1, false, StepSize, ErrorNorm,
+      order, out, success);
+
+  const double slope = computeLinearRegressionLogLog<double>(StepSize, ErrorNorm);
+  out << "  Expected order: " << order << "  Observed order: " << slope << std::endl;
+  TEST_FLOATING_EQUALITY(slope, order, 0.04);
+}
+
+// ************************************************************
+// ************************************************************
+// Adjoint sensitivities of the response J = sum_k x(t_k), including the
+// initial and final times, with RK Explicit 4 Stage.
+TEUCHOS_UNIT_TEST(ExplicitRK, SinCos_ASA_SumOverTimes)
+{
+  std::vector<double> StepSize, ErrorNorm;
+  double order = 0.0;
+  computeSinCosAdjointResponseErrors(
+      "Tempus_ExplicitRK_SinCos.xml",
+      [](ParameterList& pl) {
+        pl.sublist("Demo Stepper").set("Stepper Type", "RK Explicit 4 Stage");
+        pl.sublist("Demo Stepper")
+            .set("Initial Condition Consistency", "None");
+        pl.sublist("Demo Stepper")
+            .set("Initial Condition Consistency Check", false);
+        pl.sublist("Sensitivities").set("Mass Matrix Is Identity", true);
+        ParameterList& interp_pl = pl.sublist("Demo Integrator")
+                                       .sublist("Solution History")
+                                       .sublist("Interpolator");
+        interp_pl.set("Interpolator Type", "Lagrange");
+        interp_pl.set("Order", 3);
+      },
+      "Sum Over Times", {0.0, 0.3, 0.6, 1.0}, 5, 0.1, false, StepSize, ErrorNorm, order, out, success);
+
+  const double slope =
+      computeLinearRegressionLogLog<double>(StepSize, ErrorNorm);
+  out << "  Expected order: " << order << "  Observed order: " << slope << std::endl;
+  TEST_FLOATING_EQUALITY(slope, order, 0.04);
 }
 
 }  // namespace Tempus_Test

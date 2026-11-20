@@ -1,44 +1,11 @@
-/*@HEADER
-// ***********************************************************************
-//
+// @HEADER
+// *****************************************************************************
 //       Ifpack2: Templated Object-Oriented Algebraic Preconditioner Package
-//                 Copyright (2009) Sandia Corporation
 //
-// Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
-// license for use of this work by or on behalf of the U.S. Government.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
-//
-// ***********************************************************************
-//@HEADER
-*/
+// Copyright 2009 NTESS and the Ifpack2 contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
 
 #ifndef IFPACK2_DIAGONAL_DECL_HPP
 #define IFPACK2_DIAGONAL_DECL_HPP
@@ -67,18 +34,16 @@ namespace Ifpack2 {
 /// inverted diagonal elements from the matrix.  When Diagonal is
 /// constructed with a Tpetra::Vector, \f$D\f$ is the caller-supplied
 /// vector.
-template<class MatrixType>
-class Diagonal :
-    virtual public Ifpack2::Preconditioner<typename MatrixType::scalar_type,
-                                           typename MatrixType::local_ordinal_type,
-                                           typename MatrixType::global_ordinal_type,
-                                           typename MatrixType::node_type>,
-    virtual public Ifpack2::Details::CanChangeMatrix<Tpetra::RowMatrix<typename MatrixType::scalar_type,
-                                                                       typename MatrixType::local_ordinal_type,
-                                                                       typename MatrixType::global_ordinal_type,
-                                                                       typename MatrixType::node_type> >
-{
-public:
+template <class MatrixType>
+class Diagonal : virtual public Ifpack2::Preconditioner<typename MatrixType::scalar_type,
+                                                        typename MatrixType::local_ordinal_type,
+                                                        typename MatrixType::global_ordinal_type,
+                                                        typename MatrixType::node_type>,
+                 virtual public Ifpack2::Details::CanChangeMatrix<Tpetra::RowMatrix<typename MatrixType::scalar_type,
+                                                                                    typename MatrixType::local_ordinal_type,
+                                                                                    typename MatrixType::global_ordinal_type,
+                                                                                    typename MatrixType::node_type> > {
+ public:
   typedef typename MatrixType::scalar_type scalar_type;
   typedef typename MatrixType::local_ordinal_type local_ordinal_type;
   typedef typename MatrixType::global_ordinal_type global_ordinal_type;
@@ -89,7 +54,8 @@ public:
   typedef Tpetra::RowMatrix<scalar_type,
                             local_ordinal_type,
                             global_ordinal_type,
-                            node_type> row_matrix_type;
+                            node_type>
+      row_matrix_type;
 
   static_assert(std::is_same<MatrixType, row_matrix_type>::value, "Ifpack2::Diagonal: The template parameter MatrixType must be a Tpetra::RowMatrix specialization.  Please don't use Tpetra::CrsMatrix (a subclass of Tpetra::RowMatrix) here anymore.  The constructor can take either a RowMatrix or a CrsMatrix just fine.");
 
@@ -97,21 +63,24 @@ public:
   typedef Tpetra::CrsMatrix<scalar_type,
                             local_ordinal_type,
                             global_ordinal_type,
-                            node_type> crs_matrix_type;
+                            node_type>
+      crs_matrix_type;
   //! Tpetra::Vector specialization used by this class.
   typedef Tpetra::Vector<scalar_type,
                          local_ordinal_type,
                          global_ordinal_type,
-                         node_type> vector_type;
+                         node_type>
+      vector_type;
   //! Tpetra::Map specialization used by this class.
   typedef Tpetra::Map<local_ordinal_type,
                       global_ordinal_type,
-                      node_type> map_type;
+                      node_type>
+      map_type;
 
   /// \brief Constructor that takes a Tpetra::RowMatrix.
   ///
-  /// \param A_in [in] The input matrix.
-  Diagonal (const Teuchos::RCP<const row_matrix_type>& A);
+  /// \param A [in] The input matrix.
+  Diagonal(const Teuchos::RCP<const row_matrix_type>& A);
 
   /// \brief Constructor that takes a Tpetra::CrsMatrix.
   ///
@@ -120,7 +89,7 @@ public:
   /// a Tpetra::RowMatrix.
   ///
   /// \param A_in [in] The input matrix.
-  Diagonal (const Teuchos::RCP<const crs_matrix_type>& A_in);
+  Diagonal(const Teuchos::RCP<const crs_matrix_type>& A_in);
 
   /// \brief Constructor that accepts a Tpetra::Vector of inverse diagonal entries.
   ///
@@ -133,30 +102,30 @@ public:
   /// may arise if this constructor is called with a
   /// <tt>Teuchos::RCP<Tpetra::Vector></tt> that isn't const-qualified
   /// exactly as declared here.)
-  Diagonal (const Teuchos::RCP<const vector_type>& diag);
+  Diagonal(const Teuchos::RCP<const vector_type>& diag);
 
   //! Destructor
-  virtual ~Diagonal ();
+  virtual ~Diagonal();
 
   //! Sets parameters on this object.
   /**
     Currently doesn't need any parameters.
   */
-  void setParameters (const Teuchos::ParameterList& params);
+  void setParameters(const Teuchos::ParameterList& params);
 
   //! Initialize
-  void initialize ();
+  void initialize();
 
   //! Returns \c true if the preconditioner has been successfully initialized.
-  bool isInitialized () const {
+  bool isInitialized() const {
     return isInitialized_;
   }
 
   //! Compute the preconditioner.
-  void compute ();
+  void compute();
 
   //! Return true if compute() has been called.
-  bool isComputed () const {
+  bool isComputed() const {
     return isComputed_;
   }
 
@@ -187,7 +156,7 @@ public:
   /// The new matrix A need not necessarily have the same Maps or even
   /// the same communicator as the original matrix.
   virtual void
-  setMatrix (const Teuchos::RCP<const row_matrix_type>& A);
+  setMatrix(const Teuchos::RCP<const row_matrix_type>& A);
 
   //@}
   //! \name Implementation of Tpetra::Operator
@@ -196,34 +165,34 @@ public:
   /// \brief Apply the preconditioner to X, putting the result in Y.
   ///
   /// If the result of applying this preconditioner to a vector X is
-  /// \f$F \cdot X$, then this method computes \f$\beta Y + \alpha F \cdot X\f$.
+  /// \f$F \cdot X\f$, then this method computes \f$\beta Y + \alpha F \cdot X\f$.
   /// The typical case is \f$\beta = 0\f$ and \f$\alpha = 1\f$.
   void
-  apply (const Tpetra::MultiVector<scalar_type,local_ordinal_type,global_ordinal_type,node_type>& X,
-         Tpetra::MultiVector<scalar_type,local_ordinal_type,global_ordinal_type,node_type>& Y,
-         Teuchos::ETransp mode = Teuchos::NO_TRANS,
-         scalar_type alpha = Teuchos::ScalarTraits<scalar_type>::one(),
-         scalar_type beta = Teuchos::ScalarTraits<scalar_type>::zero()) const;
+  apply(const Tpetra::MultiVector<scalar_type, local_ordinal_type, global_ordinal_type, node_type>& X,
+        Tpetra::MultiVector<scalar_type, local_ordinal_type, global_ordinal_type, node_type>& Y,
+        Teuchos::ETransp mode = Teuchos::NO_TRANS,
+        scalar_type alpha     = Teuchos::ScalarTraits<scalar_type>::one(),
+        scalar_type beta      = Teuchos::ScalarTraits<scalar_type>::zero()) const;
 
   //! The Tpetra::Map representing this operator's domain.
-  Teuchos::RCP<const map_type> getDomainMap () const;
+  Teuchos::RCP<const map_type> getDomainMap() const;
 
   //! The Tpetra::Map representing this operator's range.
-  Teuchos::RCP<const map_type> getRangeMap () const;
+  Teuchos::RCP<const map_type> getRangeMap() const;
 
   //@}
   //! \name Attribute accessor methods
   //@{
 
   //! Return the communicator associated with this matrix operator.
-  //Teuchos::RCP<const Teuchos::Comm<int> > getComm () const;
+  // Teuchos::RCP<const Teuchos::Comm<int> > getComm () const;
 
   /// \brief The original input matrix to be preconditioned.
   ///
   /// This could be null, for example if the user created this object
   /// using the constructor that takes a Tpetra::Vector, or if the
   /// user called setMatrix() with a null input.
-  Teuchos::RCP<const row_matrix_type> getMatrix () const {
+  Teuchos::RCP<const row_matrix_type> getMatrix() const {
     return matrix_;
   }
 
@@ -260,14 +229,14 @@ public:
 
   //! Print the object with some verbosity level to an FancyOStream object.
   void
-  describe (Teuchos::FancyOStream& out,
-            const Teuchos::EVerbosityLevel verbLevel =
-            Teuchos::Describable::verbLevel_default) const;
+  describe(Teuchos::FancyOStream& out,
+           const Teuchos::EVerbosityLevel verbLevel =
+               Teuchos::Describable::verbLevel_default) const;
   //@}
 
-private:
+ private:
   //! Reset the preconditioner's state.  Call in setMatrix().
-  void reset ();
+  void reset();
 
   //! The input matrix provided by the user.
   Teuchos::RCP<const row_matrix_type> matrix_;
@@ -297,36 +266,36 @@ private:
 };
 
 /** Function to construct a Diagonal preconditioner with Vector input.
-* This is just a nonmember function version of Diagonal's constructor.
-*
-* Example usage:
-*
-* \code
-* using Teuchos::RCP;
-* typedef Tpetra::RowMatrix<> row_matrix_type;
-* typedef Tpetra::Vector<> vec_type;
-* typedef Tpetra::Preconditioner<> prec_type;
-*
-* RCP<vec_type> D = ...
-* RCP<prec_type> P =
-*   Ifpack2::createDiagonalPreconditioner<row_matrix_type, vec_type> (D);
-* \endcode
-*/
-template<class MatrixType, class VectorType>
+ * This is just a nonmember function version of Diagonal's constructor.
+ *
+ * Example usage:
+ *
+ * \code
+ * using Teuchos::RCP;
+ * typedef Tpetra::RowMatrix<> row_matrix_type;
+ * typedef Tpetra::Vector<> vec_type;
+ * typedef Tpetra::Preconditioner<> prec_type;
+ *
+ * RCP<vec_type> D = ...
+ * RCP<prec_type> P =
+ *   Ifpack2::createDiagonalPreconditioner<row_matrix_type, vec_type> (D);
+ * \endcode
+ */
+template <class MatrixType, class VectorType>
 Teuchos::RCP<Ifpack2::Diagonal<Tpetra::RowMatrix<typename MatrixType::scalar_type,
                                                  typename MatrixType::local_ordinal_type,
                                                  typename MatrixType::global_ordinal_type,
                                                  typename MatrixType::node_type> > >
-createDiagonalPreconditioner (const Teuchos::RCP<const VectorType>& invdiag)
-{
+createDiagonalPreconditioner(const Teuchos::RCP<const VectorType>& invdiag) {
   typedef Tpetra::RowMatrix<typename MatrixType::scalar_type,
-    typename MatrixType::local_ordinal_type,
-    typename MatrixType::global_ordinal_type,
-    typename MatrixType::node_type> row_matrix_type;
+                            typename MatrixType::local_ordinal_type,
+                            typename MatrixType::global_ordinal_type,
+                            typename MatrixType::node_type>
+      row_matrix_type;
 
-  return Teuchos::rcp (new Ifpack2::Diagonal<row_matrix_type> (invdiag));
+  return Teuchos::rcp(new Ifpack2::Diagonal<row_matrix_type>(invdiag));
 }
 
-}//namespace Ifpack2
+}  // namespace Ifpack2
 
 #endif

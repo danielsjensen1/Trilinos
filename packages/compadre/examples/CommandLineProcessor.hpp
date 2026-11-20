@@ -1,3 +1,11 @@
+// @HEADER
+// *****************************************************************************
+//     Compadre: COMpatible PArticle Discretization and REmap Toolkit
+//
+// Copyright 2018 NTESS and the Compadre contributors.
+// SPDX-License-Identifier: BSD-2-Clause
+// *****************************************************************************
+// @HEADER
 #ifndef COMMANDLINEPROCESSOR
 #define COMMANDLINEPROCESSOR
 
@@ -5,6 +13,8 @@ struct CommandLineProcessor {
 
     int order, dimension, number_target_coords, number_source_coords, number_of_batches;
     std::string constraint_name, solver_name, problem_name;
+
+    Compadre::WeightingFunctionType kernel_type, curvature_kernel_type;
 
     CommandLineProcessor(int argc, char* args[], const bool print=true) {
 
@@ -17,6 +27,8 @@ struct CommandLineProcessor {
         constraint_name = "NO_CONSTRAINT"; // "NEUMANN_GRAD_SCALAR"
         solver_name = "QR"; // LU
         problem_name = "STANDARD"; // MANIFOLD
+        kernel_type = Compadre::GMLS::translateWeightingType("POWER");
+        curvature_kernel_type = Compadre::GMLS::translateWeightingType("POWER");
 
         for (int i = 1; i < argc; ++i) {
             if (i + 1 < argc) { // not at end
@@ -36,6 +48,10 @@ struct CommandLineProcessor {
                    problem_name = std::string(args[i+1]); 
                 } else if (std::string(args[i]) == "--constraint") {
                    constraint_name = std::string(args[i+1]); 
+                } else if (std::string(args[i]) == "--kernel-type") {
+                   kernel_type = Compadre::GMLS::translateWeightingType(std::string(args[i+1])); 
+                } else if (std::string(args[i]) == "--curvature-kernel-type") {
+                   curvature_kernel_type = Compadre::GMLS::translateWeightingType(std::string(args[i+1])); 
                 }
             }
         }

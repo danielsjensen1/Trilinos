@@ -1,43 +1,10 @@
 // @HEADER
-// ************************************************************************
-//
+// *****************************************************************************
 //        Piro: Strategy package for embedded analysis capabilitites
-//                  Copyright (2010) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Andy Salinger (agsalin@sandia.gov), Sandia
-// National Laboratories.
-//
-// ************************************************************************
+// Copyright 2010 NTESS and the Piro contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #ifndef PIRO_THYRAPRODUCTME_OBJECTIVE_SIMOPT
@@ -549,11 +516,25 @@ public:
         cached_objectiveStr_ = objectiveStr_;
 
         TEUCHOS_ASSERT(!tmp_objectiveStr_.shareGradients(cached_objectiveStr_));
-        if((observer_ != Teuchos::null) && (iter%write_interval_ == 0)) {
-          const ROL::ThyraVector<Real>  & thyra_u = dynamic_cast<const ROL::ThyraVector<Real>&>(u);
-          observer_->observeSolution(iter, *(thyra_u.getVector()), Teuchos::null, Teuchos::null, Teuchos::null);
-          if(objectiveStr_.isValueValid_)
-            observer_->observeResponse(iter);
+        // A write interval of 0 means that the accepted iterates are not observed
+        if((observer_ != Teuchos::null) && (write_interval_ != 0)) {
+          if(iter%write_interval_ == 0) {
+            const ROL::ThyraVector<Real>  & thyra_u = dynamic_cast<const ROL::ThyraVector<Real>&>(u);
+            observer_->observeSolution(iter, *(thyra_u.getVector()), Teuchos::null, Teuchos::null, Teuchos::null);
+            if(objectiveStr_.isValueValid_)
+              observer_->observeResponse(iter);
+            isLastAcceptedObserved_ = true;
+          } else {
+            // Store the iterate, to observe it at the end of the optimization if it is the last accepted one
+            if(Teuchos::is_null(lastAcceptedState_)) {
+              lastAcceptedState_ = u.clone();
+              lastAcceptedParams_ = z.clone();
+            }
+            lastAcceptedState_->set(u);
+            lastAcceptedParams_->set(z);
+            lastAcceptedIter_ = iter;
+            isLastAcceptedObserved_ = false;
+          }
         }
         break;
       }
@@ -577,6 +558,28 @@ public:
 
   void update( const ROL::Vector<Real> &, const ROL::Vector<Real> &z, bool, int  = -1 ) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::logic_error, std::endl << "Piro::ThyraProductME_Objective_SimOpt::update:  Deprecated Update function, it should not be called." << std::endl);
+  }
+
+  //! Observes the last accepted iterate, if it was not observed when it was accepted because of the write interval.
+  //! To be called at the end of the optimization. The objective is evaluated again at the iterate, so that the observed
+  //! response corresponds to it.
+  void observeLastAcceptedIterate() {
+    if((observer_ == Teuchos::null) || isLastAcceptedObserved_ || Teuchos::is_null(lastAcceptedState_))
+      return;
+
+    const ROL::ThyraVector<Real>  & thyra_u = dynamic_cast<const ROL::ThyraVector<Real>&>(*lastAcceptedState_);
+    const ROL::ThyraVector<Real>  & thyra_p = dynamic_cast<const ROL::ThyraVector<Real>&>(*lastAcceptedParams_);
+
+    Thyra::ModelEvaluatorBase::InArgs<Real> inArgs = thyra_model_->createInArgs();
+    Thyra::ModelEvaluatorBase::OutArgs<Real> outArgs = thyra_model_->createOutArgs();
+    inArgs.set_p(0, thyra_p.getVector());
+    inArgs.set_x(thyra_u.getVector());
+    outArgs.set_g(g_index_, Thyra::createMember<Real>(thyra_model_->get_g_space(g_index_)));
+    thyra_model_->evalModel(inArgs, outArgs);
+
+    observer_->observeSolution(lastAcceptedIter_, *(thyra_u.getVector()), Teuchos::null, Teuchos::null, Teuchos::null);
+    observer_->observeResponse(lastAcceptedIter_);
+    isLastAcceptedObserved_ = true;
   }
 
 private:
@@ -628,6 +631,10 @@ private:
   Teuchos::RCP<ROL_ObserverBase<Real>> observer_;
   int write_interval_;
 
+  // Last accepted iterate (state and parameters), stored when it is not observed because of the write interval
+  Teuchos::RCP<ROL::Vector<Real>> lastAcceptedState_, lastAcceptedParams_;
+  int lastAcceptedIter_ = -1;
+  bool isLastAcceptedObserved_ = true;
 };
 
 

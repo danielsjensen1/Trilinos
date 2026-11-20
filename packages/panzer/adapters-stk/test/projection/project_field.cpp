@@ -1,3 +1,13 @@
+// @HEADER
+// *****************************************************************************
+//           Panzer: A partial differential equation assembly
+//       engine for strongly coupled complex multiphysics systems
+//
+// Copyright 2011 NTESS and the Panzer contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
+
 #include <Teuchos_ConfigDefs.hpp>
 #include <Teuchos_UnitTestHarness.hpp>
 #include <Teuchos_RCP.hpp>
@@ -75,7 +85,11 @@ public:
   void operator()(const int elem) const
   {
     for(int i=0;i<static_cast<int>(points.extent(1));i++) {
-      auto x = points(elem,i,0), y = points(elem,i,1), z = points(elem,i,2);
+      auto x = points(elem,i,0);
+      auto y = points(elem,i,1);
+      double z = 0.;
+      if (points.extent(2) == 3)
+        z = points(elem,i,2);
       if (funAtPoints.rank() == 3) {
         for(int d=0;d<static_cast<int>(funAtPoints.extent(2));d++)
           funAtPoints(elem,i,d) = fun(x,y,z,d); // vector basis
@@ -122,15 +136,15 @@ class GetCoeffsEvaluator
     DynRankView local_refTargetAtEvalPoints, local_physTargetAtEvalPoints;
     ElemShape elemShape;
     Intrepid2::ProjectionStruct<PHX::Device,double> projStruct;
-    Teuchos::RCP<Intrepid2::Basis<PHX::Device::execution_space,double,double> > it2basis;
+    Teuchos::RCP<Intrepid2::Basis<PHX::Device,double,double> > it2basis;
   
 }; // end of class
 
 template<typename EvalT, typename Traits>
 GetCoeffsEvaluator<EvalT, Traits>::
-GetCoeffsEvaluator(std::string & name, Teuchos::RCP<panzer::PureBasis> basis,
+GetCoeffsEvaluator(std::string & name, Teuchos::RCP<panzer::PureBasis> in_basis,
                    std::string & eShape, const size_t numNodesPerElem, const size_t dim) 
-  : basis(basis)
+  : basis(in_basis)
 {
 
   // set up coeffs
@@ -156,7 +170,7 @@ GetCoeffsEvaluator(std::string & name, Teuchos::RCP<panzer::PureBasis> basis,
       "ERROR: Element shape not supported!");
   }
 
-  it2basis = basis->template getIntrepid2Basis<PHX::exec_space,double,double>();
+  it2basis = basis->template getIntrepid2Basis<PHX::Device,double,double>();
   
   // set up projection structure
   projStruct.createL2ProjectionStruct(it2basis.get(), 3); // cubature order 3
@@ -291,7 +305,7 @@ class CheckCoeffsEvaluator
   public:
 
     CheckCoeffsEvaluator(std::string & name, Teuchos::RCP<panzer::PureBasis> basis,
-                         Teuchos::RCP<std::vector<double> > errors);
+                         Teuchos::RCP<std::vector<double> > in_errors);
 
     void
     evaluateFields(
@@ -310,9 +324,9 @@ class CheckCoeffsEvaluator
 
 template<typename EvalT, typename Traits>
 CheckCoeffsEvaluator<EvalT, Traits>::
-CheckCoeffsEvaluator(std::string & name, Teuchos::RCP<panzer::PureBasis> basis,
-Teuchos::RCP<std::vector<double> > errors)
-  : basis(basis), errors(errors)
+CheckCoeffsEvaluator(std::string & name, Teuchos::RCP<panzer::PureBasis> in_basis,
+Teuchos::RCP<std::vector<double> > in_errors)
+  : basis(in_basis), errors(in_errors)
 {
   
   // set up fields

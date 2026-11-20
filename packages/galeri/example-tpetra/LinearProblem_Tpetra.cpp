@@ -1,42 +1,10 @@
 // @HEADER
-// ************************************************************************
-//
+// *****************************************************************************
 //           Galeri: Finite Element and Matrix Generation Package
-//                 Copyright (2006) ETHZ/Sandia Corporation
 //
-// Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
-// license for use of this work by or on behalf of the U.S. Government.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions about Galeri? Contact Marzio Sala (marzio.sala _AT_ gmail.com)
-//
-// ************************************************************************
+// Copyright 2006 ETHZ/NTESS and the Galeri contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #include "Galeri_XpetraMaps.hpp"
@@ -52,14 +20,13 @@
 #else
 #define GO long long
 #endif
-#define Scalar int
+#define Scalar double
 #define LO int
 #define Node Tpetra::KokkosClassic::DefaultNode::DefaultNodeType
 
 using namespace Galeri;
 
-int main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) {
   using Teuchos::RCP;
   using Teuchos::rcp;
 
@@ -82,7 +49,7 @@ int main(int argc, char *argv[])
   // with Matrix arising from a 5-point formula discretization.
 
   std::string mapType = "Cartesian2D";
-  auto mapParameters = Teuchos::ParameterList("Tpetra::Map");
+  auto mapParameters  = Teuchos::ParameterList("Tpetra::Map");
   // dimension of the problem is nx x ny
   mapParameters.set("nx", 10 * comm->getSize());
   mapParameters.set("ny", 10);
@@ -92,18 +59,17 @@ int main(int argc, char *argv[])
 
   auto out = Teuchos::getFancyOStream(Teuchos::rcpFromRef(std::cout));
 
-  try
-  {
+  try {
     // Creation of the map
-    auto map = RCP{Galeri::Xpetra::CreateMap<Scalar, GO, Tpetra_Map>(mapType, comm, mapParameters)};
+    auto map = RCP{Galeri::Xpetra::CreateMap<LO, GO, Tpetra_Map>(mapType, comm, mapParameters)};
 
     // Creation of linear problem
     auto problem = Galeri::Xpetra::BuildProblem<Scalar, LO, GO, Tpetra_Map, Tpetra_CrsMatrix, Tpetra_MultiVector>("Laplace2D", map, mapParameters);
 
     // Build Matrix and MultiVectors
-    auto matrix = problem->BuildMatrix();
-    auto LHS = rcp(new Tpetra_MultiVector(matrix->getDomainMap(), 1));
-    auto RHS = rcp(new Tpetra_MultiVector(matrix->getRangeMap(), 1));
+    auto matrix        = problem->BuildMatrix();
+    auto LHS           = rcp(new Tpetra_MultiVector(matrix->getDomainMap(), 1));
+    auto RHS           = rcp(new Tpetra_MultiVector(matrix->getRangeMap(), 1));
     auto ExactSolution = rcp(new Tpetra_MultiVector(matrix->getDomainMap(), 1));
 
     ExactSolution->randomize(0, 100);
@@ -117,11 +83,8 @@ int main(int argc, char *argv[])
     ExactSolution->describe(*out, Teuchos::EVerbosityLevel::VERB_EXTREME);
 
     // at this point any LinearSolver can be used which understands the Tpetra objects. For example: Amesos2 or Ifpack2
-  }
-  catch (Galeri::Exception &rhs)
-  {
-    if (comm->getRank() == 0)
-    {
+  } catch (Galeri::Exception &rhs) {
+    if (comm->getRank() == 0) {
       cerr << "Caught exception: ";
       rhs.Print();
 

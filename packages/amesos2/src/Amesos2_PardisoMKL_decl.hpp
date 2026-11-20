@@ -1,44 +1,10 @@
 // @HEADER
+// *****************************************************************************
+//           Amesos2: Templated Direct Sparse Solver Package
 //
-// ***********************************************************************
-//
-//           Amesos2: Templated Direct Sparse Solver Package 
-//                  Copyright 2011 Sandia Corporation
-//
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
-//
-// ***********************************************************************
-//
+// Copyright 2011 NTESS and the Amesos2 contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 
@@ -55,8 +21,6 @@
 
 #ifndef AMESOS2_PARDISOMKL_DECL_HPP
 #define AMESOS2_PARDISOMKL_DECL_HPP
-
-#include <map>
 
 #include <Teuchos_StandardParameterEntryValidators.hpp>
 
@@ -119,6 +83,8 @@ namespace Amesos2 {
     typedef Kokkos::View<int_t*,              HostExecSpaceType>    host_size_type_array;
     typedef Kokkos::View<int_t*,              HostExecSpaceType>    host_ordinal_type_array;
     typedef Kokkos::View<solver_scalar_type*, HostExecSpaceType>    host_value_type_array;
+    typedef typename Kokkos::View<solver_scalar_type**, Kokkos::LayoutLeft,
+                                  typename HostExecSpaceType::memory_space> host_solver_scalar_view;
 
     /// \name Constructor/Destructor methods
     //@{
@@ -230,6 +196,14 @@ namespace Amesos2 {
     bool loadA_impl(EPhase current_phase);
 
 
+    /** 
+     * \brief Prints the status information about the current solver with some level
+     * of verbosity
+     */
+    void describe_impl(Teuchos::FancyOStream &out,
+                       const Teuchos::EVerbosityLevel verbLevel) const;
+
+
     ////////// Internal routines (not called from outside) //////////
 
     /** \internal
@@ -280,10 +254,10 @@ namespace Amesos2 {
     host_ordinal_type_array colind_view_;
     /// Stores the row indices of the nonzero entries
     host_size_type_array rowptr_view_;
-    /// Persisting, contiguous, 1D store for X
-    mutable Teuchos::Array<solver_scalar_type> xvals_;
-    /// Persisting, contiguous, 1D store for B
-    mutable Teuchos::Array<solver_scalar_type> bvals_;
+    /// Persisting, contiguous, 2D view for X
+    mutable host_solver_scalar_view xvals_;
+    /// Persisting, contiguous, 2D view for B
+    mutable host_solver_scalar_view bvals_;
 
     /// PardisoMKL internal data address pointer
     mutable void* pt_[64];
@@ -296,12 +270,19 @@ namespace Amesos2 {
     /// number of righthand-side vectors
     mutable int_t nrhs_;
 
+    // Partial factorization
+    size_t schur_size_;
+    int_t partial_facto_;
+    host_size_type_array  schur_part_;
+    host_value_type_array schur_out_;
+    scalar_type* schur_out_ptr_;
+    mutable host_solver_scalar_view wvals_;
+    bool only_forward_solve_;
+    bool only_backward_solve_;
+
     /// PardisoMKL parameter vector.  Note that the documentation uses
     /// 1-based indexing, but our interface must use 0-based indexing
     int_t iparm_[64];
-
-    /// The messaging level.  Set to 1 if you wish for Pardiso MKL to print statistical info
-    static const int_t msglvl_;
 
     // We will deal with 1 factor at a time
     static const int_t maxfct_;
@@ -312,8 +293,12 @@ namespace Amesos2 {
     = Meta::or_<std::is_same_v<solver_scalar_type, PMKL::_MKL_Complex8>,
                 std::is_same_v<solver_scalar_type, PMKL::_DOUBLE_COMPLEX_t>>::value;
 
+    bool pardiso_initialized_;
     bool is_contiguous_;
 
+    /// The messaging level.  Set to 1 if you wish for Pardiso MKL to print statistical info
+    int_t msglvl_;
+    int debug_level_;
 };                              // End class PardisoMKL
 
 
@@ -333,6 +318,11 @@ typedef Meta::make_list2<float,
 #endif
 };
 
+template <typename Scalar, typename LocalOrdinal, typename ExecutionSpace>
+struct solver_supports_matrix<PardisoMKL,
+  KokkosSparse::CrsMatrix<Scalar, LocalOrdinal, ExecutionSpace>> {
+  static const bool value = true;
+};
 } // end namespace Amesos
 
 #endif  // AMESOS2_PARDISOMKL_DECL_HPP

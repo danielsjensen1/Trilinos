@@ -11,17 +11,14 @@
 #include "Ioss_CodeTypes.h"       // for IntVector
 #include "Ioss_ElementTopology.h" // for ElementTopology
 
-// STL Includes
-
 namespace Ioss {
-  class IOSS_EXPORT Pyramid13 : public Ioss::ElementTopology
+  class IOSS_EXPORT Pyramid13 final : public Ioss::ElementTopology
   {
 
   public:
     static const char *name;
 
     static void factory();
-    Pyramid13(const Pyramid13 &) = delete;
 
     IOSS_NODISCARD ElementShape shape() const override { return ElementShape::PYRAMID; }
     IOSS_NODISCARD int          spatial_dimension() const override;

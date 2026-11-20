@@ -1,43 +1,11 @@
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //           Panzer: A partial differential equation assembly
 //       engine for strongly coupled complex multiphysics systems
-//                 Copyright (2011) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Roger P. Pawlowski (rppawlo@sandia.gov) and
-// Eric C. Cyr (eccyr@sandia.gov)
-// ***********************************************************************
+// Copyright 2011 NTESS and the Panzer contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #ifndef PANZER_GATHER_TANGENT_TPETRA_IMPL_HPP
@@ -49,6 +17,7 @@
 #include "Panzer_GlobalIndexer.hpp"
 #include "Panzer_PureBasis.hpp"
 #include "Panzer_TpetraLinearObjContainer.hpp"
+#include "Panzer_TpetraVector_ReadOnly_GlobalEvaluationData.hpp"
 #include "Panzer_LOCPair_GlobalEvaluationData.hpp"
 #include "Panzer_GlobalEvaluationDataContainer.hpp"
 #include "Panzer_DOFManager.hpp"
@@ -131,21 +100,37 @@ preEvaluate(typename TRAITS::PreEvalData d)
   using Teuchos::rcp_dynamic_cast;
 
   typedef TpetraLinearObjContainer<double,LO,GO,NodeT> LOC;
+  typedef TpetraVector_ReadOnly_GlobalEvaluationData<double,LO,GO,NodeT> RO_GED;
 
-  // try to extract linear object container
-  if (d.gedc->containsDataObject(globalDataKey_)) {
-    RCP<GlobalEvaluationData> ged = d.gedc->getDataObject(globalDataKey_);
+  if (!d.gedc->containsDataObject(globalDataKey_))
+    return;
+
+  RCP<GlobalEvaluationData> ged = d.gedc->getDataObject(globalDataKey_);
+
+  // try to extract a linear object container, possibly wrapped in a LOCPair
+  {
+    RCP<LOC> tpetraContainer = rcp_dynamic_cast<LOC>(ged);
     RCP<LOCPair_GlobalEvaluationData> loc_pair =
       rcp_dynamic_cast<LOCPair_GlobalEvaluationData>(ged);
 
-    if(loc_pair!=Teuchos::null) {
-      Teuchos::RCP<LinearObjContainer> loc = loc_pair->getGhostedLOC();
-      tpetraContainer_ = rcp_dynamic_cast<LOC>(loc,true);
-    }
+    if(loc_pair!=Teuchos::null)
+      tpetraContainer = rcp_dynamic_cast<LOC>(loc_pair->getGhostedLOC(),true);
 
-    if(tpetraContainer_==Teuchos::null) {
-      tpetraContainer_ = rcp_dynamic_cast<LOC>(ged,true);
+    if(tpetraContainer!=Teuchos::null) {
+      if (useTimeDerivativeSolutionVector_)
+        x_vector_ = tpetraContainer->get_dxdt_mv();
+      else
+        x_vector_ = tpetraContainer->get_x_mv();
+
+      return;
     }
+  }
+
+  // otherwise it must be a read-only ghosted vector, which is what the model
+  // evaluator hands out for the tangent gather containers (throws if not)
+  {
+    RCP<RO_GED> ro_ged = rcp_dynamic_cast<RO_GED>(ged,true);
+    x_vector_ = ro_ged->getGhostedVector_Tpetra();
   }
 }
 
@@ -154,20 +139,15 @@ template<typename EvalT,typename TRAITS,typename LO,typename GO,typename NodeT>
 void panzer::GatherTangent_Tpetra<EvalT, TRAITS,LO,GO,NodeT>::
 evaluateFields(typename TRAITS::EvalData workset)
 {
-  // If tpetraContainer_ was not initialized, then no global evaluation data
+  // If x_vector_ was not initialized, then no global evaluation data
   // container was set, in which case this evaluator becomes a no-op
-  if (tpetraContainer_ == Teuchos::null)
+  if (x_vector_ == Teuchos::null)
     return;
 
-  typedef TpetraLinearObjContainer<double,LO,GO,NodeT> LOC;
   // for convenience pull out some objects from workset
   std::string blockId = this->wda(workset).block_id;
 
-  Teuchos::RCP<typename LOC::VectorType> x;
-  if (useTimeDerivativeSolutionVector_)
-    x = tpetraContainer_->get_dxdt();
-  else
-    x = tpetraContainer_->get_x();
+  auto x = x_vector_;
 
   auto cellLocalIdsKokkos = this->wda(workset).getLocalCellIDs();
   auto lids = globalIndexer_->getLIDs();
@@ -175,7 +155,7 @@ evaluateFields(typename TRAITS::EvalData workset)
   auto gidFieldOffsets = vov.getViewDevice();
   auto gatherFieldsDevice = gatherFieldsVoV_.getViewDevice();
   auto x_view = x->getLocalViewDevice(Tpetra::Access::ReadWrite);
-  Kokkos::MDRangePolicy<PHX::Device::execution_space,Kokkos::Rank<2>> policy({0,0},{cellLocalIdsKokkos.extent(0),gidFieldOffsets.extent(0)});
+  Kokkos::MDRangePolicy<PHX::ExecutionSpace,Kokkos::Rank<2>> policy({0,0},{cellLocalIdsKokkos.extent(0),gidFieldOffsets.extent(0)});
   Kokkos::parallel_for("GatherSolutionTpetra<Tangent>",policy,KOKKOS_LAMBDA(const int worksetCellIndex, const int fieldIndex) {
     for(std::size_t basis=0;basis<gidFieldOffsets(fieldIndex).extent(0);basis++) {
       int offset = gidFieldOffsets(fieldIndex)(basis);

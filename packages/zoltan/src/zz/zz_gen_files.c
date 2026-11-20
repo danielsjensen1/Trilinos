@@ -1,48 +1,11 @@
-/* 
- * @HEADER
- *
- * ***********************************************************************
- *
- *  Zoltan Toolkit for Load-balancing, Partitioning, Ordering and Coloring
- *                  Copyright 2012 Sandia Corporation
- *
- * Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
- * the U.S. Government retains certain rights in this software.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- * 1. Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *
- * 2. Redistributions in binary form must reproduce the above copyright
- * notice, this list of conditions and the following disclaimer in the
- * documentation and/or other materials provided with the distribution.
- *
- * 3. Neither the name of the Corporation nor the names of the
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- * Questions? Contact Karen Devine	kddevin@sandia.gov
- *                    Erik Boman	egboman@sandia.gov
- *
- * ***********************************************************************
- *
- * @HEADER
- */
+// @HEADER
+// *****************************************************************************
+//  Zoltan Toolkit for Load-balancing, Partitioning, Ordering and Coloring
+//
+// Copyright 2012 NTESS and the Zoltan contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
 #ifdef __cplusplus
 /* if C++, define the rest of this header file as extern C */
 extern "C" {
@@ -150,6 +113,13 @@ int gen_geom, int gen_graph, int gen_hg)
 
   /* Assign default file name if none was given. */
   if (fname==NULL) fname = "noname";
+
+  /* Reject base names too long for full_fname plus the longest suffix. */
+  if (strlen(fname) >= sizeof(full_fname) - 8){
+    ZOLTAN_PRINT_ERROR(zz->Proc, yo, "File name too long.");
+    ZOLTAN_TRACE_EXIT(zz, yo);
+    return ZOLTAN_FATAL;
+  }
 
   /* Zoltan_Get_Obj_List allocates memory for all return lists. */
   error = Zoltan_Get_Obj_List(zz, &num_obj, &global_ids, &local_ids,
@@ -310,7 +280,7 @@ int gen_geom, int gen_graph, int gen_hg)
    */
   /* Write object assignments to file. */
   /* For now, only write partition number. */
-  sprintf(full_fname, "%s.assign", fname);
+  snprintf(full_fname, sizeof(full_fname), "%s.assign", fname);
   if (zz->Proc == 0)
     fp = fopen(full_fname, "w");
   else
@@ -326,7 +296,7 @@ int gen_geom, int gen_graph, int gen_hg)
   fflush(fp);
   fclose(fp);
 
-  sprintf(full_fname, "%s.gids", fname);
+  snprintf(full_fname, sizeof(full_fname), "%s.gids", fname);
   if (zz->Proc == 0)
     fp = fopen(full_fname, "w");
   else
@@ -337,7 +307,6 @@ int gen_geom, int gen_graph, int gen_hg)
     goto End;
   }
   for (i=0; i<num_obj; i++) {
-    int j;
     for (j = 0; j < lenGID; j++)
       fprintf(fp, ZOLTAN_ID_SPEC" ", global_ids[i*lenGID+j]);
     fprintf(fp, "\n");
@@ -347,7 +316,7 @@ int gen_geom, int gen_graph, int gen_hg)
 
   /* Write geometry to file, if applicable. */
   if (gen_geom){
-    sprintf(full_fname, "%s.coords", fname);
+    snprintf(full_fname, sizeof(full_fname), "%s.coords", fname);
     if (zz->Proc == 0)
       fp = fopen(full_fname, "w");
     else
@@ -369,7 +338,7 @@ int gen_geom, int gen_graph, int gen_hg)
   /* Write graph to file, if applicable. */
   /* Also create a minimal .graph file with no edges for geometric methods. */
   if (gen_geom || gen_graph){
-    sprintf(full_fname, "%s.graph", fname);
+    snprintf(full_fname, sizeof(full_fname), "%s.graph", fname);
     if (zz->Proc == 0)
       fp = fopen(full_fname, "w");
     else
@@ -441,7 +410,7 @@ int gen_geom, int gen_graph, int gen_hg)
      *  6. character data may be upper or lower case. 
      */
 
-    sprintf(full_fname, "%s.mtxp", fname);  /* matrixmarket plus */
+    snprintf(full_fname, sizeof(full_fname), "%s.mtxp", fname);  /* matrixmarket plus */
 
     Zoltan_Print_Sync_Start(zz->Communicator, 0); 
     if (zz->Proc == 0)

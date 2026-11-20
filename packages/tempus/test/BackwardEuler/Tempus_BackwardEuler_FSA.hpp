@@ -1,10 +1,11 @@
-// @HEADER
-// ****************************************************************************
-//                Tempus: Copyright (2017) Sandia Corporation
+//@HEADER
+// *****************************************************************************
+//          Tempus: Time Integration and Sensitivity Analysis Package
 //
-// Distributed under BSD 3-clause license (See accompanying file Copyright.txt)
-// ****************************************************************************
-// @HEADER
+// Copyright 2017 NTESS and the Tempus contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+//@HEADER
 
 #include "Teuchos_UnitTestHarness.hpp"
 #include "Teuchos_XMLParameterListHelpers.hpp"
@@ -44,7 +45,7 @@ using Tempus::SolutionState;
 // ************************************************************
 void test_sincos_fsa(const bool use_combined_method,
                      const bool use_dfdp_as_tangent, Teuchos::FancyOStream &out,
-                     bool &success)
+                     bool &success, const bool use_row_sum_scaling = false)
 {
   std::vector<double> StepSize;
   std::vector<double> ErrorNorm;
@@ -73,9 +74,16 @@ void test_sincos_fsa(const bool use_combined_method,
       sens_pl.set("Sensitivity Method", "Combined");
     else {
       sens_pl.set("Sensitivity Method", "Staggered");
-      sens_pl.set("Reuse State Linear Solver", true);
+      // With row sum scaling, the sensitivity stepper has its own solver
+      sens_pl.set("Reuse State Linear Solver", !use_row_sum_scaling);
     }
     sens_pl.set("Use DfDp as Tangent", use_dfdp_as_tangent);
+    if (use_row_sum_scaling)
+      pl->sublist("Default Stepper")
+          .sublist("Default Solver")
+          .sublist("NOX")
+          .sublist("Thyra Group Options")
+          .set("Function Scaling", "Row Sum");
 
     // Setup the Integrator and reset initial time step
     pl->sublist("Default Integrator")

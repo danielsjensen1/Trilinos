@@ -60,18 +60,19 @@ namespace Ioad {
                                size_t data_size) const override;
     int64_t get_field_internal(const Ioss::ElementBlock *eb, const Ioss::Field &field, void *data,
                                size_t data_size) const override;
-    int64_t get_field_internal(const Ioss::StructuredBlock *sb, const Ioss::Field &field,
-                               void *data, size_t data_size) const override
+    int64_t get_field_internal(const Ioss::StructuredBlock * /* sb */,
+                               const Ioss::Field & /*field*/, void * /*data*/,
+                               size_t /*data_size*/) const override
     {
       return -1;
     }
-    int64_t get_field_internal(const Ioss::Assembly *sb, const Ioss::Field &field, void *data,
-                               size_t data_size) const override
+    int64_t get_field_internal(const Ioss::Assembly * /*sb*/, const Ioss::Field & /*field*/,
+                               void * /*data*/, size_t /*data_size*/) const override
     {
       return -1;
     }
-    int64_t get_field_internal(const Ioss::Blob *sb, const Ioss::Field &field, void *data,
-                               size_t data_size) const override
+    int64_t get_field_internal(const Ioss::Blob * /*sb*/, const Ioss::Field & /*field*/,
+                               void * /*data*/, size_t /*data_size*/) const override
     {
       return -1;
     }
@@ -120,18 +121,18 @@ namespace Ioad {
                                size_t data_size) const override;
     int64_t put_field_internal(const Ioss::CommSet *cs, const Ioss::Field &field, void *data,
                                size_t data_size) const override;
-    int64_t put_field_internal(const Ioss::StructuredBlock *sb, const Ioss::Field &field,
-                               void *data, size_t data_size) const override
+    int64_t put_field_internal(const Ioss::StructuredBlock * /*sb*/, const Ioss::Field & /*field*/,
+                               void * /*data*/, size_t /*data_size*/) const override
     {
       return -1;
     }
-    int64_t put_field_internal(const Ioss::Assembly *sb, const Ioss::Field &field, void *data,
-                               size_t data_size) const override
+    int64_t put_field_internal(const Ioss::Assembly * /*sb*/, const Ioss::Field & /*field*/,
+                               void * /*data*/, size_t /*data_size*/) const override
     {
       return -1;
     }
-    int64_t put_field_internal(const Ioss::Blob *sb, const Ioss::Field &field, void *data,
-                               size_t data_size) const override
+    int64_t put_field_internal(const Ioss::Blob * /*sb*/, const Ioss::Field & /*field*/,
+                               void * /*data*/, size_t /*data_size*/) const override
     {
       return -1;
     }
@@ -144,8 +145,8 @@ namespace Ioad {
     template <typename T> T get_attribute(const std::string &attribute_name);
 
     template <typename T> void put_data(void *data, const std::string &encoded_name) const;
-    template <typename T, typename = typename std::enable_if<
-                              !std::is_base_of<Ioss::EntitySet, T>::value, T>::type>
+    template <typename T,
+              typename = typename std::enable_if_t<!std::is_base_of_v<Ioss::EntitySet, T>, T>>
     void put_var_type(const Ioss::Field &field, const std::string &encoded_name,
                       bool transformed_field) const;
     template <typename T>
@@ -200,11 +201,10 @@ namespace Ioad {
                                               const std::string   &var_name) const;
 
     template <typename T>
-    using IsIossEntityBlock =
-        typename std::enable_if<std::is_base_of<Ioss::EntityBlock, T>::value>::type;
+    using IsIossEntityBlock = typename std::enable_if_t<std::is_base_of_v<Ioss::EntityBlock, T>>;
     template <typename T>
     using IsNotIossEntityBlock =
-        typename std::enable_if<!std::is_base_of<Ioss::EntityBlock, T>::value>::type;
+        typename std::enable_if_t<!std::is_base_of_v<Ioss::EntityBlock, T>>;
 
     template <typename T, typename = IsIossEntityBlock<T>>
     void define_entity_meta_variables(const std::string &encoded_name);

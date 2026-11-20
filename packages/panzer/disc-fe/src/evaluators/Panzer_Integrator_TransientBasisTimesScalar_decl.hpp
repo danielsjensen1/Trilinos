@@ -1,43 +1,11 @@
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //           Panzer: A partial differential equation assembly
 //       engine for strongly coupled complex multiphysics systems
-//                 Copyright (2011) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Roger P. Pawlowski (rppawlo@sandia.gov) and
-// Eric C. Cyr (eccyr@sandia.gov)
-// ***********************************************************************
+// Copyright 2011 NTESS and the Panzer contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #ifndef PANZER_EVALUATOR_TRANSIENT_BASISTIMESSCALAR_DECL_HPP
@@ -52,7 +20,13 @@
 #include "Panzer_Evaluator_Macros.hpp"
 
 namespace panzer {
-    
+
+/** This integrates a scalar quantity times a basis function over each
+  * cell, contributing to the residual only when the workset indicates
+  * transient (time derivative) terms should be evaluated. It is
+  * useful for building the mass-matrix-like terms of a time-dependent
+  * weak form.
+  */
 template<typename EvalT, typename Traits>
 class Integrator_TransientBasisTimesScalar
   :
@@ -61,14 +35,17 @@ class Integrator_TransientBasisTimesScalar
 {
   public:
 
+    /// \brief Construct from a ParameterList specifying the residual field name, integrand name, basis, integration rule, scaling multiplier, and optional field multipliers.
     Integrator_TransientBasisTimesScalar(
       const Teuchos::ParameterList& p);
 
+    /// \brief Looks up the basis index needed by evaluateFields(). Called once before the first evaluation.
     void
     postRegistrationSetup(
       typename Traits::SetupData d,
       PHX::FieldManager<Traits>& fm);
 
+    /// \brief Computes the residual field for this workset per the class description, when the workset indicates transient terms should be evaluated.
     void
     evaluateFields(
       typename Traits::EvalData d);
@@ -95,6 +72,7 @@ class Integrator_TransientBasisTimesScalar
   Kokkos::DynRankView<ScalarT,typename PHX::DevLayout<ScalarT>::type,PHX::Device> tmp;
 
 private:
+  /// \brief Returns the ParameterList of valid parameters/defaults for this evaluator's constructor.
   Teuchos::RCP<Teuchos::ParameterList> getValidParameters() const;
 
 }; // end of class Integrator_TransientBasisTimesScalar

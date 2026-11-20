@@ -1,4 +1,4 @@
-// Copyright(C) 1999-2024 National Technology & Engineering Solutions
+// Copyright(C) 1999-2025 National Technology & Engineering Solutions
 // of Sandia, LLC (NTESS).  Under the terms of Contract DE-NA0003525 with
 // NTESS, the U.S. Government retains certain rights in this software.
 //
@@ -51,8 +51,12 @@ namespace Ioss {
       return m_registry.find(type);
     }
 
+    ETRegistry()                              = default;
+    ETRegistry(const ETRegistry &)            = delete;
+    ETRegistry &operator=(const ETRegistry &) = delete;
+    ETRegistry(ETRegistry &&)                 = delete;
+    ETRegistry &operator=(ETRegistry &&)      = delete;
     ~ETRegistry();
-    std::map<std::string, std::string> customFieldTypes;
 
   private:
     Ioss::ElementTopologyMap             m_registry;
@@ -73,6 +77,8 @@ namespace Ioss {
 
     ElementTopology(const ElementTopology &)            = delete;
     ElementTopology &operator=(const ElementTopology &) = delete;
+    ElementTopology(ElementTopology &&)                 = delete;
+    ElementTopology &operator=(ElementTopology &&)      = delete;
 
     virtual ~ElementTopology() = default;
 
@@ -147,12 +153,12 @@ namespace Ioss {
 
   protected:
     ElementTopology(std::string type, std::string master_elem_name, bool delete_me = false);
-    virtual bool validate_permutation_nodes() const { return true; }
+    IOSS_NODISCARD virtual bool validate_permutation_nodes() const { return true; }
 
   private:
-    bool              equal_(const Ioss::ElementTopology &rhs, bool quiet) const;
-    const std::string name_;
-    const std::string masterElementName_;
+    IOSS_NODISCARD bool equal_(const Ioss::ElementTopology &rhs, bool quiet) const;
+    const std::string   name_;
+    const std::string   masterElementName_;
 
     static const std::string &topology_shape_to_permutation_name(Ioss::ElementShape topoShape);
 

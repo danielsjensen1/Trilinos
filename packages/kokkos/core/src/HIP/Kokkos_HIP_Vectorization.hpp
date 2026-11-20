@@ -1,18 +1,5 @@
-//@HEADER
-// ************************************************************************
-//
-//                        Kokkos v. 4.0
-//       Copyright (2022) National Technology & Engineering
-//               Solutions of Sandia, LLC (NTESS).
-//
-// Under the terms of Contract DE-NA0003525 with NTESS,
-// the U.S. Government retains certain rights in this software.
-//
-// Part of Kokkos, under the Apache License v2.0 with LLVM Exceptions.
-// See https://kokkos.org/LICENSE for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-//
-//@HEADER
+// SPDX-FileCopyrightText: Copyright Contributors to the Kokkos project
 
 #ifndef KOKKOS_HIP_VECTORIZATION_HPP
 #define KOKKOS_HIP_VECTORIZATION_HPP
@@ -32,7 +19,7 @@ namespace Impl {
 template <class Derived>
 struct in_place_shfl_op {
   // CRTP boilerplate
-  __device__ KOKKOS_IMPL_FORCEINLINE const Derived& self() const noexcept {
+  __device__ __forceinline__ const Derived& self() const noexcept {
     return *static_cast<Derived const*>(this);
   }
 
@@ -40,8 +27,8 @@ struct in_place_shfl_op {
   template <class Scalar>
   // requires _assignable_from_bits<Scalar>
   __device__ inline std::enable_if_t<sizeof(Scalar) < sizeof(int)> operator()(
-      Scalar& out, Scalar const& in, int lane_or_delta, int width) const
-      noexcept {
+      Scalar& out, Scalar const& in, int lane_or_delta,
+      int width) const noexcept {
     using shfl_type = int;
     union conv_type {
       Scalar orig;
@@ -65,16 +52,16 @@ struct in_place_shfl_op {
   template <class Scalar>
   // requires _assignable_from_bits<Scalar>
   __device__ inline std::enable_if_t<sizeof(Scalar) == sizeof(int)> operator()(
-      Scalar& out, Scalar const& in, int lane_or_delta, int width) const
-      noexcept {
+      Scalar& out, Scalar const& in, int lane_or_delta,
+      int width) const noexcept {
     reinterpret_cast<int&>(out) = self().do_shfl_op(
         reinterpret_cast<int const&>(in), lane_or_delta, width);
   }
 
   template <class Scalar>
   __device__ inline std::enable_if_t<sizeof(Scalar) == sizeof(double)>
-  operator()(Scalar& out, Scalar const& in, int lane_or_delta, int width) const
-      noexcept {
+  operator()(Scalar& out, Scalar const& in, int lane_or_delta,
+             int width) const noexcept {
     reinterpret_cast<double&>(out) = self().do_shfl_op(
         *reinterpret_cast<double const*>(&in), lane_or_delta, width);
   }
@@ -82,8 +69,8 @@ struct in_place_shfl_op {
   // sizeof(Scalar) > sizeof(double) case
   template <typename Scalar>
   __device__ inline std::enable_if_t<(sizeof(Scalar) > sizeof(double))>
-  operator()(Scalar& out, const Scalar& val, int lane_or_delta, int width) const
-      noexcept {
+  operator()(Scalar& out, const Scalar& val, int lane_or_delta,
+             int width) const noexcept {
     using shuffle_as_t = int;
     constexpr int N    = sizeof(Scalar) / sizeof(shuffle_as_t);
 
@@ -99,46 +86,44 @@ struct in_place_shfl_op {
 
 struct in_place_shfl_fn : in_place_shfl_op<in_place_shfl_fn> {
   template <class T>
-  __device__ KOKKOS_IMPL_FORCEINLINE T do_shfl_op(T& val, int lane,
-                                                  int width) const noexcept {
+  __device__ __forceinline__ T do_shfl_op(T& val, int lane,
+                                          int width) const noexcept {
     auto return_val = __shfl(val, lane, width);
     return return_val;
   }
 };
 
 template <class... Args>
-__device__ KOKKOS_IMPL_FORCEINLINE void in_place_shfl(Args&&... args) noexcept {
-  in_place_shfl_fn{}((Args &&) args...);
+__device__ __forceinline__ void in_place_shfl(Args&&... args) noexcept {
+  in_place_shfl_fn{}((Args&&)args...);
 }
 
 struct in_place_shfl_up_fn : in_place_shfl_op<in_place_shfl_up_fn> {
   template <class T>
-  __device__ KOKKOS_IMPL_FORCEINLINE T do_shfl_op(T& val, int lane,
-                                                  int width) const noexcept {
+  __device__ __forceinline__ T do_shfl_op(T& val, int lane,
+                                          int width) const noexcept {
     auto return_val = __shfl_up(val, lane, width);
     return return_val;
   }
 };
 
 template <class... Args>
-__device__ KOKKOS_IMPL_FORCEINLINE void in_place_shfl_up(
-    Args&&... args) noexcept {
-  in_place_shfl_up_fn{}((Args &&) args...);
+__device__ __forceinline__ void in_place_shfl_up(Args&&... args) noexcept {
+  in_place_shfl_up_fn{}((Args&&)args...);
 }
 
 struct in_place_shfl_down_fn : in_place_shfl_op<in_place_shfl_down_fn> {
   template <class T>
-  __device__ KOKKOS_IMPL_FORCEINLINE T do_shfl_op(T& val, int lane,
-                                                  int width) const noexcept {
+  __device__ __forceinline__ T do_shfl_op(T& val, int lane,
+                                          int width) const noexcept {
     auto return_val = __shfl_down(val, lane, width);
     return return_val;
   }
 };
 
 template <class... Args>
-__device__ KOKKOS_IMPL_FORCEINLINE void in_place_shfl_down(
-    Args&&... args) noexcept {
-  in_place_shfl_down_fn{}((Args &&) args...);
+__device__ __forceinline__ void in_place_shfl_down(Args&&... args) noexcept {
+  in_place_shfl_down_fn{}((Args&&)args...);
 }
 
 }  // namespace Impl

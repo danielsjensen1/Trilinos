@@ -1,3 +1,11 @@
+// @HEADER
+// *****************************************************************************
+//     Compadre: COMpatible PArticle Discretization and REmap Toolkit
+//
+// Copyright 2018 NTESS and the Compadre contributors.
+// SPDX-License-Identifier: BSD-2-Clause
+// *****************************************************************************
+// @HEADER
 #include "Compadre_GMLS.hpp"
 #include "Compadre_Functors.hpp"
 
@@ -171,6 +179,9 @@ void GMLS::generatePolynomialCoefficients(const int number_of_batches, const boo
         if (!_orthonormal_tangent_space_provided) {
             _T = Kokkos::View<double*>("tangent approximation",_pc._target_coordinates.extent(0)*_dimensions*_dimensions);
             Kokkos::deep_copy(_T, 0.0);
+        } else {
+            compadre_assert_release(_T.extent(0)/(_dimensions*_dimensions)==_pc._target_coordinates.extent(0) &&
+                    "Provided tangent_directions has number of targets different than target_coordinates");
         }
         _manifold_curvature_coefficients = Kokkos::View<double*>("manifold curvature coefficients",
                 _pc._target_coordinates.extent(0)*manifold_NP);
@@ -240,12 +251,7 @@ void GMLS::generatePolynomialCoefficients(const int number_of_batches, const boo
         auto gmls_basis_data = this->extractBasisData();
         auto gmls_solution_data = this->extractSolutionData();
 
-        
-        // even kernels that should run on other # of vector lanes do not (on GPU)
-        auto tp = _pm.TeamPolicyThreadsAndVectors(this_batch_size, _pm._default_threads, 1);
-        //auto tp = _pm.TeamPolicyThreadsAndVectors(this_batch_size, _pm._default_threads, _pm._default_vector_lanes);
-        //const auto work_item_property = Kokkos::Experimental::WorkItemProperty::HintLightWeight;
-        //const auto tp2 = Kokkos::Experimental::require(tp, work_item_property);
+        auto tp = _pm.TeamPolicyThreadsAndVectors(this_batch_size);
 
         if (_problem_type == ProblemType::MANIFOLD) {
 
@@ -386,7 +392,6 @@ void GMLS::generatePolynomialCoefficients(const int number_of_batches, const boo
          *    Calculate Optimal Threads Based On Levels of Parallelism
          */
 
-
         if (_problem_type == ProblemType::MANIFOLD) {
 
             /*
@@ -411,7 +416,7 @@ void GMLS::generatePolynomialCoefficients(const int number_of_batches, const boo
             
         // fine grain control over applying target (most expensive part after QR solve)
         ParallelManager pm;
-        tp = pm.TeamPolicyThreadsAndVectors(this_batch_size, pm._default_threads, pm._default_vector_lanes);
+        tp = pm.TeamPolicyThreadsAndVectors(this_batch_size);
         const auto work_item_property = Kokkos::Experimental::WorkItemProperty::HintLightWeight;
         const auto tp2 = Kokkos::Experimental::require(tp, work_item_property);
         auto functor_apply_targets = ApplyTargets(gmls_solution_data);

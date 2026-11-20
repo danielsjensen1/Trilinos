@@ -1,44 +1,10 @@
 // @HEADER
-//
-// ***********************************************************************
-//
+// *****************************************************************************
 //           Amesos2: Templated Direct Sparse Solver Package
-//                  Copyright 2011 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Sivasankaran Rajamanickam (srajama@sandia.gov)
-//
-// ***********************************************************************
-//
+// Copyright 2011 NTESS and the Amesos2 contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #ifndef AMESOS2_TACHO_DEF_HPP
@@ -61,16 +27,25 @@ TachoSolver<Matrix,Vector>::TachoSolver(
   Teuchos::RCP<const Vector> B )
   : SolverCore<Amesos2::TachoSolver,Matrix,Vector>(A, X, B)
 {
-  data_.method  = 1; // Cholesky
-  data_.variant = 2; // solver variant
+  data_.method    = 1;      // Cholesky
+  data_.variant   = 2;      // solver variant
+  data_.streams   = 1;      // # of streams
+  data_.dofs_per_node = 1;  // DoFs / node
+  data_.pivot_pert = false; // Pertub small pivot
+  data_.diag_shift = false; // Shift diagonal
+  data_.verbose    = false; // verbose
+  data_.team_on_user_stream  = false; // use user stream-0 for team/batched kernels
+  data_.small_problem_threshold_size = 1024;
+  tacho_initialized_ = false;
 }
 
 
 template <class Matrix, class Vector>
 TachoSolver<Matrix,Vector>::~TachoSolver( )
 {
-  if ( this->root_ ) {
+  if ( this->root_ && tacho_initialized_) {
     data_.solver.release();
+    tacho_initialized_ = false;
   }
 }
 
@@ -100,6 +75,12 @@ TachoSolver<Matrix,Vector>::symbolicFactorization_impl()
 
   int status = 0;
   if ( this->root_ ) {
+    if (tacho_initialized_) {
+      // release inernal memory if symbolic was called before
+      data_.solver.release();
+      tacho_initialized_ = false;
+    }
+
     if(do_optimization()) {
       this->matrixA_->returnRowPtr_kokkos_view(host_row_ptr_view_);
       this->matrixA_->returnColInd_kokkos_view(host_cols_view_);
@@ -107,13 +88,20 @@ TachoSolver<Matrix,Vector>::symbolicFactorization_impl()
 
     data_.solver.setSolutionMethod(data_.method);
     data_.solver.setLevelSetOptionAlgorithmVariant(data_.variant);
-
+    data_.solver.setSmallProblemThresholdsize(data_.small_problem_threshold_size);
+    data_.solver.setVerbose(data_.verbose);
+    data_.solver.setLevelSetOptionNumStreams(data_.streams, data_.team_on_user_stream);
     // TODO: Confirm param options
     // data_.solver.setMaxNumberOfSuperblocks(data_.max_num_superblocks);
 
     // Symbolic factorization currently must be done on host
-    data_.solver.analyze(this->globalNumCols_, host_row_ptr_view_, host_cols_view_);
+    if (data_.dofs_per_node > 1) {
+      data_.solver.analyze(this->globalNumCols_, data_.dofs_per_node, host_row_ptr_view_, host_cols_view_);
+    } else {
+      data_.solver.analyze(this->globalNumCols_, host_row_ptr_view_, host_cols_view_);
+    }
     data_.solver.initialize();
+    tacho_initialized_ = true;
   }
   return status;
 }
@@ -130,7 +118,20 @@ TachoSolver<Matrix,Vector>::numericFactorization_impl()
   int status = 0;
   if ( this->root_ ) {
     if(do_optimization()) {
-     this->matrixA_->returnValues_kokkos_view(device_nzvals_view_);
+     // instead of holding onto the device poinster
+     //  this->matrixA_->returnValues_kokkos_view(device_nzvals_view_);
+     // make an explicit copy
+     device_value_type_array device_nzvals_temp;
+     this->matrixA_->returnValues_kokkos_view(device_nzvals_temp);
+     Kokkos::deep_copy(device_nzvals_view_, device_nzvals_temp);
+    }
+    if (data_.diag_shift) {
+      data_.solver.shiftDiagonal();
+    }
+    if (data_.pivot_pert) {
+      data_.solver.useDefaultPivotTolerance(2); // tol = sqrt(eps)
+    } else {
+      data_.solver.useNoPivotTolerance();
     }
     data_.solver.factorize(device_nzvals_view_);
   }
@@ -156,7 +157,6 @@ TachoSolver<Matrix,Vector>::solve_impl(const Teuchos::Ptr<MultiVecAdapter<Vector
   {                             // Get values from RHS B
 #ifdef HAVE_AMESOS2_TIMERS
     Teuchos::TimeMonitor mvConvTimer(this->timers_.vecConvTime_);
-    Teuchos::TimeMonitor redistTimer(this->timers_.vecRedistTime_);
 #endif
     const bool initialize_data = true;
     const bool do_not_initialize_data = false;
@@ -173,10 +173,10 @@ TachoSolver<Matrix,Vector>::solve_impl(const Teuchos::Ptr<MultiVecAdapter<Vector
   int ierr = 0; // returned error code
 
   if ( this->root_ ) {  // Do solve!
-#ifdef HAVE_AMESOS2_TIMER
+    // Bump up the workspace size if needed
+#ifdef HAVE_AMESOS2_TIMERS
     Teuchos::TimeMonitor solveTimer(this->timers_.solveTime_);
 #endif
-    // Bump up the workspace size if needed
     if (workspace_.extent(0) < this->globalNumRows_ || workspace_.extent(1) < nrhs) {
       workspace_ = device_solve_array_t(
         Kokkos::ViewAllocateWithoutInitializing("t"), this->globalNumRows_, nrhs);
@@ -236,7 +236,9 @@ TachoSolver<Matrix,Vector>::setParameters_impl(const Teuchos::RCP<Teuchos::Param
 
   // factorization type
   auto method_name = parameterList->get<std::string> ("method", "chol");
-  if (method_name == "chol")
+  if (method_name == "ldl-nopiv")
+    data_.method = 0;
+  else if (method_name == "chol")
     data_.method = 1;
   else if (method_name == "ldl")
     data_.method = 2;
@@ -247,6 +249,19 @@ TachoSolver<Matrix,Vector>::setParameters_impl(const Teuchos::RCP<Teuchos::Param
   }
   // solver type
   data_.variant = parameterList->get<int> ("variant", 2);
+  // small problem threshold
+  data_.small_problem_threshold_size = parameterList->get<int> ("small problem threshold size", 1024);
+  // verbosity
+  data_.verbose = parameterList->get<bool> ("verbose", false);
+  // # of streams
+  data_.streams = parameterList->get<int> ("num-streams", 1);
+  // use user stream-0 for batched kernels
+  data_.team_on_user_stream = parameterList->get<bool> ("team-on-user-stream", false);
+  // DoFs / node
+  data_.dofs_per_node = parameterList->get<int> ("dofs-per-node", 1);
+  // Perturb tiny pivots
+  data_.pivot_pert = parameterList->get<bool> ("perturb-pivot", false);
+  data_.diag_shift = parameterList->get<bool> ("shift-diag", false);
   // TODO: Confirm param options
   // data_.num_kokkos_threads = parameterList->get<int>("kokkos-threads", 1);
   // data_.max_num_superblocks = parameterList->get<int>("max-num-superblocks", 4);
@@ -264,6 +279,13 @@ TachoSolver<Matrix,Vector>::getValidParameters_impl() const
 
     pl->set("method", "chol", "Type of factorization, chol, ldl, or lu");
     pl->set("variant", 2, "Type of solver variant, 0, 1, or 2");
+    pl->set("small problem threshold size", 1024, "Problem size threshold below with Tacho uses LAPACK.");
+    pl->set("verbose", false, "Verbosity");
+    pl->set("num-streams", 1, "Number of GPU streams");
+    pl->set("dofs-per-node", 1, "DoFs per node");
+    pl->set("perturb-pivot", false, "Perturb tiny pivots");
+    pl->set("shift-diag", false, "Shift diagonal entries");
+    pl->set("team-on-user-stream", false, "Use user stream-0 for team/batched kernels");
 
     // TODO: Confirm param options
     // pl->set("kokkos-threads", 1, "Number of threads");
@@ -301,13 +323,19 @@ TachoSolver<Matrix,Vector>::loadA_impl(EPhase current_phase)
     // now so I didn't complete refactoring the matrix code for the parallel
     // case. If we added that later, we should have it hooked up to the copy
     // manager and then these allocations can go away.
-    if( this->root_ ) {
-      device_nzvals_view_ = device_value_type_array(
-        Kokkos::ViewAllocateWithoutInitializing("nzvals"), this->globalNumNonZeros_);
-      host_cols_view_ = host_ordinal_type_array(
-        Kokkos::ViewAllocateWithoutInitializing("colind"), this->globalNumNonZeros_);
-      host_row_ptr_view_ = host_size_type_array(
-        Kokkos::ViewAllocateWithoutInitializing("rowptr"), this->globalNumRows_ + 1);
+    {
+      if( this->root_ ) {
+        if (device_nzvals_view_.extent(0) != this->globalNumNonZeros_)
+          Kokkos::resize(device_nzvals_view_, this->globalNumNonZeros_);
+        if (host_cols_view_.extent(0) != this->globalNumNonZeros_)
+          Kokkos::resize(host_cols_view_, this->globalNumNonZeros_);
+        if (host_row_ptr_view_.extent(0) != this->globalNumRows_ + 1)
+          Kokkos::resize(host_row_ptr_view_, this->globalNumRows_ + 1);
+      } else {
+        Kokkos::resize(device_nzvals_view_, 0);
+        Kokkos::resize(host_cols_view_, 0);
+        Kokkos::resize(host_row_ptr_view_, 1);
+      }
     }
 
     typename host_size_type_array::value_type nnz_ret = 0;
@@ -331,8 +359,39 @@ TachoSolver<Matrix,Vector>::loadA_impl(EPhase current_phase)
                                                       this->columnIndexBase_);
     }
   }
+  else {
+    if( this->root_ ) {
+      // instead of holding onto the device poinster (which could cause issue)
+      // make an explicit copy
+      device_nzvals_view_ = device_value_type_array(
+        Kokkos::ViewAllocateWithoutInitializing("nzvals"), this->globalNumNonZeros_);
+    }
+  }
 
   return true;
+}
+
+
+template <class Matrix, class Vector>
+void
+TachoSolver<Matrix,Vector>::describe_impl(Teuchos::FancyOStream &out,
+                                          const Teuchos::EVerbosityLevel verbLevel) const
+{
+  out << " Tacho current parameters:" << std::endl;
+  out << " > method  = " << data_.method;
+  if (data_.method == 0) out << " (ldl-nopiv)" << std::endl;
+  if (data_.method == 1) out << " (chol)" << std::endl;
+  if (data_.method == 2) out << " (ldl)" << std::endl;
+  if (data_.method == 3) out << " (lu)" << std::endl;
+  out << " > variant = " << data_.variant << std::endl;
+  out << " > verbose = " << data_.verbose << std::endl;
+  out << " > num-streams   = " << data_.streams << std::endl;
+  out << " > dofs-per-node = " << data_.dofs_per_node << std::endl;
+  out << " > perturb-pivo  = " << (data_.pivot_pert ? "YES" : "NO") << std::endl;
+  out << " > shift-diag    = " << (data_.diag_shift ? "YES" : "NO") << std::endl;
+  out << " > team-on-user-stream  = " << (data_.team_on_user_stream ? "YES" : "NO") << std::endl;
+  out << " > small problem threshold size = " << data_.small_problem_threshold_size << std::endl;
+  out << std::endl;
 }
 
 

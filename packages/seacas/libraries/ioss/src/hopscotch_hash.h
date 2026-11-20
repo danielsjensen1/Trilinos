@@ -1717,7 +1717,7 @@ namespace tsl {
         while (neighborhood_infos != 0) {
           if ((neighborhood_infos & 1) == 1) {
             // Check StoreHash before calling bucket_hash_equal. Functionally it
-            // doesn't change anythin. If StoreHash is false, bucket_hash_equal is a
+            // doesn't change anything. If StoreHash is false, bucket_hash_equal is a
             // no-op. Avoiding the call is there to help GCC optimizes `my_hash`
             // parameter away, it seems to not be able to do without this hint.
             if ((!StoreHash || bucket_for_hash->bucket_hash_equal(my_hash)) &&
@@ -1798,7 +1798,7 @@ namespace tsl {
        */
       template <
           class T                                                                      = size_type,
-	typename std::enable_if<std::is_same<T, truncated_hash_type>::value>::type * = nullptr>
+          typename std::enable_if<std::is_same<T, truncated_hash_type>::value>::type * = nullptr>
       static bool USE_STORED_HASH_ON_REHASH(size_type /*bucket_count*/)
       {
         return StoreHash;
@@ -1806,7 +1806,7 @@ namespace tsl {
 
       template <
           class T                                                                       = size_type,
-	typename std::enable_if<!std::is_same<T, truncated_hash_type>::value>::type * = nullptr>
+          typename std::enable_if<!std::is_same<T, truncated_hash_type>::value>::type * = nullptr>
       static bool USE_STORED_HASH_ON_REHASH(size_type bucket_count)
       {
         (void)bucket_count;

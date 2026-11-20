@@ -1,43 +1,11 @@
-//@HEADER
-// ************************************************************************
-//
+// @HEADER
+// *****************************************************************************
 //                 Belos: Block Linear Solvers Package
-//                  Copyright 2004 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
-//
-// ************************************************************************
-//@HEADER
+// Copyright 2004-2016 NTESS and the Belos contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
 //
 // This driver reads a problem from a Harwell-Boeing (HB) file.
 // The right-hand-side from the problem is being used instead of multiple
@@ -58,8 +26,8 @@
 #include "BelosTpetraTestFramework.hpp"
 #include "BelosPseudoBlockGmresSolMgr.hpp"
 
-template <typename ScalarType>
-int run(int argc, char *argv[]) {
+template <class ScalarType, class DM>
+int run(Teuchos::CommandLineProcessor& cmdp, int argc, char *argv[]) {
   //
   Teuchos::GlobalMPISession session(&argc, &argv, nullptr);
   //
@@ -71,13 +39,13 @@ int run(int argc, char *argv[]) {
   using OP  = typename Tpetra::Operator<ST,LO,GO,NT>;
   using MV  = typename Tpetra::MultiVector<ST,LO,GO,NT>;
   using SCT = typename Teuchos::ScalarTraits<ST>;
-  using MT  = typename SCT::magnitudeType;
+  using MT = typename SCT::magnitudeType;
   using MGT = typename Teuchos::ScalarTraits<MT>;
 
   using tmap_t       = Tpetra::Map<LO,GO,NT>;
   using tcrsmatrix_t = Tpetra::CrsMatrix<ST,LO,GO,NT>;
 
-  using MVT = typename Belos::MultiVecTraits<ST,MV>;
+  using MVT = typename Belos::MultiVecTraits<ST,MV,DM>;
   using OPT = typename Belos::OperatorTraits<ST,MV,OP>;
 
   using Teuchos::RCP;
@@ -105,7 +73,6 @@ int run(int argc, char *argv[]) {
     MT tol = 1.0e-5;  // relative residual tolerance
     MT compTol = 10*MGT::prec();
 
-    Teuchos::CommandLineProcessor cmdp(false,true);
     cmdp.setOption("verbose","quiet",&verbose,"Print messages and results.");
     cmdp.setOption("pseudo","regular",&pseudo,"Use pseudo-block Gmres to solve the linear systems.");
     cmdp.setOption("frequency",&frequency,"Solvers frequency for printing residuals (#iters).");
@@ -160,7 +127,7 @@ int run(int argc, char *argv[]) {
       belosList.set( "Verbosity", Belos::Errors + Belos::Warnings );
 
     // Construct an unpreconditioned linear problem instance.
-    Belos::LinearProblem<ST,MV,OP> problem( A, X, B );
+    Belos::LinearProblem<ST,MV,OP,DM> problem( A, X, B );
     bool set = problem.setProblem();
     if (set == false) {
       if (procVerbose)
@@ -172,16 +139,19 @@ int run(int argc, char *argv[]) {
     // *************Start the block Gmres iteration*************************
     // *******************************************************************
 
-    RCP< Belos::SolverManager<ST,MV,OP> > solver;
+    RCP< Belos::SolverManager<ST,MV,OP,DM> > solver;
     if (pseudo)
-      solver = rcp( new Belos::PseudoBlockGmresSolMgr<ST,MV,OP>( rcp(&problem,false), rcp(&belosList,false) ) );
+      solver = rcp( new Belos::PseudoBlockGmresSolMgr<ST,MV,OP,DM>( rcp(&problem,false), rcp(&belosList,false) ) );
     else
-      solver = rcp( new Belos::BlockGmresSolMgr<ST,MV,OP>( rcp(&problem,false), rcp(&belosList,false) ) );
+      solver = rcp( new Belos::BlockGmresSolMgr<ST,MV,OP,DM>( rcp(&problem,false), rcp(&belosList,false) ) );
 
     // Perform solve
     Belos::ReturnType ret = solver->solve();
 
-    if (ret!=Belos::Converged) {
+    if (ret==Belos::Converged) {
+      // Ok
+    }
+    else {
       if (procVerbose)
         std::cout << "End Result: TEST FAILED" << std::endl;
       return -1;
@@ -189,8 +159,7 @@ int run(int argc, char *argv[]) {
 
     // Get the number of iterations for this solve.
     int numIters = solver->getNumIters();
-    if (procVerbose)
-      std::cout << "Number of iterations performed for this solve: " << numIters << std::endl;
+    std::cout << "Number of iterations performed for this solve: " << numIters << std::endl;
 
     // Compute actual residuals.
     std::vector<MT> actual_resids( numrhs );
@@ -219,10 +188,12 @@ int run(int argc, char *argv[]) {
 
     // Get the number of iterations for this solve.
     numIters = solver->getNumIters();
-    if (procVerbose)
-      std::cout << "Number of iterations performed for this solve (manager reset): " << numIters << std::endl;
+    std::cout << "Number of iterations performed for this solve (manager reset): " << numIters << std::endl;
 
-    if (ret!=Belos::Converged) {
+    if (ret==Belos::Converged) {
+      // Ok
+    }
+    else {
       if (procVerbose)
         std::cout << "End Result: TEST FAILED" << std::endl;
       return -1;
@@ -243,7 +214,7 @@ int run(int argc, char *argv[]) {
         std::cout<<"Problem "<<i<<" : \t"<< actual_resids[i]/rhs_norm[i] <<std::endl;
         if ( actual_resids2[i]/rhs_norm[i] > compTol ) {
           badRes = true;
-          std::cout << "Resolve residual vector is too different from first solve residual vector: " << actual_resids2[i]/rhs_norm[i] << std::endl;
+          std::cout << "Resolve residual vector is too different from first solve residual vector: " << actual_resids2[i] << std::endl;
         }
       }
     }
@@ -266,10 +237,12 @@ int run(int argc, char *argv[]) {
 
     // Get the number of iterations for this solve.
     numIters = solver->getNumIters();
-    if (procVerbose)
-      std::cout << "Number of iterations performed for this solve (manager setProblem()): " << numIters << std::endl;
+    std::cout << "Number of iterations performed for this solve (manager setProblem()): " << numIters << std::endl;
 
-    if (ret!=Belos::Converged) {
+    if (ret==Belos::Converged) {
+      // Ok
+    }
+    else {
       if (procVerbose)
         std::cout << "End Result: TEST FAILED" << std::endl;
       return -1;
@@ -288,7 +261,7 @@ int run(int argc, char *argv[]) {
         std::cout<<"Problem "<<i<<" : \t"<< actual_resids[i]/rhs_norm[i] <<std::endl;
         if ( actual_resids2[i]/rhs_norm[i] > compTol ) {
           badRes = true;
-          std::cout << "Resolve residual vector is too different from first solve residual vector: " << actual_resids2[i]/rhs_norm[i] << std::endl;
+          std::cout << "Resolve residual vector is too different from first solve residual vector: " << actual_resids2[i] << std::endl;
         }
       }
     }
@@ -310,10 +283,12 @@ int run(int argc, char *argv[]) {
 
     // Get the number of iterations for this solve.
     numIters = solver->getNumIters();
-    if (procVerbose)
-      std::cout << "Number of iterations performed for this solve (label reset): " << numIters << std::endl;
+    std::cout << "Number of iterations performed for this solve (label reset): " << numIters << std::endl;
 
-    if (ret!=Belos::Converged) {
+    if (ret==Belos::Converged) {
+      // Ok
+    }
+    else {
       if (procVerbose)
         std::cout << "End Result: TEST FAILED" << std::endl;
       return -1;
@@ -332,7 +307,7 @@ int run(int argc, char *argv[]) {
         std::cout<<"Problem "<<i<<" : \t"<< actual_resids[i]/rhs_norm[i] <<std::endl;
         if ( actual_resids2[i]/rhs_norm[i] > compTol ) {
           badRes = true;
-          std::cout << "Resolve residual vector is too different from first solve residual vector: " << actual_resids2[i]/rhs_norm[i] << std::endl;
+          std::cout << "Resolve residual vector is too different from first solve residual vector: " << actual_resids2[i] << std::endl;
         }
       }
     }
@@ -343,7 +318,7 @@ int run(int argc, char *argv[]) {
 
     RCP<MV> X2 = MVT::Clone(*X, numrhs);
     MVT::MvInit( *X2, 0.0 );
-    Belos::LinearProblem<ST,MV,OP> problem2( A, X2, B );
+    Belos::LinearProblem<ST,MV,OP,DM> problem2( A, X2, B );
     problem2.setLabel("Belos Resolve");
     set = problem2.setProblem();
     if (set == false) {
@@ -358,9 +333,9 @@ int run(int argc, char *argv[]) {
 
     // Create the solver without either the problem or parameter list.
     if (pseudo)
-      solver = rcp( new Belos::PseudoBlockGmresSolMgr<ST,MV,OP>() );
+      solver = rcp( new Belos::PseudoBlockGmresSolMgr<ST,MV,OP,DM>() );
     else
-      solver = rcp( new Belos::BlockGmresSolMgr<ST,MV,OP>() );
+      solver = rcp( new Belos::BlockGmresSolMgr<ST,MV,OP,DM>() );
 
     // Set the problem after the solver construction.
     solver->setProblem( rcp( &problem2, false ) );
@@ -385,8 +360,7 @@ int run(int argc, char *argv[]) {
 
     // Get the number of iterations for this solve.
     numIters = solver->getNumIters();
-    if (procVerbose)
-      std::cout << "Number of iterations performed for this solve (new solver): " << numIters << std::endl;
+    std::cout << "Number of iterations performed for this solve (new solver): " << numIters << std::endl;
 
     // Compute actual residuals.
     OPT::Apply( *A, *X2, resid2 );
@@ -401,7 +375,7 @@ int run(int argc, char *argv[]) {
         std::cout<<"Problem "<<i<<" : \t"<< actual_resids[i]/rhs_norm[i] <<std::endl;
         if ( actual_resids2[i]/rhs_norm[i] > compTol ) {
           badRes = true;
-          std::cout << "Resolve residual vector is too different from first solve residual vector: " << actual_resids2[i]/rhs_norm[i] << std::endl;
+          std::cout << "Resolve residual vector is too different from first solve residual vector: " << actual_resids2[i] << std::endl;
         }
       }
     }
@@ -432,8 +406,8 @@ int run(int argc, char *argv[]) {
   return ( success ? EXIT_SUCCESS : EXIT_FAILURE );
 } // run
 
-int main(int argc, char *argv[]) {
-  // run with different ST
-  return run<double>(argc,argv);
-  // run<float>(argc,argv); // FAILS
+#include "BelosTpetraTestMain.hpp"
+
+int main(int argc, char* argv[]) {
+  return common_main(argc, argv);
 }

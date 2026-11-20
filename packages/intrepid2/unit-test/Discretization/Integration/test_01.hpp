@@ -1,43 +1,10 @@
 // @HEADER
-// ************************************************************************
-//
+// *****************************************************************************
 //                           Intrepid2 Package
-//                 Copyright (2007) Sandia Corporation
 //
-// Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
-// license for use of this work by or on behalf of the U.S. Government.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Kyungjoo Kim  (kyukim@sandia.gov), or
-//                    Mauro Perego  (mperego@sandia.gov)
-//
-// ************************************************************************
+// Copyright 2007 NTESS and the Intrepid2 contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 
@@ -70,6 +37,9 @@
 #include "Teuchos_RCP.hpp"
 
 #include "test_util.hpp"
+
+#include <algorithm>
+#include <type_traits>
 
 namespace Intrepid2 {
 
@@ -135,7 +105,7 @@ namespace Intrepid2 {
       typedef CubatureTensor                 <DeviceType,pointValueType,weightValueType> CubatureTensorType;
       //typedef CubatureTensorPyr              <DeviceType,pointValueType,weightValueType> CubatureTensorPyrType;
 
-      const auto tol = 100.0 * tolerence();
+      const auto tol = 100.0 * tolerance();
 
       int errorFlag  = 0;
 
@@ -293,9 +263,41 @@ namespace Intrepid2 {
         DynRankView ConstructWithLabel(cubPoints,  Parameters::MaxIntegrationPoints, Parameters::MaxDimension);
         DynRankView ConstructWithLabel(cubWeights, Parameters::MaxIntegrationPoints);
 
+        const bool limitDeviceCubatureSweeps =
+          !std::is_same<typename DeviceType::memory_space, Kokkos::HostSpace>::value;
+
+        const ordinal_type maxTotalCubatureDegree =
+          limitDeviceCubatureSweeps ?
+          std::min<ordinal_type>(static_cast<ordinal_type>(Parameters::MaxCubatureDegreeEdge), 8) :
+          static_cast<ordinal_type>(Parameters::MaxCubatureDegreeEdge); // sum in all dimensions
+        const ordinal_type maxTriDefaultDegree =
+          limitDeviceCubatureSweeps ? 8 : 20;
+        const ordinal_type maxTriSymDegree =
+          limitDeviceCubatureSweeps ?
+          std::min<ordinal_type>(static_cast<ordinal_type>(Parameters::MaxCubatureDegreeTri), 8) :
+          static_cast<ordinal_type>(Parameters::MaxCubatureDegreeTri);
+        const ordinal_type maxTetDegree =
+          limitDeviceCubatureSweeps ?
+          std::min<ordinal_type>(static_cast<ordinal_type>(Parameters::MaxCubatureDegreeTet), 8) :
+          static_cast<ordinal_type>(Parameters::MaxCubatureDegreeTet);
+        const ordinal_type maxHexStandardDegree =
+          limitDeviceCubatureSweeps ? 4 : 10;
+        const ordinal_type maxPrismLineDegree =
+          limitDeviceCubatureSweeps ?
+          std::min<ordinal_type>(static_cast<ordinal_type>(Parameters::MaxCubatureDegreeEdge), 4) :
+          static_cast<ordinal_type>(Parameters::MaxCubatureDegreeEdge);
+        const ordinal_type maxPrismTriDefaultDegree =
+          limitDeviceCubatureSweeps ? 8 : 20;
+        const ordinal_type maxPrismSymLineDegree =
+          limitDeviceCubatureSweeps ? 4 : 10;
+        const ordinal_type maxPrismSymTriDegree =
+          limitDeviceCubatureSweeps ?
+          std::min<ordinal_type>(static_cast<ordinal_type>(Parameters::MaxCubatureDegreeTri), 8) :
+          static_cast<ordinal_type>(Parameters::MaxCubatureDegreeTri);
+        
         *outStream << "-> Line testing\n\n";
         {
-          for (ordinal_type deg=0;deg<=Parameters::MaxCubatureDegreeEdge;++deg) {
+          for (ordinal_type deg=0;deg<=maxTotalCubatureDegree;++deg) {
             CubatureLineType cub(deg);
             cub.getCubature(cubPoints, cubWeights);
             const auto npts = cub.getNumPoints();
@@ -313,7 +315,7 @@ namespace Intrepid2 {
 
         *outStream << "-> Triangle testing\n\n";
         {
-          for (auto deg=0;deg<=20;++deg) {
+          for (ordinal_type deg=0;deg<=maxTriDefaultDegree;++deg) {
             CubatureTriType cub(deg);
             cub.getCubature(cubPoints, cubWeights);
             const auto npts = cub.getNumPoints();
@@ -329,7 +331,7 @@ namespace Intrepid2 {
           }
 
           *outStream << "-> Triangle symmetric cubature testing\n\n";
-          for (auto deg=0;deg<=Parameters::MaxCubatureDegreeTri;++deg) {
+          for (ordinal_type deg=0;deg<=maxTriSymDegree;++deg) {
             CubatureTriSymType cub(deg);
             cub.getCubature(cubPoints, cubWeights);
             const auto npts = cub.getNumPoints();
@@ -349,8 +351,8 @@ namespace Intrepid2 {
 
         *outStream << "-> Quad testing\n\n";
         {
-          for (ordinal_type y_deg=0;y_deg<=Parameters::MaxCubatureDegreeEdge;++y_deg)
-            for (ordinal_type x_deg=0;x_deg<=Parameters::MaxCubatureDegreeEdge;++x_deg) {
+          for (ordinal_type y_deg=0;y_deg<=maxTotalCubatureDegree-1;++y_deg)
+            for (ordinal_type x_deg=0;x_deg<=maxTotalCubatureDegree-y_deg;++x_deg) {
               const auto x_line = CubatureLineType(x_deg);
               const auto y_line = CubatureLineType(y_deg);
               CubatureTensorType cub( x_line, y_line );
@@ -372,7 +374,7 @@ namespace Intrepid2 {
         
         *outStream << "-> Tetrahedron testing\n\n";
         {
-          for (auto deg=0;deg<=Parameters::MaxCubatureDegreeTet;++deg) {
+          for (ordinal_type deg=0;deg<=maxTetDegree;++deg) {
             CubatureTetType cub(deg);
             
             cub.getCubature(cubPoints, cubWeights);
@@ -390,7 +392,7 @@ namespace Intrepid2 {
           }
 
           *outStream << "-> Tetrahedron symmetric cubature testing\n\n";
-          for (auto deg=0;deg<=Parameters::MaxCubatureDegreeTet;++deg) {
+          for (ordinal_type deg=0;deg<=maxTetDegree;++deg) {
             CubatureTetSymType cub(deg);
             
             cub.getCubature(cubPoints, cubWeights);
@@ -410,10 +412,11 @@ namespace Intrepid2 {
         
         *outStream << "-> Hexahedron testing\n\n";
         {
-          // when hex is tested with max cubature degree edge, it exceeds max integration points 1001
-          for (ordinal_type z_deg=0;z_deg<Parameters::MaxCubatureDegreeEdge;++z_deg)
-            for (ordinal_type y_deg=0;y_deg<Parameters::MaxCubatureDegreeEdge;++y_deg)
-              for (ordinal_type x_deg=0;x_deg<Parameters::MaxCubatureDegreeEdge;++x_deg) {
+          // Test up to 10th order in each dimension with standard (non-tensor) points on host;
+          // cap device-memory-space instantiations to avoid excessive tiny kernel launches in CI.
+          for (ordinal_type z_deg=0;z_deg<maxHexStandardDegree;++z_deg)
+            for (ordinal_type y_deg=0;y_deg<maxHexStandardDegree;++y_deg)
+              for (ordinal_type x_deg=0;x_deg<maxHexStandardDegree;++x_deg) {
                 const auto x_line = CubatureLineType(x_deg);
                 const auto y_line = CubatureLineType(y_deg);
                 const auto z_line = CubatureLineType(z_deg);
@@ -433,11 +436,41 @@ namespace Intrepid2 {
                 }
               }
         }
+        
+        {
+          std::vector<CubatureLineType> lines;
+          for (ordinal_type deg=0;deg<=maxTotalCubatureDegree;++deg) {
+            lines.push_back(CubatureLineType(deg));
+          }
+          for (ordinal_type z_deg=0;z_deg<=maxTotalCubatureDegree-2;++z_deg)
+            for (ordinal_type y_deg=0;y_deg<=maxTotalCubatureDegree-z_deg;++y_deg)
+              for (ordinal_type x_deg=0;x_deg<=maxTotalCubatureDegree-z_deg-y_deg;++x_deg) {
+                const auto &x_line = lines[x_deg];
+                const auto &y_line = lines[y_deg];
+                const auto &z_line = lines[z_deg];
+                CubatureTensorType cub( x_line, y_line, z_line );
+
+                auto cubTensorPoints  = cub.allocateCubaturePoints();
+                auto cubTensorWeights = cub.allocateCubatureWeights();
+                cub.getCubature(cubTensorPoints, cubTensorWeights);
+                const auto npts = cub.getNumPoints();
+
+                const auto testVol = computeRefVolume(npts, cubTensorWeights);
+                const auto refVol  = 8.0;
+                if (std::abs(testVol - refVol) > tol) {
+                  *outStream << std::setw(30) << "Hexahedron volume computed with tensor-product cubature of degree (" << x_deg << ", " << y_deg << ", " << z_deg << ") --> " << std::setw(10) << std::scientific << testVol <<
+                    std::setw(10) << "diff = " << std::setw(10) << std::scientific << std::abs(testVol - refVol) << "\n";
+
+                  ++errorFlag;
+                  *outStream << std::setw(70) << "^^^^----FAILURE!" << "\n";
+                }
+              }
+        }
 
         *outStream << "-> Prism testing\n\n";
         {
-          for (auto z_deg=0;z_deg<Parameters::MaxCubatureDegreeEdge;++z_deg)
-            for (auto xy_deg=0;xy_deg<20;++xy_deg) {
+          for (ordinal_type z_deg=0;z_deg<maxPrismLineDegree;++z_deg)
+            for (ordinal_type xy_deg=0;xy_deg<maxPrismTriDefaultDegree;++xy_deg) {
               const auto xy_tri = CubatureTriType(xy_deg);
               const auto z_line = CubatureLineType(z_deg);
               CubatureTensorType cub( xy_tri, z_line );
@@ -456,8 +489,10 @@ namespace Intrepid2 {
             }
 
           *outStream << "-> Prism symmetric quadrature testing\n\n";
-          for (auto z_deg=0;z_deg<Parameters::MaxCubatureDegreeEdge;++z_deg)
-            for (auto xy_deg=0;xy_deg<Parameters::MaxCubatureDegreeTri;++xy_deg) {
+          // Test up to 10th order in the extrusion dimension with standard (non-tensor) points on host;
+          // cap device-memory-space instantiations to avoid excessive tiny kernel launches in CI.
+          for (ordinal_type z_deg=0;z_deg<maxPrismSymLineDegree;++z_deg)
+            for (ordinal_type xy_deg=0;xy_deg<maxPrismSymTriDegree;++xy_deg) {
               const auto xy_tri = CubatureTriSymType(xy_deg);
               const auto z_line = CubatureLineType(z_deg);
               CubatureTensorType cub( xy_tri, z_line );
@@ -466,6 +501,27 @@ namespace Intrepid2 {
               const auto npts = cub.getNumPoints();
               
               const auto testVol = computeRefVolume(npts, cubWeights);
+              const auto refVol  = 1.0;
+              if (std::abs(testVol - refVol) > tol) {
+                *outStream << std::setw(30) << "Wedge volume computed with symmetric tensor-product cubature of degree (" << xy_deg << ", " << z_deg << ") --> " << std::setw(10) << std::scientific << testVol <<
+                  std::setw(10) << "diff = " << std::setw(10) << std::scientific << std::abs(testVol - refVol) << "\n";
+                ++errorFlag;
+                *outStream << std::setw(70) << "^^^^----FAILURE!" << "\n";
+              }
+            }
+          
+          for (ordinal_type z_deg=0;z_deg<maxPrismLineDegree;++z_deg)
+            for (ordinal_type xy_deg=0;xy_deg<maxPrismSymTriDegree;++xy_deg) {
+              const auto xy_tri = CubatureTriSymType(xy_deg);
+              const auto z_line = CubatureLineType(z_deg);
+              CubatureTensorType cub( xy_tri, z_line );
+              
+              auto cubTensorPoints  = cub.allocateCubaturePoints();
+              auto cubTensorWeights = cub.allocateCubatureWeights();
+              cub.getCubature(cubTensorPoints, cubTensorWeights);
+              const auto npts = cub.getNumPoints();
+              
+              const auto testVol = computeRefVolume(npts, cubTensorWeights);
               const auto refVol  = 1.0;
               if (std::abs(testVol - refVol) > tol) {
                 *outStream << std::setw(30) << "Wedge volume computed with symmetric tensor-product cubature of degree (" << xy_deg << ", " << z_deg << ") --> " << std::setw(10) << std::scientific << testVol <<

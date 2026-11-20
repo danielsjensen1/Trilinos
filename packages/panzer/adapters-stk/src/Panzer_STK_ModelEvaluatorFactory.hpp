@@ -1,43 +1,11 @@
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //           Panzer: A partial differential equation assembly
 //       engine for strongly coupled complex multiphysics systems
-//                 Copyright (2011) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Roger P. Pawlowski (rppawlo@sandia.gov) and
-// Eric C. Cyr (eccyr@sandia.gov)
-// ***********************************************************************
+// Copyright 2011 NTESS and the Panzer contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #ifndef PANZER_STK_MODEL_EVALUATOR_FACTORY_HPP
@@ -113,12 +81,22 @@ namespace panzer_stk {
 
     /** @name Overridden from ParameterListAcceptor */
     //@{
+    /// \brief Sets and validates the top-level parameter list describing the physics, mesh, and solver setup.
     void setParameterList(Teuchos::RCP<Teuchos::ParameterList> const& paramList);
+    /// \brief Returns the valid parameters (with defaults) for the top-level parameter list.
     Teuchos::RCP<const Teuchos::ParameterList> getValidParameters() const;
     //@}
 
-    /** \brief Builds the model evaluators for a panzer assembly
+    /** \brief Set the Stratimikos Linear Solver sublist used to
+        create the LinearOpWithSolve factory.
 
+        This function is optional to call. The default list is pull
+        from the main parameter list in "Solution
+        Control->NOX->Direction->Newton->Stratimikos Linear Solver".
+     */
+    void setStratimikosList(const Teuchos::RCP<Teuchos::ParameterList>& paramList);
+
+    /** \brief Builds the model evaluators for a panzer assembly
         \param[in] comm (Required) Teuchos communicator.  Must be non-null.
         \param[in] global_data (Required) A fully constructed (all members allocated) global data object used to control parameter library and output support. Must be non-null.
         \param[in] eqset_factory (Required) Equation set factory to provide user defined equation sets.
@@ -132,26 +110,38 @@ namespace panzer_stk {
                       const panzer::ClosureModelFactory_TemplateManager<panzer::Traits> & cm_factory,
                       bool meConstructionOn=true);
 
+    /// \brief Returns the physics model evaluator built by buildObjects().
     Teuchos::RCP<Thyra::ModelEvaluator<ScalarT> > getPhysicsModelEvaluator();
 
     /** @name Methods for building the solver */
     //@{
 
+    /// \brief Sets the factory used to build a NOX observer for the solver built by buildResponseOnlyModelEvaluator().
     void setNOXObserverFactory(const Teuchos::RCP<const panzer_stk::NOXObserverFactory>& nox_observer_factory);
 
 #ifdef PANZER_HAVE_TEMPUS
+    /// \brief Sets the factory used to build a Tempus observer for the solver built by buildResponseOnlyModelEvaluator().
     void setTempusObserverFactory(const Teuchos::RCP<const panzer_stk::TempusObserverFactory>& tempus_observer_factory);
 #endif
 
+    /// \brief Registers a response to be built by buildResponses(), using the given response evaluator factory builder.
     template <typename BuilderT>
     int addResponse(const std::string & responseName,const std::vector<panzer::WorksetDescriptor> & wkstDesc,const BuilderT & builder);
 
+    /** \brief Add a response \f$g\f$ along with support for state and parameter derivatives \f$\frac{dg}{dx}\f$ and \f$\frac{dg}{dp}\f$, respectively.
+     */
+    template <typename BuilderT>
+    int addResponseWithDerivatives(const std::string & responseName,const std::vector<panzer::WorksetDescriptor> & wkstDesc,BuilderT & builder);
+
+    /// \brief Builds and registers the evaluators for all responses added via addResponse().
     void buildResponses(const panzer::ClosureModelFactory_TemplateManager<panzer::Traits>& cm_factory,
                         const bool write_graphviz_file=false,
                         const std::string& graphviz_file_prefix="");
 
+    /// \brief Returns the response-only model evaluator built by buildResponseOnlyModelEvaluator().
     Teuchos::RCP<Thyra::ModelEvaluator<ScalarT> > getResponseOnlyModelEvaluator();
 
+    /// \brief Wraps the given physics model evaluator with a solver (e.g. NOX/Tempus), exposing only the registered responses.
     Teuchos::RCP<Thyra::ModelEvaluator<ScalarT> >
     buildResponseOnlyModelEvaluator(const Teuchos::RCP<Thyra::ModelEvaluator<ScalarT> > & thyra_me,
                                     const Teuchos::RCP<panzer::GlobalData>& global_data,
@@ -169,8 +159,10 @@ namespace panzer_stk {
     //! Set user defined workset factory
     void setUserWorksetFactory(Teuchos::RCP<panzer_stk::WorksetFactory>& user_wkst_factory);
 
+    /// \brief Returns the response library used to build and evaluate registered responses.
     Teuchos::RCP<panzer::ResponseLibrary<panzer::Traits> > getResponseLibrary();
 
+    /// \brief Returns the physics blocks built by buildObjects().
     const std::vector<Teuchos::RCP<panzer::PhysicsBlock> > & getPhysicsBlocks() const;
 
     //! Get mesh object used to build model evaluator
@@ -185,7 +177,7 @@ namespace panzer_stk {
     Teuchos::RCP<panzer::ConnManager> getConnManager() const
     { return m_conn_manager; }
 
-    //! Is blocked assembly?
+    //! Returns true if assembly is blocked
     bool isBlockedAssembly() const
     { return m_blockedAssembly; }
 
@@ -193,6 +185,7 @@ namespace panzer_stk {
     Teuchos::RCP<panzer::LinearObjFactory<panzer::Traits> > getLinearObjFactory() const
     { return m_lin_obj_factory; }
 
+    //! Returns true if this a transient problem
     bool isTransient() const
     { return m_is_transient; }
 
@@ -250,6 +243,7 @@ namespace panzer_stk {
                         bool is_transient,double t_init) const;
 
 
+    //! Should coordinates be recomputed dynamically (e.g. for a moving mesh) rather than cached once?
     bool useDynamicCoordinates() const
     { return useDynamicCoordinates_; }
 
@@ -261,6 +255,7 @@ namespace panzer_stk {
     double getInitialTime(Teuchos::ParameterList& transient_ic_params,
                           const panzer_stk::STK_Interface& mesh) const;
 
+    /// \brief Builds a Thyra LOWS (linear-op-with-solve) factory from this object's Stratimikos parameter list, for the given global indexer, connection manager, and mesh.
     Teuchos::RCP<Thyra::LinearOpWithSolveFactoryBase<double> >
     buildLOWSFactory(bool blockedAssembly,
                      const Teuchos::RCP<const panzer::GlobalIndexer> & globalIndexer,
@@ -282,6 +277,7 @@ namespace panzer_stk {
     //! build STK mesh factory from a mesh parameter list
     Teuchos::RCP<STK_MeshFactory> buildSTKMeshFactory(const Teuchos::ParameterList & mesh_params) const;
 
+    /// \brief Commits the mesh's meta data, builds its bulk data, and writes it out if requested, completing construction started by an STK_MeshFactory.
     void finalizeMeshConstruction(const STK_MeshFactory & mesh_factory,
                                   const std::vector<Teuchos::RCP<panzer::PhysicsBlock> > & physicsBlocks,
                                   const Teuchos::MpiComm<int> mpi_comm,
@@ -289,6 +285,7 @@ namespace panzer_stk {
 
   protected:
 
+    /// \brief Builds the field manager builder used to register and evaluate the physics/BC/closure-model evaluators for buildObjects().
     Teuchos::RCP<panzer::FieldManagerBuilder>
     buildFieldManagerBuilder(const Teuchos::RCP<panzer::WorksetContainer> & wc,
                              const std::vector<Teuchos::RCP<panzer::PhysicsBlock> >& physicsBlocks,
@@ -303,7 +300,7 @@ namespace panzer_stk {
                              bool writeGraph,const std::string & graphPrefix,
 			     bool write_field_managers,const std::string & field_manager_prefix) const;
 
-    /**
+    /** \brief Builds a response library configured to write the solution out to the STK mesh.
       */
     Teuchos::RCP<panzer::ResponseLibrary<panzer::Traits> > initializeSolnWriterResponseLibrary(
                                                                 const Teuchos::RCP<panzer::WorksetContainer> & wc,
@@ -311,7 +308,7 @@ namespace panzer_stk {
                                                                 const Teuchos::RCP<const panzer::LinearObjFactory<panzer::Traits> > & lof,
                                                                 const Teuchos::RCP<panzer_stk::STK_Interface> & mesh) const;
 
-    /**
+    /** \brief Builds and registers the evaluators needed by a solution-writer response library built with initializeSolnWriterResponseLibrary().
       */
     void finalizeSolnWriterResponseLibrary(panzer::ResponseLibrary<panzer::Traits> & rl,
                                            const std::vector<Teuchos::RCP<panzer::PhysicsBlock> > & physicsBlocks,
@@ -319,7 +316,9 @@ namespace panzer_stk {
                                            const Teuchos::ParameterList & closure_models,
                                            int workset_size, Teuchos::ParameterList & user_data) const;
 
-
+    /// \brief Registers the given mesh with a closure model factory template manager, e.g. so its closure models can reference mesh-derived fields.
+    void registerMeshWithClosureModelFactories(const Teuchos::RCP<panzer_stk::STK_Interface>& mesh,
+                                               panzer::ClosureModelFactory_TemplateManager<panzer::Traits> & user_cm_factory);
   private:
 
     Teuchos::RCP<Thyra::ModelEvaluator<ScalarT> > m_physics_me;
@@ -346,6 +345,7 @@ namespace panzer_stk {
     Teuchos::RCP<panzer::WorksetContainer> m_wkstContainer;
 
     bool useDynamicCoordinates_;
+    Teuchos::RCP<Teuchos::ParameterList> m_stratimikos_params;
   };
 
 template<typename ScalarT>
@@ -375,6 +375,22 @@ addResponse(const std::string & responseName,const std::vector<panzer::WorksetDe
     return panzer_me->addResponse(responseName,wkstDesc,builder);
   }
 #endif
+
+  TEUCHOS_ASSERT(false);
+  return -1;
+}
+
+template<typename ScalarT>
+template <typename BuilderT>
+int ModelEvaluatorFactory<ScalarT>::
+addResponseWithDerivatives(const std::string & responseName,const std::vector<panzer::WorksetDescriptor> & wkstDesc,BuilderT & builder)
+{
+  typedef panzer::ModelEvaluator<double> PanzerME;
+
+  Teuchos::RCP<PanzerME> panzer_me = Teuchos::rcp_dynamic_cast<PanzerME>(m_physics_me);
+  if(panzer_me!=Teuchos::null) {
+    return panzer_me->addFlexibleResponse(responseName,wkstDesc,Teuchos::rcpFromRef(builder));
+  }
 
   TEUCHOS_ASSERT(false);
   return -1;

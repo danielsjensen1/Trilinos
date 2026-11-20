@@ -1,46 +1,11 @@
 /*
 //@HEADER
-// ************************************************************************
+// *****************************************************************************
+//                        Adelus
 //
-//                        Adelus v. 1.0
-//       Copyright (2020) National Technology & Engineering
-//               Solutions of Sandia, LLC (NTESS).
-//
-// Under the terms of Contract DE-NA0003525 with NTESS,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of NTESS nor the names of the contributors may be
-// used to endorse or promote products derived from this software without
-// specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY NTESS "AS IS" AND ANY EXPRESS OR IMPLIED
-// WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
-// MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
-// IN NO EVENT SHALL NTESS OR THE CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
-// INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-// (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
-// SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-// HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-// STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-// IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE 
-// POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Vinh Dang (vqdang@sandia.gov)
-//                    Joseph Kotulski (jdkotul@sandia.gov)
-//                    Siva Rajamanickam (srajama@sandia.gov)
-//
-// ************************************************************************
+// Copyright 2020 NTESS and the Adelus contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 //@HEADER
 */
 
@@ -100,12 +65,21 @@ void factor(HandleType& ahandle,           // handle containg metadata
   using execution_space = typename ZDView::device_type::execution_space;
   using memory_space    = typename ZDView::device_type::memory_space;
 #endif
-#ifdef ADELUS_HOST_PINNED_MEM_MPI
 #if defined(KOKKOS_ENABLE_CUDA)
   using View1DHostPinnType = Kokkos::View<value_type*, Kokkos::LayoutLeft, Kokkos::CudaHostPinnedSpace>;//CudaHostPinnedSpace
 #elif defined(KOKKOS_ENABLE_HIP)
   using View1DHostPinnType = Kokkos::View<value_type*, Kokkos::LayoutLeft, Kokkos::HIPHostPinnedSpace>;//HIPHostPinnedSpace
+#else
+  using View1DHostPinnType = Kokkos::View<value_type*, Kokkos::LayoutLeft>;//fallback placeholder
 #endif
+
+  constexpr bool isOnDeviceSpace =
+#if defined( KOKKOS_ENABLE_CUDA )
+    std::is_same_v<typename ZDView::device_type::memory_space, Kokkos::CudaSpace>;
+#elif defined( KOKKOS_ENABLE_HIP )
+    std::is_same_v<typename ZDView::device_type::memory_space, Kokkos::HIPSpace>;
+#else
+    false;
 #endif
 
   MPI_Comm comm     = ahandle.get_comm();
@@ -117,7 +91,7 @@ void factor(HandleType& ahandle,           // handle containg metadata
   int my_rows       = ahandle.get_my_rows();
   int my_cols       = ahandle.get_my_cols();
   int blksz         = ahandle.get_blksz();
-  
+
   int j,k;               // loop counters
 
   struct pivot_type {    // a stucture for storing pivot info
@@ -126,7 +100,7 @@ void factor(HandleType& ahandle,           // handle containg metadata
     int row;             //   pivot row number
   } pivot;               // pivot info and some temporary pivot info
 
-  constexpr int one = 1; 
+  constexpr int one = 1;
   value_type d_one     = static_cast<value_type>(1.0);
   value_type d_min_one = static_cast<value_type>(-1.0);
   value_type d_zero    = static_cast<value_type>(0.0);
@@ -172,9 +146,7 @@ void factor(HandleType& ahandle,           // handle containg metadata
   double t1,t2;
   double msgtime,copytime,dgemmtime,totalfactortime;
   double iamaxtime,getlocalpivtime,localpivtime;
-#if defined(ADELUS_HOST_PINNED_MEM_MPI) && (defined(KOKKOS_ENABLE_CUDA) || defined(KOKKOS_ENABLE_HIP))
   double copyhostpinnedtime;
-#endif
 #endif
 
   MPI_Request msgrequest;
@@ -200,19 +172,19 @@ void factor(HandleType& ahandle,           // handle containg metadata
   printf("Rank %i -- factor() -- use KokkosBlas::copy, KokkosBlas::iamax\n", me);
 #endif
 #endif
-  
+
 #ifdef GET_TIMING
   t2 = MPI_Wtime();
 #endif
   colcnt = 0;                       // number of column's currently saved for update
   col_len = my_rows;                // length of column in remaining local matrix
- 
-  cur_col_i=0; cur_col_j=0;         // location of first column in remaining local matrix   
-  sav_col_i=0; sav_col_j=0;         // location to store next active column   
+
+  cur_col_i=0; cur_col_j=0;         // location of first column in remaining local matrix
+  sav_col_i=0; sav_col_j=0;         // location to store next active column
   act_col_i=0;                      // location of matrix of columns being saved for gemm update
-  
+
   row_len = my_cols + my_rhs;       // length of row in local matrix including rhs's
-                                    
+
   rows_used = 0;                    // haven't used any local rows yet
   cols_used = 0;
 
@@ -229,9 +201,7 @@ void factor(HandleType& ahandle,           // handle containg metadata
   copycoltime=copyrowtime=copyrow1time=copypivrowtime=copypivrow1time=pivotswaptime=0.0;
   updatetime=colupdtime=rowupdtime=scaltime=0.0;
   iamaxtime=getlocalpivtime=localpivtime=0.0;
-#if defined(ADELUS_HOST_PINNED_MEM_MPI) && (defined(KOKKOS_ENABLE_CUDA) || defined (KOKKOS_ENABLE_HIP))
-  copyhostpinnedtime=0.0;
-#endif
+  if (!(ahandle.get_gpuawarempi_behavior()) && isOnDeviceSpace) copyhostpinnedtime=0.0;
 #endif
 
 #ifdef PRINT_STATUS
@@ -245,11 +215,12 @@ void factor(HandleType& ahandle,           // handle containg metadata
   }
 #endif
 
-#if defined(ADELUS_HOST_PINNED_MEM_MPI) && (defined(KOKKOS_ENABLE_CUDA) || defined (KOKKOS_ENABLE_HIP))
-  View1DHostPinnType h_coltmp( "h_coltmp", my_rows );
-  View1DHostPinnType h_row2  ( "h_row2",   my_cols + blksz + nrhs );
-  View1DHostPinnType h_row3  ( "h_row3",   my_cols + blksz + nrhs );
-#endif
+  View1DHostPinnType h_coltmp, h_row2, h_row3;
+  if (!(ahandle.get_gpuawarempi_behavior()) && isOnDeviceSpace) {
+    h_coltmp = View1DHostPinnType( Kokkos::view_alloc(Kokkos::WithoutInitializing, "h_coltmp"), my_rows );
+    h_row2   = View1DHostPinnType( Kokkos::view_alloc(Kokkos::WithoutInitializing, "h_row2"), my_cols + blksz + nrhs );
+    h_row3   = View1DHostPinnType( Kokkos::view_alloc(Kokkos::WithoutInitializing, "h_row3"), my_cols + blksz + nrhs );
+  }
 
   //Kokkos::fence();
   for (j=0; j<ncols_matrix; j++) {
@@ -356,7 +327,7 @@ void factor(HandleType& ahandle,           // handle containg metadata
       pivot_mag = abs(pivot.entry);
       if (pivot_mag == 0.0) {
         //printf("Node %d error -- zero pivot found in column %d -- exiting\n",me,j);
-        //return; 
+        //return;
         std::ostringstream os;
         os << "Adelus::factor: rank " << me << " error -- zero pivot found in column "<< j;
         throw std::runtime_error (os.str ());
@@ -426,15 +397,15 @@ void factor(HandleType& ahandle,           // handle containg metadata
       bcastpivstime += (MPI_Wtime()-t1);
 #endif
 
-#if defined(ADELUS_HOST_PINNED_MEM_MPI) && (defined(KOKKOS_ENABLE_CUDA) || defined (KOKKOS_ENABLE_HIP))
+      if (!(ahandle.get_gpuawarempi_behavior()) && isOnDeviceSpace) {
 #ifdef GET_TIMING
-      t1 = MPI_Wtime();
+        t1 = MPI_Wtime();
 #endif
-      Kokkos::deep_copy(subview(h_coltmp, Kokkos::make_pair(0, col_len)), subview(col1_view, Kokkos::make_pair(sav_col_i, sav_col_i+col_len), sav_col_j));
+        Kokkos::deep_copy(subview(h_coltmp, Kokkos::make_pair(0, col_len)), subview(col1_view, Kokkos::make_pair(sav_col_i, sav_col_i+col_len), sav_col_j));
 #ifdef GET_TIMING
-      copyhostpinnedtime += (MPI_Wtime()-t1);
+        copyhostpinnedtime += (MPI_Wtime()-t1);
 #endif
-#endif
+      }
 
 #ifdef GET_TIMING
       t1 = MPI_Wtime();
@@ -442,11 +413,10 @@ void factor(HandleType& ahandle,           // handle containg metadata
       for (rdist = 1;rdist <= MAXDIST;rdist++) {
         if (rowplus(rdist) == c_owner) break;
         bytes=sizeof(ADELUS_DATA_TYPE)*col_len;
-#if defined(ADELUS_HOST_PINNED_MEM_MPI) && (defined(KOKKOS_ENABLE_CUDA) || defined (KOKKOS_ENABLE_HIP))
-        MPI_Send(h_coltmp.data(),bytes,MPI_BYTE,rowplus(rdist),LUROWTYPE+j,comm);
-#else //GPU-aware MPI
-        MPI_Send(col1_view.data()+sav_col_j*col1_view.stride(1)+sav_col_i,bytes,MPI_BYTE,rowplus(rdist),LUROWTYPE+j,comm);
-#endif
+        if (!(ahandle.get_gpuawarempi_behavior()) && isOnDeviceSpace)
+          MPI_Send(h_coltmp.data(),bytes,MPI_BYTE,rowplus(rdist),LUROWTYPE+j,comm);
+        else //GPU-aware MPI
+          MPI_Send(col1_view.data()+sav_col_j*col1_view.stride(1)+sav_col_i,bytes,MPI_BYTE,rowplus(rdist),LUROWTYPE+j,comm);
       }
 #ifdef GET_TIMING
       bcastcolstime += (MPI_Wtime()-t1);
@@ -454,7 +424,7 @@ void factor(HandleType& ahandle,           // handle containg metadata
 
       // if own active column don't include it in row work anymore
 
-      row_len--; 
+      row_len--;
       update_j++;
       cur_col_j++;
       cur_row_j++;
@@ -468,12 +438,11 @@ void factor(HandleType& ahandle,           // handle containg metadata
       // recv column and pivot
 
       bytes=col_len*sizeof(ADELUS_DATA_TYPE);
-#if defined(ADELUS_HOST_PINNED_MEM_MPI) && (defined(KOKKOS_ENABLE_CUDA) || defined (KOKKOS_ENABLE_HIP))
-      MPI_Irecv(h_coltmp.data(),bytes,MPI_BYTE,MPI_ANY_SOURCE,LUROWTYPE+j,comm,&msgrequest);
-#else //GPU-aware MPI
-      MPI_Irecv(col1_view.data()+sav_col_j*col1_view.stride(1)+sav_col_i,bytes,MPI_BYTE,
-                MPI_ANY_SOURCE,LUROWTYPE+j,comm,&msgrequest);
-#endif
+      if (!(ahandle.get_gpuawarempi_behavior()) && isOnDeviceSpace)
+        MPI_Irecv(h_coltmp.data(),bytes,MPI_BYTE,MPI_ANY_SOURCE,LUROWTYPE+j,comm,&msgrequest);
+      else //GPU-aware MPI
+        MPI_Irecv(col1_view.data()+sav_col_j*col1_view.stride(1)+sav_col_i,bytes,MPI_BYTE,
+                  MPI_ANY_SOURCE,LUROWTYPE+j,comm,&msgrequest);
 
 #ifdef GET_TIMING
       t1 = MPI_Wtime();
@@ -509,16 +478,16 @@ void factor(HandleType& ahandle,           // handle containg metadata
         bcastcolrtime += (MPI_Wtime()-t1);
 #endif
 
-#if defined(ADELUS_HOST_PINNED_MEM_MPI) && (defined(KOKKOS_ENABLE_CUDA) || defined (KOKKOS_ENABLE_HIP))
+        if (!(ahandle.get_gpuawarempi_behavior()) && isOnDeviceSpace) {
 #ifdef GET_TIMING
-        t1 = MPI_Wtime();
+          t1 = MPI_Wtime();
 #endif
-        bytes=col_len*sizeof(ADELUS_DATA_TYPE);
-        Kokkos::deep_copy(subview(col1_view, Kokkos::make_pair(sav_col_i, sav_col_i+col_len), sav_col_j), subview(h_coltmp, Kokkos::make_pair(0, col_len)));
+          bytes=col_len*sizeof(ADELUS_DATA_TYPE);
+          Kokkos::deep_copy(subview(col1_view, Kokkos::make_pair(sav_col_i, sav_col_i+col_len), sav_col_j), subview(h_coltmp, Kokkos::make_pair(0, col_len)));
 #ifdef GET_TIMING
-        copyhostpinnedtime += (MPI_Wtime()-t1);
+          copyhostpinnedtime += (MPI_Wtime()-t1);
 #endif
-#endif
+        }
 
 #ifdef GET_TIMING
         t1 = MPI_Wtime();
@@ -526,11 +495,10 @@ void factor(HandleType& ahandle,           // handle containg metadata
         for (rdist = 1;rdist <= MAXDIST;rdist++) {
           if (rowplus(rdist) == c_owner) break;
           bytes=col_len*sizeof(ADELUS_DATA_TYPE);
-#if defined(ADELUS_HOST_PINNED_MEM_MPI) && (defined(KOKKOS_ENABLE_CUDA) || defined (KOKKOS_ENABLE_HIP))
-          MPI_Send(h_coltmp.data(),bytes,MPI_BYTE,rowplus(rdist),LUROWTYPE+j,comm);
-#else //GPU-aware MPI
-          MPI_Send(col1_view.data()+sav_col_j*col1_view.stride(1)+sav_col_i,bytes,MPI_BYTE,rowplus(rdist),LUROWTYPE+j,comm);
-#endif
+          if (!(ahandle.get_gpuawarempi_behavior()) && isOnDeviceSpace)
+            MPI_Send(h_coltmp.data(),bytes,MPI_BYTE,rowplus(rdist),LUROWTYPE+j,comm);
+          else //GPU-aware MPI
+            MPI_Send(col1_view.data()+sav_col_j*col1_view.stride(1)+sav_col_i,bytes,MPI_BYTE,rowplus(rdist),LUROWTYPE+j,comm);
         }
 #ifdef GET_TIMING
         bcastcolstime += (MPI_Wtime()-t1);
@@ -559,14 +527,14 @@ void factor(HandleType& ahandle,           // handle containg metadata
         auto cur_row_view_1d = subview(ZV, cur_row_i, Kokkos::make_pair(cur_row_j, cur_row_j+row_len));
         auto sav_row_view_1d = subview(row2_view, Kokkos::make_pair(0, 0+row_len));  //note: sav_row_ptr = row2;
 #ifdef USE_DEEPCOPY
-        Kokkos::deep_copy (sav_row_view_1d, cur_row_view_1d);//copy: cur_row_view_1d --> sav_row_view_1d 
+        Kokkos::deep_copy (sav_row_view_1d, cur_row_view_1d);//copy: cur_row_view_1d --> sav_row_view_1d
 #else
         BlasWrapper::copy (cur_row_view_1d, sav_row_view_1d);//copy: cur_row_view_1d --> sav_row_view_1d
 #endif
         auto cur_col1_row_view_1d = subview(col1_view, cur_col1_row_i, Kokkos::make_pair(0, 0+colcnt));
         auto sav_row_plus_view_1d = subview(row2_view, Kokkos::make_pair(row_len, row_len+colcnt));  //note: sav_row_ptr = row2;
 #ifdef USE_DEEPCOPY
-        Kokkos::deep_copy (sav_row_plus_view_1d, cur_col1_row_view_1d);//copy: cur_col1_row_view_1d --> sav_row_plus_view_1d 
+        Kokkos::deep_copy (sav_row_plus_view_1d, cur_col1_row_view_1d);//copy: cur_col1_row_view_1d --> sav_row_plus_view_1d
 #else
         BlasWrapper::copy (cur_col1_row_view_1d, sav_row_plus_view_1d);//copy: cur_col1_row_view_1d --> sav_row_plus_view_1d
 #endif
@@ -625,7 +593,7 @@ void factor(HandleType& ahandle,           // handle containg metadata
 #endif
 #endif
 #ifdef GET_TIMING
-        Kokkos::fence();        
+        Kokkos::fence();
         rowupdtime += (MPI_Wtime()-t1);
 #endif
       }
@@ -649,7 +617,7 @@ void factor(HandleType& ahandle,           // handle containg metadata
       auto piv_col1_row_view_1d  = subview(col1_view, piv_col1_row_i, Kokkos::make_pair(0, 0+colcnt));
       auto temp_row_plus_view_1d = subview(row3_view, Kokkos::make_pair(row_len, row_len+colcnt));  //note: temp_row_ptr -> row3.view;
 #ifdef USE_DEEPCOPY
-      Kokkos::deep_copy (temp_row_plus_view_1d, piv_col1_row_view_1d);//copy: piv_col1_row_view_1d --> temp_row_plus_view_1d 
+      Kokkos::deep_copy (temp_row_plus_view_1d, piv_col1_row_view_1d);//copy: piv_col1_row_view_1d --> temp_row_plus_view_1d
 #else
       BlasWrapper::copy (piv_col1_row_view_1d, temp_row_plus_view_1d);//copy: piv_col1_row_view_1d --> temp_row_plus_view_1d
 #endif
@@ -664,40 +632,38 @@ void factor(HandleType& ahandle,           // handle containg metadata
 
     // broadcast pivot row
 
-#if defined(ADELUS_HOST_PINNED_MEM_MPI) && (defined(KOKKOS_ENABLE_CUDA) || defined (KOKKOS_ENABLE_HIP))
+    if (!(ahandle.get_gpuawarempi_behavior()) && isOnDeviceSpace) {
 #ifdef GET_TIMING
-    t1 = MPI_Wtime();
+      t1 = MPI_Wtime();
 #endif
-    Kokkos::deep_copy(subview(h_row3, Kokkos::make_pair(0, row_len + colcnt)), subview(row3_view, Kokkos::make_pair(0, row_len + colcnt)));
+      Kokkos::deep_copy(subview(h_row3, Kokkos::make_pair(0, row_len + colcnt)), subview(row3_view, Kokkos::make_pair(0, row_len + colcnt)));
 #ifdef GET_TIMING
-    copyhostpinnedtime += (MPI_Wtime()-t1);
+      copyhostpinnedtime += (MPI_Wtime()-t1);
 #endif
-#endif
+    }
 
 #ifdef GET_TIMING
     t1 = MPI_Wtime();
 #endif
     bytes=sizeof(ADELUS_DATA_TYPE)*row_size ;
-#if defined(ADELUS_HOST_PINNED_MEM_MPI) && (defined(KOKKOS_ENABLE_CUDA) || defined (KOKKOS_ENABLE_HIP))
-    MPI_Bcast(reinterpret_cast<char *>(h_row3.data()), row_size, MPI_CHAR, mesh_row(pivot_owner), col_comm);
+    if (!(ahandle.get_gpuawarempi_behavior()) && isOnDeviceSpace)
+      MPI_Bcast(reinterpret_cast<char *>(h_row3.data()), row_size, MPI_CHAR, mesh_row(pivot_owner), col_comm);
+    else //GPU-aware MPI -- Note: Looks like MPI_Bcast is still working well with device (cuda) pointers (and faster than using cuda host pinned memory) for 2 nodes
+      MPI_Bcast(reinterpret_cast<char *>(row3_view.data()), row_size, MPI_CHAR, mesh_row(pivot_owner), col_comm);
     MPI_Barrier(col_comm);
-#else //GPU-aware MPI -- Note: Looks like MPI_Bcast is still working well with device (cuda) pointers (and faster than using cuda host pinned memory) for 2 nodes
-    MPI_Bcast(reinterpret_cast<char *>(row3_view.data()), row_size, MPI_CHAR, mesh_row(pivot_owner), col_comm);
-    MPI_Barrier(col_comm);
-#endif
 #ifdef GET_TIMING
     bcastrowtime += (MPI_Wtime()-t1);
 #endif
 
-#if defined(ADELUS_HOST_PINNED_MEM_MPI) && (defined(KOKKOS_ENABLE_CUDA) || defined (KOKKOS_ENABLE_HIP))
+    if (!(ahandle.get_gpuawarempi_behavior()) && isOnDeviceSpace) {
 #ifdef GET_TIMING
-    t1 = MPI_Wtime();
+      t1 = MPI_Wtime();
 #endif
-    Kokkos::deep_copy(subview(row3_view, Kokkos::make_pair(0, row_len + colcnt)), subview(h_row3, Kokkos::make_pair(0, row_len + colcnt)));
+      Kokkos::deep_copy(subview(row3_view, Kokkos::make_pair(0, row_len + colcnt)), subview(h_row3, Kokkos::make_pair(0, row_len + colcnt)));
 #ifdef GET_TIMING
-    copyhostpinnedtime += (MPI_Wtime()-t1);
+      copyhostpinnedtime += (MPI_Wtime()-t1);
 #endif
-#endif
+    }
 
 #ifdef GET_TIMING
     t1 = MPI_Wtime();
@@ -720,25 +686,24 @@ void factor(HandleType& ahandle,           // handle containg metadata
 
     if (gpivot_row != j) {
       if (me != pivot_owner && me == r_owner) {
-#if defined(ADELUS_HOST_PINNED_MEM_MPI) && (defined(KOKKOS_ENABLE_CUDA) || defined (KOKKOS_ENABLE_HIP))
+        if (!(ahandle.get_gpuawarempi_behavior()) && isOnDeviceSpace) {
 #ifdef GET_TIMING
-        t1 = MPI_Wtime();
+          t1 = MPI_Wtime();
 #endif
-        Kokkos::deep_copy(subview(h_row2, Kokkos::make_pair(0, row_len + colcnt)), subview(row2_view, Kokkos::make_pair(0, row_len + colcnt)));
+          Kokkos::deep_copy(subview(h_row2, Kokkos::make_pair(0, row_len + colcnt)), subview(row2_view, Kokkos::make_pair(0, row_len + colcnt)));
 #ifdef GET_TIMING
-        copyhostpinnedtime += (MPI_Wtime()-t1);
+          copyhostpinnedtime += (MPI_Wtime()-t1);
 #endif
-#endif
+        }
 
 #ifdef GET_TIMING
         t1 = MPI_Wtime();
 #endif
         bytes=(row_len+colcnt)*sizeof(ADELUS_DATA_TYPE);
-#if defined(ADELUS_HOST_PINNED_MEM_MPI) && (defined(KOKKOS_ENABLE_CUDA) || defined (KOKKOS_ENABLE_HIP))
-        MPI_Send(h_row2.data(),bytes,MPI_BYTE,pivot_owner,LUSENDTYPE+j,comm);
-#else //GPU-aware MPI
-        MPI_Send(row2_view.data(),bytes,MPI_BYTE,pivot_owner,LUSENDTYPE+j,comm);
-#endif
+        if (!(ahandle.get_gpuawarempi_behavior()) && isOnDeviceSpace)
+          MPI_Send(h_row2.data(),bytes,MPI_BYTE,pivot_owner,LUSENDTYPE+j,comm);
+        else //GPU-aware MPI
+          MPI_Send(row2_view.data(),bytes,MPI_BYTE,pivot_owner,LUSENDTYPE+j,comm);
 #ifdef GET_TIMING
         sendrowtime += (MPI_Wtime()-t1);
 #endif
@@ -751,26 +716,25 @@ void factor(HandleType& ahandle,           // handle containg metadata
 #endif
         if (me != r_owner) {
           bytes=(row_len+colcnt)*sizeof(ADELUS_DATA_TYPE);
-#if defined(ADELUS_HOST_PINNED_MEM_MPI) && (defined(KOKKOS_ENABLE_CUDA) || defined (KOKKOS_ENABLE_HIP))
-          MPI_Recv(h_row2.data(),bytes,MPI_BYTE,r_owner,LUSENDTYPE+j,comm,&msgstatus);
-#else //GPU-aware MPI
-          MPI_Recv(row2_view.data(),bytes,MPI_BYTE,r_owner,LUSENDTYPE+j,comm,&msgstatus);
-#endif
+          if (!(ahandle.get_gpuawarempi_behavior()) && isOnDeviceSpace)
+            MPI_Recv(h_row2.data(),bytes,MPI_BYTE,r_owner,LUSENDTYPE+j,comm,&msgstatus);
+          else //GPU-aware MPI
+            MPI_Recv(row2_view.data(),bytes,MPI_BYTE,r_owner,LUSENDTYPE+j,comm,&msgstatus);
         }
 #ifdef GET_TIMING
         recvrowtime += (MPI_Wtime()-t1);
 #endif
 
         if (me != r_owner) {
-#if defined(ADELUS_HOST_PINNED_MEM_MPI) && (defined(KOKKOS_ENABLE_CUDA) || defined (KOKKOS_ENABLE_HIP))
+          if (!(ahandle.get_gpuawarempi_behavior()) && isOnDeviceSpace) {
 #ifdef GET_TIMING
-          t1 = MPI_Wtime();
+            t1 = MPI_Wtime();
 #endif
-          Kokkos::deep_copy(subview(row2_view, Kokkos::make_pair(0, row_len + colcnt)), subview(h_row2, Kokkos::make_pair(0, row_len + colcnt)));
+            Kokkos::deep_copy(subview(row2_view, Kokkos::make_pair(0, row_len + colcnt)), subview(h_row2, Kokkos::make_pair(0, row_len + colcnt)));
 #ifdef GET_TIMING
-          copyhostpinnedtime += (MPI_Wtime()-t1);
+            copyhostpinnedtime += (MPI_Wtime()-t1);
 #endif
-#endif
+          }
         }
 
 #ifdef GET_TIMING
@@ -840,15 +804,15 @@ void factor(HandleType& ahandle,           // handle containg metadata
       bcastcolrtime += (MPI_Wtime()-t1);
 #endif
 
-#if defined(ADELUS_HOST_PINNED_MEM_MPI) && (defined(KOKKOS_ENABLE_CUDA) || defined (KOKKOS_ENABLE_HIP))
+      if (!(ahandle.get_gpuawarempi_behavior()) && isOnDeviceSpace) {
 #ifdef GET_TIMING
-      t1 = MPI_Wtime();
+        t1 = MPI_Wtime();
 #endif
-      Kokkos::deep_copy(subview(col1_view, Kokkos::make_pair(sav_col_i, sav_col_i+col_len), sav_col_j), subview(h_coltmp, Kokkos::make_pair(0, col_len)));
+        Kokkos::deep_copy(subview(col1_view, Kokkos::make_pair(sav_col_i, sav_col_i+col_len), sav_col_j), subview(h_coltmp, Kokkos::make_pair(0, col_len)));
 #ifdef GET_TIMING
-      copyhostpinnedtime += (MPI_Wtime()-t1);
+        copyhostpinnedtime += (MPI_Wtime()-t1);
 #endif
-#endif
+      }
     }
     // saved this active row and column so get ready for next ones
 
@@ -889,8 +853,8 @@ void factor(HandleType& ahandle,           // handle containg metadata
 #endif
     }
 #endif
- 
-    sav_col_j++; 
+
+    sav_col_j++;
     sav_piv_row_i++;
 
     // if we have saved up enough columns, we do the outer product update
@@ -917,7 +881,7 @@ void factor(HandleType& ahandle,           // handle containg metadata
 #endif
         // reset active matrix pointers
 
-        colcnt = 0; 
+        colcnt = 0;
         act_col_i=rows_used; sav_col_i=rows_used; sav_col_j=0;
         act_row_j = 0; sav_piv_row_i=sav_piv_row_j=0;
      }
@@ -961,11 +925,11 @@ void factor(HandleType& ahandle,           // handle containg metadata
   showtime(ahandle.get_comm_id(),comm,me,numprocs,"Total msg passing time",&msgtime);
   tmp = 100*msgtime/totalfactortime;
   showtime(ahandle.get_comm_id(),comm,me,numprocs,"Percent msg passing time",&tmp);
-#if defined(ADELUS_HOST_PINNED_MEM_MPI) && (defined(KOKKOS_ENABLE_CUDA) || defined (KOKKOS_ENABLE_HIP))
-  showtime(ahandle.get_comm_id(),comm,me,numprocs,"Total copy between host pinned mem and dev mem time",&copyhostpinnedtime); 
-  tmp = 100*copyhostpinnedtime/totalfactortime;
-  showtime(ahandle.get_comm_id(),comm,me,numprocs,"Percent copy between host pinned mem and dev mem time",&tmp);  
-#endif
+  if (!(ahandle.get_gpuawarempi_behavior()) && isOnDeviceSpace) {
+    showtime(ahandle.get_comm_id(),comm,me,numprocs,"Total copy between host pinned mem and dev mem time",&copyhostpinnedtime);
+    tmp = 100*copyhostpinnedtime/totalfactortime;
+    showtime(ahandle.get_comm_id(),comm,me,numprocs,"Percent copy between host pinned mem and dev mem time",&tmp);
+  }
 #ifdef ADELUS_SHOW_TIMING_DETAILS
   showtime(ahandle.get_comm_id(),comm,me,numprocs,"Time to swap pivot",&pivotswaptime);
   showtime(ahandle.get_comm_id(),comm,me,numprocs,"Time to copy cur col",&copycoltime);

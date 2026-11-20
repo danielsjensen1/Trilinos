@@ -1,43 +1,11 @@
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //           Panzer: A partial differential equation assembly
 //       engine for strongly coupled complex multiphysics systems
-//                 Copyright (2011) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Roger P. Pawlowski (rppawlo@sandia.gov) and
-// Eric C. Cyr (eccyr@sandia.gov)
-// ***********************************************************************
+// Copyright 2011 NTESS and the Panzer contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #include <Teuchos_ConfigDefs.hpp>
@@ -91,7 +59,7 @@ namespace panzer
    RCP<const panzer::FieldPattern> buildFieldPattern()
    {
       // build a geometric pattern from a single basis
-      RCP<Intrepid2::Basis<PHX::exec_space, double, double>> basis = rcp(new Intrepid2Type);
+      RCP<Intrepid2::Basis<PHX::Device, double, double>> basis = rcp(new Intrepid2Type);
       RCP<const panzer::FieldPattern> pattern = rcp(new panzer::Intrepid2FieldPattern(basis));
       return pattern;
    }
@@ -110,7 +78,7 @@ namespace panzer
 
       RCP<ConnManager> connManager = rcp(new unit_test::ConnManager(myRank, numProc));
 
-      RCP<const FieldPattern> patternC1 = buildFieldPattern<Intrepid2::Basis_HGRAD_QUAD_C1_FEM<PHX::exec_space, double, double>>();
+      RCP<const FieldPattern> patternC1 = buildFieldPattern<Intrepid2::Basis_HGRAD_QUAD_C1_FEM<PHX::Device, double, double>>();
 
       RCP<panzer::DOFManager> indexer = rcp(new panzer::DOFManager());
       indexer->setConnManager(connManager, MPI_COMM_WORLD);
@@ -139,9 +107,8 @@ namespace panzer
 
    TEUCHOS_UNIT_TEST(tCloneLOF, blocked_tpetra)
    {
-      // TODO: Uncomment when BlockedTpetraLinearObjFactory will be supported in cloneWithNewDomain method
-      // typedef Thyra::ProductVectorBase<double> PVector;
-      // typedef Thyra::BlockedLinearOpBase<double> BLinearOp;
+      typedef Thyra::ProductVectorBase<double> PVector;
+      typedef Thyra::BlockedLinearOpBase<double> BLinearOp;
 
 // build global (or serial communicator)
 #ifdef HAVE_MPI
@@ -155,8 +122,8 @@ namespace panzer
 
       RCP<ConnManager> connManager = rcp(new unit_test::ConnManager(myRank, numProc));
 
-      RCP<const FieldPattern> patternC1 = buildFieldPattern<Intrepid2::Basis_HGRAD_QUAD_C1_FEM<PHX::exec_space, double, double>>();
-      RCP<const FieldPattern> patternC2 = buildFieldPattern<Intrepid2::Basis_HGRAD_QUAD_C2_FEM<PHX::exec_space, double, double>>();
+      RCP<const FieldPattern> patternC1 = buildFieldPattern<Intrepid2::Basis_HGRAD_QUAD_C1_FEM<PHX::Device, double, double>>();
+      RCP<const FieldPattern> patternC2 = buildFieldPattern<Intrepid2::Basis_HGRAD_QUAD_C2_FEM<PHX::Device, double, double>>();
 
       RCP<panzer::BlockedDOFManager> indexer = rcp(new panzer::BlockedDOFManager());
       {
@@ -193,48 +160,48 @@ namespace panzer
       // setup factory
       RCP<BlockedTpetraLinObjFactoryType> bt_lof = Teuchos::rcp(new BlockedTpetraLinObjFactoryType(tComm, indexer));
 
-      // NOT supported yet
-      TEST_THROW(cloneWithNewDomain(*bt_lof, control_indexer), std::logic_error);
 
-      // TODO: Uncomment when BlockedTpetraLinearObjFactory will be supported in cloneWithNewDomain method
-      // // this is the member we are testing!
-      // RCP<const LinearObjFactory<Traits>> control_lof = cloneWithNewDomain(*bt_lof, control_indexer);
-      // RCP<const BlockedTpetraLinObjFactoryType> bt_control_lof = rcp_dynamic_cast<const BlockedTpetraLinObjFactoryType>(control_lof);
+      // this is the member we are testing!
+      RCP<const LinearObjFactory<Traits>> control_lof = cloneWithNewDomain(*bt_lof, control_indexer);
+      RCP<const BlockedTpetraLinObjFactoryType> bt_control_lof = rcp_dynamic_cast<const BlockedTpetraLinObjFactoryType>(control_lof);
 
-      // RCP<BLinearOp> mat = rcp_dynamic_cast<BLinearOp>(bt_control_lof->getThyraMatrix());
-      // RCP<BLinearOp> gmat = rcp_dynamic_cast<BLinearOp>(bt_control_lof->getGhostedThyraMatrix());
-      // RCP<PVector> x = rcp_dynamic_cast<PVector>(bt_control_lof->getThyraDomainVector());
-      // RCP<PVector> gx = rcp_dynamic_cast<PVector>(bt_control_lof->getGhostedThyraDomainVector());
-      // RCP<PVector> f = rcp_dynamic_cast<PVector>(bt_control_lof->getThyraRangeVector());
-      // RCP<PVector> gf = rcp_dynamic_cast<PVector>(bt_control_lof->getGhostedThyraRangeVector());
+      RCP<BLinearOp> mat = rcp_dynamic_cast<BLinearOp>(bt_control_lof->getThyraMatrix());
+      RCP<BLinearOp> gmat = rcp_dynamic_cast<BLinearOp>(bt_control_lof->getGhostedThyraMatrix());
+      RCP<PVector> x = rcp_dynamic_cast<PVector>(bt_control_lof->getThyraDomainVector());
+      RCP<PVector> gx = rcp_dynamic_cast<PVector>(bt_control_lof->getGhostedThyraDomainVector());
+      RCP<PVector> f = rcp_dynamic_cast<PVector>(bt_control_lof->getThyraRangeVector());
+      RCP<PVector> gf = rcp_dynamic_cast<PVector>(bt_control_lof->getGhostedThyraRangeVector());
 
-      // TEST_EQUALITY(x->productSpace()->numBlocks(), 1);
-      // TEST_EQUALITY(x->productSpace()->dim(), 18);
-      // TEST_EQUALITY(gx->productSpace()->numBlocks(), 1);
-      // TEST_EQUALITY(gx->productSpace()->dim(), 10 + 15);
+      TEST_EQUALITY(x->productSpace()->numBlocks(), 1);
+      TEST_EQUALITY(x->productSpace()->dim(), 18);
+      TEST_EQUALITY(gx->productSpace()->numBlocks(), 1);
+      TEST_EQUALITY(gx->productSpace()->dim(), 10 + 15);
 
-      // TEST_EQUALITY(f->productSpace()->numBlocks(), 2);
-      // TEST_EQUALITY(f->productSpace()->dim(), 36);
-      // TEST_EQUALITY(gf->productSpace()->numBlocks(), 2);
-      // TEST_EQUALITY(gf->productSpace()->dim(), 50);
+      TEST_EQUALITY(f->productSpace()->numBlocks(), 2);
+      TEST_EQUALITY(f->productSpace()->dim(), 36);
+      TEST_EQUALITY(gf->productSpace()->numBlocks(), 2);
+      TEST_EQUALITY(gf->productSpace()->dim(), 50);
 
-      // TEST_EQUALITY(mat->productRange()->numBlocks(), 2);
-      // TEST_EQUALITY(mat->productRange()->dim(), 36);
-      // TEST_EQUALITY(mat->productDomain()->numBlocks(), 1);
-      // TEST_EQUALITY(mat->productDomain()->dim(), 18);
+      TEST_EQUALITY(mat->productRange()->numBlocks(), 2);
+      TEST_EQUALITY(mat->productRange()->dim(), 36);
+      TEST_EQUALITY(mat->productDomain()->numBlocks(), 1);
+      TEST_EQUALITY(mat->productDomain()->dim(), 18);
 
-      // TEST_EQUALITY(gmat->productRange()->numBlocks(), 2);
-      // TEST_EQUALITY(gmat->productRange()->dim(), 50);
-      // TEST_EQUALITY(gmat->productDomain()->numBlocks(), 1);
-      // TEST_EQUALITY(gmat->productDomain()->dim(), 10 + 15);
+      // Unlike the Epetra factory, a ghosted Tpetra block is fillComplete()d with
+      // the OWNED domain and range maps -- that is what ghostToGlobalTpetraMatrix()
+      // exports through -- so its Thyra spaces are the owned ones. Only the graph
+      // spans the ghosted maps, which is why gf and gx above are ghosted sized.
+      TEST_EQUALITY(gmat->productRange()->numBlocks(), 2);
+      TEST_EQUALITY(gmat->productRange()->dim(), 36);
+      TEST_EQUALITY(gmat->productDomain()->numBlocks(), 1);
+      TEST_EQUALITY(gmat->productDomain()->dim(), 18);
    }
 
    TEUCHOS_UNIT_TEST(tCloneLOF, blocked_tpetra_nonblocked_domain)
    {
-      // TODO: Uncomment when BlockedTpetraLinearObjFactory will be supported in cloneWithNewDomain method
-      // typedef Thyra::ProductVectorBase<double> PVector;
-      // typedef Thyra::BlockedLinearOpBase<double> BLinearOp;
-      // typedef Thyra::VectorBase<double> Vector;
+      typedef Thyra::ProductVectorBase<double> PVector;
+      typedef Thyra::BlockedLinearOpBase<double> BLinearOp;
+      typedef Thyra::VectorBase<double> Vector;
 
 // build global (or serial communicator)
 #ifdef HAVE_MPI
@@ -248,8 +215,8 @@ namespace panzer
 
       RCP<ConnManager> connManager = rcp(new unit_test::ConnManager(myRank, numProc));
 
-      RCP<const FieldPattern> patternC1 = buildFieldPattern<Intrepid2::Basis_HGRAD_QUAD_C1_FEM<PHX::exec_space, double, double>>();
-      RCP<const FieldPattern> patternC2 = buildFieldPattern<Intrepid2::Basis_HGRAD_QUAD_C2_FEM<PHX::exec_space, double, double>>();
+      RCP<const FieldPattern> patternC1 = buildFieldPattern<Intrepid2::Basis_HGRAD_QUAD_C1_FEM<PHX::Device, double, double>>();
+      RCP<const FieldPattern> patternC2 = buildFieldPattern<Intrepid2::Basis_HGRAD_QUAD_C2_FEM<PHX::Device, double, double>>();
 
       RCP<panzer::BlockedDOFManager> indexer = rcp(new panzer::BlockedDOFManager());
       {
@@ -278,42 +245,48 @@ namespace panzer
       out << "build lof" << std::endl;
       RCP<BlockedTpetraLinObjFactoryType> bt_lof = Teuchos::rcp(new BlockedTpetraLinObjFactoryType(tComm, indexer));
 
-      // NOT supported yet
-      TEST_THROW(cloneWithNewDomain(*bt_lof, control_indexer), std::logic_error);
 
-      // TODO: Uncomment when BlockedTpetraLinearObjFactory will be supported in cloneWithNewDomain method
-      // // this is the member we are testing!
-      // out << "cloning lof" << std::endl;
-      // RCP<const LinearObjFactory<Traits>> control_lof = cloneWithNewDomain(*bt_lof, control_indexer);
+      // this is the member we are testing!
+      out << "cloning lof" << std::endl;
+      RCP<const LinearObjFactory<Traits>> control_lof = cloneWithNewDomain(*bt_lof, control_indexer);
 
-      // out << "casting lof" << std::endl;
-      // RCP<const BlockedTpetraLinObjFactoryType> bt_control_lof = rcp_dynamic_cast<const BlockedTpetraLinObjFactoryType>(control_lof, true);
+      out << "casting lof" << std::endl;
+      RCP<const BlockedTpetraLinObjFactoryType> bt_control_lof = rcp_dynamic_cast<const BlockedTpetraLinObjFactoryType>(control_lof, true);
 
-      // out << "using casted lof" << std::endl;
-      // RCP<BLinearOp> mat = rcp_dynamic_cast<BLinearOp>(bt_control_lof->getThyraMatrix(), true);
-      // RCP<BLinearOp> gmat = rcp_dynamic_cast<BLinearOp>(bt_control_lof->getGhostedThyraMatrix(), true);
-      // RCP<Vector> x = bt_control_lof->getThyraDomainVector();
-      // RCP<Vector> gx = bt_control_lof->getGhostedThyraDomainVector();
-      // RCP<PVector> f = rcp_dynamic_cast<PVector>(bt_control_lof->getThyraRangeVector(), true);
-      // RCP<PVector> gf = rcp_dynamic_cast<PVector>(bt_control_lof->getGhostedThyraRangeVector(), true);
+      out << "using casted lof" << std::endl;
+      RCP<BLinearOp> mat = rcp_dynamic_cast<BLinearOp>(bt_control_lof->getThyraMatrix(), true);
+      RCP<BLinearOp> gmat = rcp_dynamic_cast<BLinearOp>(bt_control_lof->getGhostedThyraMatrix(), true);
+      RCP<Vector> x = bt_control_lof->getThyraDomainVector();
+      RCP<Vector> gx = bt_control_lof->getGhostedThyraDomainVector();
+      RCP<PVector> f = rcp_dynamic_cast<PVector>(bt_control_lof->getThyraRangeVector(), true);
+      RCP<PVector> gf = rcp_dynamic_cast<PVector>(bt_control_lof->getGhostedThyraRangeVector(), true);
 
-      // TEST_EQUALITY(x->space()->dim(), 18);
-      // TEST_EQUALITY(gx->space()->dim(), 10 + 15);
+      TEST_EQUALITY(x->space()->dim(), 18);
+      TEST_EQUALITY(gx->space()->dim(), 10 + 15);
 
-      // TEST_EQUALITY(f->productSpace()->numBlocks(), 2);
-      // TEST_EQUALITY(f->productSpace()->dim(), 36);
-      // TEST_EQUALITY(gf->productSpace()->numBlocks(), 2);
-      // TEST_EQUALITY(gf->productSpace()->dim(), 50);
+      TEST_EQUALITY(f->productSpace()->numBlocks(), 2);
+      TEST_EQUALITY(f->productSpace()->dim(), 36);
+      TEST_EQUALITY(gf->productSpace()->numBlocks(), 2);
+      TEST_EQUALITY(gf->productSpace()->dim(), 50);
 
-      // TEST_EQUALITY(mat->productRange()->numBlocks(), 2);
-      // TEST_EQUALITY(mat->productRange()->dim(), 36);
-      // TEST_EQUALITY(mat->productDomain()->numBlocks(), 1);
-      // TEST_EQUALITY(mat->productDomain()->dim(), 18);
+      TEST_EQUALITY(mat->productRange()->numBlocks(), 2);
+      TEST_EQUALITY(mat->productRange()->dim(), 36);
+      TEST_EQUALITY(mat->productDomain()->numBlocks(), 1);
+      TEST_EQUALITY(mat->productDomain()->dim(), 18);
 
-      // TEST_EQUALITY(gmat->productRange()->numBlocks(), 2);
-      // TEST_EQUALITY(gmat->productRange()->dim(), 50);
-      // TEST_EQUALITY(gmat->productDomain()->numBlocks(), 1);
-      // TEST_EQUALITY(gmat->productDomain()->dim(), 10 + 15);
+      // Unlike the Epetra factory, a ghosted Tpetra block is fillComplete()d with
+      // the OWNED domain and range maps -- that is what ghostToGlobalTpetraMatrix()
+      // exports through -- so its Thyra spaces are the owned ones. Only the graph
+      // spans the ghosted maps, which is why gf and gx above are ghosted sized.
+      TEST_EQUALITY(gmat->productRange()->numBlocks(), 2);
+      TEST_EQUALITY(gmat->productRange()->dim(), 36);
+      TEST_EQUALITY(gmat->productDomain()->numBlocks(), 1);
+      TEST_EQUALITY(gmat->productDomain()->dim(), 18);
+
+      // FE assembly builds each block from an FECrsGraph, and buildFEGraph() has
+      // no column-side counterpart, so the combination is refused rather than
+      // assembling into a graph whose columns are wrong.
+      TEST_THROW(BlockedTpetraLinObjFactoryType(tComm, indexer, control_indexer, true), std::logic_error);
    }
 
 }

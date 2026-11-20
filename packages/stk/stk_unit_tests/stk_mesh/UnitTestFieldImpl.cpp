@@ -64,7 +64,6 @@ public:
     pC(meta_data.declare_part( std::string("C") , stk::topology::NODE_RANK)),
     pD(meta_data.declare_part( std::string("D") , stk::topology::NODE_RANK))
   {
-    meta_data.use_simple_fields();
   }
 
   void testFieldRestriction();
@@ -74,13 +73,6 @@ public:
   void testRestrictions3parts_supersetSubset();
   void testRestrictions4parts_1union_1intersection();
   void testRestrictions4parts_2unions();
-
-  void print_restrictions(const FieldRestrictionVector& restrs)
-  {
-    for(const FieldRestriction& restr : restrs) {
-      std::cout << restr.selector() << " : " << restr.num_scalars_per_entity() << std::endl;
-    }
-  }
 
 private:
   std::vector<std::string> dummy_names;
@@ -115,8 +107,6 @@ void UnitTestFieldImpl::testFieldRestriction()
 
   FieldBase * const f3_old = nodeField->field_state( StateOld ) ;
 
-  //------------------------------
-  // Test for correctness of vector of declared fields.
   ASSERT_EQ(7u,  allocated_fields.size());
   ASSERT_TRUE( f2 == allocated_fields[0] );
   ASSERT_TRUE( nodeField == allocated_fields[1] );
@@ -179,11 +169,11 @@ void UnitTestFieldImpl::testFieldRestriction()
   //------------------------------
   // Introduce a redundant restriction, clean it, and
   // check that it was cleaned.
-  Part & pD = meta_data.declare_part( std::string("D") , stk::topology::NODE_RANK );
+  Part & pDD = meta_data.declare_part( std::string("D") , stk::topology::NODE_RANK );
 
-  meta_data.declare_part_subset( pD, pA );
+  meta_data.declare_part_subset( pDD, pA );
   meta_data.declare_field_restriction(*f2, pA, stride[0], stride[0]);
-  meta_data.declare_field_restriction(*f2, pD, stride[0], stride[0]);
+  meta_data.declare_field_restriction(*f2, pDD, stride[0], stride[0]);
 
   unsigned expected = 1;
   ASSERT_TRUE( f2->restrictions().size() == expected );
@@ -192,7 +182,7 @@ void UnitTestFieldImpl::testFieldRestriction()
     const FieldBase::Restriction & rA = stk::mesh::find_restriction(*f2, stk::topology::NODE_RANK, pA );
     const FieldBase::Restriction & rD = stk::mesh::find_restriction(*f2, stk::topology::NODE_RANK, pD );
     ASSERT_TRUE( & rA == & rD );
-    ASSERT_TRUE( rA.selector() == pD );
+    ASSERT_TRUE( rA.selector() == pDD );
   }
 
   //------------------------------
@@ -203,7 +193,7 @@ void UnitTestFieldImpl::testFieldRestriction()
   // this error condition.
   {
     meta_data.declare_field_restriction(*f2, pB, stride[1], stride[1]);
-    ASSERT_THROW(meta_data.declare_part_subset(pD, pB), std::runtime_error);
+    ASSERT_THROW(meta_data.declare_part_subset(pDD, pB), std::runtime_error);
   }
 
   //Coverage for error from print_restriction in FieldBaseImpl.cpp when there is no stride (!stride[i])
@@ -231,7 +221,6 @@ void UnitTestFieldImpl::testRestrictions3parts()
 
   const unsigned expectedNumRestrictions = 1;
   EXPECT_EQ(expectedNumRestrictions, nodeField->restrictions().size());
-  print_restrictions(nodeField->restrictions());
 }
 
 void UnitTestFieldImpl::testRestrictions3parts_union()
@@ -246,7 +235,6 @@ void UnitTestFieldImpl::testRestrictions3parts_union()
 
   const unsigned expectedNumRestrictions = 1;
   EXPECT_EQ(expectedNumRestrictions, nodeField->restrictions().size());
-  print_restrictions(nodeField->restrictions());
 }
 
 void UnitTestFieldImpl::testRestrictions3parts_differentNumScalars()
@@ -263,7 +251,6 @@ void UnitTestFieldImpl::testRestrictions3parts_differentNumScalars()
 
   const unsigned expectedNumRestrictions = 2;
   EXPECT_EQ(expectedNumRestrictions, nodeField->restrictions().size());
-  print_restrictions(nodeField->restrictions());
 }
 
 void UnitTestFieldImpl::testRestrictions3parts_supersetSubset()
@@ -280,7 +267,6 @@ void UnitTestFieldImpl::testRestrictions3parts_supersetSubset()
 
   const unsigned expectedNumRestrictions = 1;
   EXPECT_EQ(expectedNumRestrictions, nodeField->restrictions().size());
-  print_restrictions(nodeField->restrictions());
 }
 
 void UnitTestFieldImpl::testRestrictions4parts_1union_1intersection()
@@ -297,7 +283,6 @@ void UnitTestFieldImpl::testRestrictions4parts_1union_1intersection()
 
   const unsigned expectedNumRestrictions = 1;
   EXPECT_EQ(expectedNumRestrictions, nodeField->restrictions().size());
-  print_restrictions(nodeField->restrictions());
 }
 
 void UnitTestFieldImpl::testRestrictions4parts_2unions()
@@ -314,7 +299,6 @@ void UnitTestFieldImpl::testRestrictions4parts_2unions()
 
   const unsigned expectedNumRestrictions = 1;
   EXPECT_EQ(expectedNumRestrictions, nodeField->restrictions().size());
-  print_restrictions(nodeField->restrictions());
 }
 
 TEST_F(UnitTestFieldImpl, testRestriction)

@@ -1,61 +1,21 @@
 // @HEADER
-//
-// ***********************************************************************
-//
+// *****************************************************************************
 //        MueLu: A package for multigrid based preconditioning
-//                  Copyright 2012 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact
-//                    Jonathan Hu       (jhu@sandia.gov)
-//                    Andrey Prokopenko (aprokop@sandia.gov)
-//                    Ray Tuminaro      (rstumin@sandia.gov)
-//
-// ***********************************************************************
-//
+// Copyright 2012 NTESS and the MueLu contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
+
 #include <Teuchos_UnitTestHarness.hpp>
 #include <Teuchos_DefaultComm.hpp>
 #include <Teuchos_VerboseObject.hpp>
 
-#include "Kokkos_StaticCrsGraph.hpp"
+#include "KokkosSparse_StaticCrsGraph.hpp"
 #include "KokkosGraph_Distance2ColorHandle.hpp"
 #include "KokkosGraph_Distance2Color.hpp"
 
 #include <Xpetra_Matrix.hpp>
-#include <Galeri_XpetraParameters.hpp>
-#include <Galeri_XpetraProblemFactory.hpp>
-#include <Galeri_XpetraUtils.hpp>
-#include <Galeri_XpetraMaps.hpp>
 
 #include "MueLu_TestHelpers_kokkos.hpp"
 #include "MueLu_Version.hpp"
@@ -66,7 +26,6 @@
 #include "MueLu_AggregationPhase2aAlgorithm.hpp"
 #include "MueLu_AggregationPhase2bAlgorithm.hpp"
 #include "MueLu_AggregationPhase3Algorithm.hpp"
-#include "MueLu_AmalgamationInfo.hpp"
 #include "MueLu_AmalgamationInfo.hpp"
 #include "MueLu_AmalgamationFactory.hpp"
 #include "MueLu_CoalesceDropFactory_kokkos.hpp"
@@ -138,6 +97,7 @@ void gimmeUncoupledAggregates(const Teuchos::RCP<Xpetra::Matrix<Scalar, LocalOrd
   params.set<bool>("aggregation: deterministic", false);
 
   params.set<bool>("aggregation: match ML phase2a", true);
+  params.set<bool>("aggregation: match ML phase2b", false);
   params.set<bool>("aggregation: error on nodes with no on-rank neighbors", false);
   params.set<bool>("aggregation: phase3 avoid singletons", false);
 
@@ -188,7 +148,7 @@ LocalOrdinal checkAggregatesContiguous(MueLu::LWGraph_kokkos<LocalOrdinal, Globa
   using device_type     = typename LWGraph_kokkos::device_type;
 
   const LO numNodes = graph.GetNodeNumVertices();
-  auto vertex2AggId = aggregates.GetVertex2AggId()->getDeviceLocalView(Xpetra::Access::ReadOnly);
+  auto vertex2AggId = aggregates.GetVertex2AggId()->getLocalViewDevice(Tpetra::Access::ReadOnly);
   auto aggSizes     = aggregates.ComputeAggregateSizes(true);
 
   auto lclLWGraph = graph;
@@ -487,17 +447,17 @@ TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Aggregates_kokkos, DiscontiguousAggregates, Sc
   Kokkos::deep_copy(aggStat, MueLu::READY);
 
   // Performing fake aggregates to generate a discontiguous aggregate
-  Kokkos::View<LO**, Kokkos::LayoutLeft, device_type> vertex2AggId = aggregates->GetVertex2AggId()->getDeviceLocalView(Xpetra::Access::ReadWrite);
-  Kokkos::View<LO**, Kokkos::LayoutLeft, device_type> procWinner   = aggregates->GetProcWinner()->getDeviceLocalView(Xpetra::Access::ReadWrite);
+  Kokkos::View<LO**, Kokkos::LayoutLeft, device_type> vertex2AggId = aggregates->GetVertex2AggId()->getLocalViewDevice(Tpetra::Access::ReadWrite);
+  Kokkos::View<LO**, Kokkos::LayoutLeft, device_type> procWinner   = aggregates->GetProcWinner()->getLocalViewDevice(Tpetra::Access::ReadWrite);
 
-  typename Kokkos::View<LO**, Kokkos::LayoutLeft, device_type>::HostMirror vertex2AggId_h = Kokkos::create_mirror_view(vertex2AggId);
+  typename Kokkos::View<LO**, Kokkos::LayoutLeft, device_type>::host_mirror_type vertex2AggId_h = Kokkos::create_mirror_view(vertex2AggId);
   Kokkos::deep_copy(vertex2AggId_h, vertex2AggId);
   vertex2AggId_h(0, 0) = 0;
   vertex2AggId_h(1, 0) = 1;
   vertex2AggId_h(2, 0) = 0;
   Kokkos::deep_copy(vertex2AggId, vertex2AggId_h);
 
-  typename Kokkos::View<LO**, Kokkos::LayoutLeft, device_type>::HostMirror procWinner_h = Kokkos::create_mirror_view(procWinner);
+  typename Kokkos::View<LO**, Kokkos::LayoutLeft, device_type>::host_mirror_type procWinner_h = Kokkos::create_mirror_view(procWinner);
   Kokkos::deep_copy(procWinner_h, procWinner);
   procWinner_h(0, 0) = comm->getRank();
   procWinner_h(1, 0) = comm->getRank();
@@ -603,8 +563,8 @@ TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Aggregates_kokkos, UncoupledPhase3, Scalar, Lo
   // TEST_EQUALITY(unaggregated.extent_int(0), 0); // 1 unaggregated node in the MPI_4 case
 
   // test aggPtr(i)+aggSizes(i)=aggPtr(i+1)
-  typename Aggregates::LO_view::HostMirror aggPtr_h                 = Kokkos::create_mirror_view(aggPtr);
-  typename Aggregates::aggregates_sizes_type::HostMirror aggSizes_h = Kokkos::create_mirror_view(aggSizes);
+  typename Aggregates::LO_view::host_mirror_type aggPtr_h                 = Kokkos::create_mirror_view(aggPtr);
+  typename Aggregates::aggregates_sizes_type::host_mirror_type aggSizes_h = Kokkos::create_mirror_view(aggSizes);
   Kokkos::deep_copy(aggPtr_h, aggPtr);
   Kokkos::deep_copy(aggSizes_h, aggSizes);
   for (LO i = 0; i < aggSizes_h.extent_int(0); ++i)
@@ -732,20 +692,7 @@ TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Aggregates_kokkos, GreedyDirichlet, Scalar, Lo
   //    RCP<Matrix> A = TestHelpers::TestFactory<SC, LO, GO, NO>::Build1DPoisson(30);
   // Make a Matrix with multiple degrees of freedom per node
   GlobalOrdinal nx = 8, ny = 8;
-
-  // Describes the initial layout of matrix rows across processors.
-  Teuchos::ParameterList galeriList;
-  galeriList.set("nx", nx);
-  galeriList.set("ny", ny);
-  RCP<const Teuchos::Comm<int>> comm = TestHelpers_kokkos::Parameters::getDefaultComm();
-  RCP<const Map> map                 = Galeri::Xpetra::CreateMap<LocalOrdinal, GlobalOrdinal, Node>(TestHelpers_kokkos::Parameters::getLib(), "Cartesian2D", comm, galeriList);
-
-  map = Xpetra::MapFactory<LocalOrdinal, GlobalOrdinal, Node>::Build(map, 2);  // expand map for 2 DOFs per node
-
-  RCP<Galeri::Xpetra::Problem<Map, CrsMatrixWrap, MultiVector>> Pr =
-      Galeri::Xpetra::BuildProblem<Scalar, LocalOrdinal, GlobalOrdinal, Map, CrsMatrixWrap, MultiVector>("Elasticity2D", map, galeriList);
-  RCP<Matrix> A = Pr->BuildMatrix();
-  A->SetFixedBlockSize(2);
+  auto A = TestHelpers_kokkos::TestFactory<SC, LO, GO, NO>::Build2DElasticity(nx, ny);
 
   Teuchos::ArrayView<const LocalOrdinal> indices;
   Teuchos::ArrayView<const Scalar> values;
@@ -797,7 +744,7 @@ TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Aggregates_kokkos, GreedyDirichlet, Scalar, Lo
 
   typename Aggregates::aggregates_sizes_type::const_type aggSizes = aggregates->ComputeAggregateSizes(true);
 
-  auto vertex2AggId = aggregates->GetVertex2AggId()->getHostLocalView(Xpetra::Access::ReadOnly);
+  auto vertex2AggId = aggregates->GetVertex2AggId()->getLocalViewHost(Tpetra::Access::ReadOnly);
   for (auto i = 0; i < (nx / 2 * ny / 2); i++) {
     TEST_EQUALITY(vertex2AggId(i, 0) != MUELU_UNAGGREGATED, true);  // check that all nodes are aggregated
   }
@@ -829,7 +776,7 @@ TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Aggregates_kokkos, GreedyDirichlet, Scalar, Lo
   // This may not be true for all problem setups, but is true for the setup in this test case.
   TEST_EQUALITY(aggSizesGreedy.extent(0) == aggSizes.extent(0), true)
 
-  vertex2AggId = aggregates->GetVertex2AggId()->getHostLocalView(Xpetra::Access::ReadOnly);
+  vertex2AggId = aggregates->GetVertex2AggId()->getLocalViewHost(Tpetra::Access::ReadOnly);
   TEST_EQUALITY(vertex2AggId(2, 0) == MUELU_UNAGGREGATED, true);  // check that the node with the Dof flagged as dirichlet is unaggregated
 
   // Repeat with greedy Dirichlet and preserve Dirichlet points
@@ -860,7 +807,7 @@ TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Aggregates_kokkos, GreedyDirichlet, Scalar, Lo
   // This will always be true.
   TEST_EQUALITY(aggSizesGreedyPreserve.extent(0) > aggSizesGreedy.extent(0), true)
 
-  vertex2AggId = aggregates->GetVertex2AggId()->getHostLocalView(Xpetra::Access::ReadOnly);
+  vertex2AggId = aggregates->GetVertex2AggId()->getLocalViewHost(Tpetra::Access::ReadOnly);
   for (auto i = 0; i < (nx / 2 * ny / 2); i++) {
     TEST_EQUALITY(vertex2AggId(i, 0) != MUELU_UNAGGREGATED, true);  // check that all nodes are aggregated
   }

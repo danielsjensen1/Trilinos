@@ -1,10 +1,11 @@
-// @HEADER
-// ****************************************************************************
-//                Tempus: Copyright (2017) Sandia Corporation
+//@HEADER
+// *****************************************************************************
+//          Tempus: Time Integration and Sensitivity Analysis Package
 //
-// Distributed under BSD 3-clause license (See accompanying file Copyright.txt)
-// ****************************************************************************
-// @HEADER
+// Copyright 2017 NTESS and the Tempus contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+//@HEADER
 
 #ifndef Tempus_StepperNewmarkExplicitAFormModifierXBase_hpp
 #define Tempus_StepperNewmarkExplicitAFormModifierXBase_hpp
@@ -51,7 +52,7 @@ class StepperNewmarkExplicitAFormModifierXBase
    *  function.
    */
   void execute(Teuchos::RCP<SolutionHistory<Scalar> > sh,
-               Teuchos::RCP<StepperNewmarkExplicitAForm<Scalar> > stepper,
+               Teuchos::RCP<StepperNewmarkExplicitAForm<Scalar> > /*stepper*/,
                const typename StepperNewmarkExplicitAFormAppAction<
                    Scalar>::ACTION_LOCATION actLoc)
   {

@@ -11,7 +11,11 @@
 
 
 #include <array>
+#include <cmath>
+#include <limits>
+#include <map>
 #include <memory>
+#include <sstream>
 #include <utility>
 
 #include <gtest/gtest.h>
@@ -21,6 +25,9 @@
 #include <stk_transfer/ReducedDependencyGeometricTransfer.hpp>
 #include <stk_transfer/TransferBase.hpp>
 #include <stk_util/parallel/ParallelReduce.hpp>
+#include "stk_transfer/ReducedDependencyCommData.hpp"
+#include "stk_unit_test_utils/StkReportRedirector.hpp"
+#include "stk_util/parallel/OutputStreams.hpp"
 
 
 namespace stk {
@@ -42,8 +49,20 @@ public:
   typedef TrivialTestKey Key;
   typedef stk::search::IdentProc<Key, int> EntityProc;
   typedef std::pair<stk::search::Box<double>,EntityProc> BoundingBox;
-  void bounding_boxes(std::vector<BoundingBox>& boxes) const
+  void bounding_boxes(std::vector<BoundingBox>& /*boxes*/) const
   { /* empty to test coarse_search_impl with empty domain */ }
+};
+
+class NonTrivialTestSrcMesh {
+public:
+  typedef TrivialTestKey Key;
+  typedef stk::search::IdentProc<Key, int> EntityProc;
+  typedef std::pair<stk::search::Box<double>,EntityProc> BoundingBox;
+  void bounding_boxes(std::vector<BoundingBox>& boxes) const
+  {
+    boxes.clear();
+    boxes.push_back(BoundingBox(stk::search::Box<double>({0,0,0}, {1,1,1}),EntityProc(0,0)));
+  }
 };
 
 class TrivialTestDestMesh {
@@ -58,28 +77,200 @@ public:
   }
 };
 
+class NonTrivialTestDestMesh {
+public:
+  typedef TrivialTestKey Key;
+  typedef stk::search::IdentProc<Key, int> EntityProc;
+  typedef std::pair<stk::search::Sphere<double>,EntityProc> BoundingBox;
+  void bounding_boxes(std::vector<BoundingBox>& boxes) const
+  {
+    boxes.clear();
+    boxes.push_back(BoundingBox(stk::search::Sphere<double>({-0.1,-0.1,-0.1},0.05),EntityProc(0,0)));
+  }
+};
+
+template <typename SrcMeshType, typename DestMeshType>
 class TrivialTestInterp {
 public:
-  typedef TrivialTestSrcMesh MeshA;
-  typedef TrivialTestDestMesh MeshB;
-  typedef MeshA::EntityProc EntityProcA;
-  typedef MeshB::EntityProc EntityProcB;
+  typedef SrcMeshType MeshA;
+  typedef DestMeshType MeshB;
+  typedef typename MeshA::EntityProc EntityProcA;
+  typedef typename MeshB::EntityProc EntityProcB;
   typedef std::pair<EntityProcA, EntityProcB> EntityProcRelation;
   typedef std::vector<EntityProcRelation> EntityProcRelationVec;
 };
 
+
+template <typename SrcMeshType, typename DestMeshType>
+class TestInterpHandleExpansion {
+public:
+  typedef SrcMeshType MeshA;
+  typedef DestMeshType MeshB;
+  typedef typename MeshA::EntityProc EntityProcA;
+  typedef typename MeshB::EntityProc EntityProcB;
+  typedef std::pair<EntityProcA, EntityProcB> EntityProcRelation;
+  typedef std::vector<EntityProcRelation> EntityProcRelationVec;
+
+  static void handle_box_expansions(
+    const MeshA* /*mesha*/,
+    const MeshB* /*meshb*/,
+    std::vector<typename MeshA::BoundingBox>& /*range*/,
+    std::vector<typename MeshB::BoundingBox>& domain,
+    const double expansion_factor
+  )
+  {
+    // only expand domain boxes
+    for(auto&& box : domain) {
+      stk::search::scale_by(box.first, expansion_factor);
+    }
+  }
+};
+
+template <typename SrcMeshType, typename DestMeshType>
+class TestInterpHandleExpansionRemoveDomain {
+public:
+  typedef SrcMeshType MeshA;
+  typedef DestMeshType MeshB;
+  typedef typename MeshA::EntityProc EntityProcA;
+  typedef typename MeshB::EntityProc EntityProcB;
+  typedef std::pair<EntityProcA, EntityProcB> EntityProcRelation;
+  typedef std::vector<EntityProcRelation> EntityProcRelationVec;
+
+  static void handle_box_expansions(
+    const MeshA* /*mesha*/,
+    const MeshB* /*meshb*/,
+    std::vector<typename MeshA::BoundingBox>& /*range*/,
+    std::vector<typename MeshB::BoundingBox>& domain,
+    const double /*expansion_factor*/
+  )
+  {
+    domain.clear();
+  }
+};
+
+
+template <typename SrcMeshType, typename DestMeshType>
+class TestInterpPrintExpansion {
+public:
+  typedef SrcMeshType MeshA;
+  typedef DestMeshType MeshB;
+  typedef typename MeshA::EntityProc EntityProcA;
+  typedef typename MeshB::EntityProc EntityProcB;
+  typedef std::pair<EntityProcA, EntityProcB> EntityProcRelation;
+  typedef std::vector<EntityProcRelation> EntityProcRelationVec;
+
+  static void print_expansion_warnings(int /*num_passes*/, size_t /*domain_size*/) {
+
+  }
+};
+
+
+
 TEST(GeomXferImpl, coarseSearchImpl_emptyDomain)
 {
-  TrivialTestInterp::EntityProcRelationVec entProcRelVec;
+  using Interp = TrivialTestInterp<TrivialTestSrcMesh, TrivialTestDestMesh>;
+
+  Interp::EntityProcRelationVec entProcRelVec;
   TrivialTestSrcMesh empty_meshA;
   TrivialTestDestMesh meshB;
-  const double expansionFactor = 1.1; // >1 so coarse_search_impl will try
-                                    //to expand boxes to find range entries
-  EXPECT_NO_THROW(stk::transfer::impl::coarse_search_impl<TrivialTestInterp>
-                  (entProcRelVec, MPI_COMM_WORLD, &empty_meshA, &meshB,
-                  stk::search::KDTREE, expansionFactor));
+  const double expansionFactor = 1.1;  // >1 so coarse_search_impl will try
+                                       // to expand boxes to find range entries
+  EXPECT_NO_THROW(stk::transfer::impl::coarse_search_impl<Interp>(
+      entProcRelVec, MPI_COMM_WORLD, &empty_meshA, &meshB, stk::search::KDTREE, expansionFactor));
   EXPECT_TRUE(entProcRelVec.empty());
 }
+
+TEST(GeomXferImpl, coarseSearchImpl_defaultPrinter)
+{
+  if( stk::parallel_machine_size(MPI_COMM_WORLD) > 1 ) GTEST_SKIP();
+  
+  using Interp = TrivialTestInterp<NonTrivialTestSrcMesh, NonTrivialTestDestMesh>;
+
+  Interp::EntityProcRelationVec entProcRelVec;
+  NonTrivialTestSrcMesh meshA; // box from 0,0,0 to 1,1,1
+  NonTrivialTestDestMesh meshB; // point at -0.1,-0.1,-0.1 radius 0.05
+  const double expansionFactor = 1.1;  // >1 so coarse_search_impl will try
+                                       // to expand boxes to find range entries
+
+  {
+    std::ostringstream messages;
+    stk::set_outputP0(&messages, MPI_COMM_WORLD);
+    stk::transfer::impl::coarse_search_impl<Interp>(
+        entProcRelVec, MPI_COMM_WORLD, &meshA, &meshB, stk::search::KDTREE, expansionFactor);
+    EXPECT_TRUE(messages.str().find("Number of points not found: 1 after expanding bounding boxes 2 time(s)") != std::string::npos);
+    stk::reset_default_output_streams(MPI_COMM_WORLD);
+  }
+
+  EXPECT_EQ(1U,entProcRelVec.size());
+}
+
+TEST(GeomXferImpl, coarseSearchImpl_customPrinter)
+{
+  if( stk::parallel_machine_size(MPI_COMM_WORLD) > 1 ) GTEST_SKIP();
+
+  using Interp = TestInterpPrintExpansion<NonTrivialTestSrcMesh, NonTrivialTestDestMesh>;
+
+  Interp::EntityProcRelationVec entProcRelVec;
+  NonTrivialTestSrcMesh meshA; // box from 0,0,0 to 1,1,1
+  NonTrivialTestDestMesh meshB; // point at -0.1,-0.1,-0.1 radius 0.05
+  const double expansionFactor = 1.1;  // >1 so coarse_search_impl will try
+                                       // to expand boxes to find range entries
+
+  {
+    std::ostringstream messages;
+    stk::set_outputP0(&messages, MPI_COMM_WORLD);
+    stk::transfer::impl::coarse_search_impl<Interp>(
+        entProcRelVec, MPI_COMM_WORLD, &meshA, &meshB, stk::search::KDTREE, expansionFactor);
+    EXPECT_EQ("", messages.str());
+    stk::reset_default_output_streams(MPI_COMM_WORLD);
+  }
+
+  EXPECT_EQ(1U,entProcRelVec.size());
+}
+
+TEST(GeomXferImpl, coarseSearchImpl_customBoxExpansion)
+{
+  if( stk::parallel_machine_size(MPI_COMM_WORLD) > 1 ) GTEST_SKIP();
+
+  using Interp = TestInterpHandleExpansion<NonTrivialTestSrcMesh, NonTrivialTestDestMesh>;
+
+  Interp::EntityProcRelationVec entProcRelVec;
+  NonTrivialTestSrcMesh meshA;
+  NonTrivialTestDestMesh meshB;
+  const double expansionFactor = 1.1;  // >1 so coarse_search_impl will try
+                                       // to expand boxes to find range entries
+
+  // only expands domain, so should take more iterations than default (2). Check that it did at least 10.
+  {
+    std::ostringstream messages;
+    stk::set_outputP0(&messages, MPI_COMM_WORLD);
+    stk::transfer::impl::coarse_search_impl<Interp>(
+        entProcRelVec, MPI_COMM_WORLD, &meshA, &meshB, stk::search::KDTREE, expansionFactor);
+    EXPECT_TRUE(messages.str().find("Number of points not found: 1 after expanding bounding boxes 10 time(s)") != std::string::npos);
+    stk::reset_default_output_streams(MPI_COMM_WORLD);
+  }
+
+  EXPECT_EQ(1U,entProcRelVec.size());
+}
+
+TEST(GeomXferImpl, coarseSearchImpl_customBoxExpansionDomainRemoval)
+{
+  if( stk::parallel_machine_size(MPI_COMM_WORLD) > 1 ) GTEST_SKIP();
+
+  using Interp = TestInterpHandleExpansionRemoveDomain<NonTrivialTestSrcMesh, NonTrivialTestDestMesh>;
+
+  Interp::EntityProcRelationVec entProcRelVec;
+  NonTrivialTestSrcMesh meshA;
+  NonTrivialTestDestMesh meshB;
+  const double expansionFactor = 1.1;  // >1 so coarse_search_impl will try
+                                       // to expand boxes to find range entries
+
+  stk::transfer::impl::coarse_search_impl<Interp>(
+      entProcRelVec, MPI_COMM_WORLD, &meshA, &meshB, stk::search::KDTREE, expansionFactor);
+
+  EXPECT_TRUE(entProcRelVec.empty());
+}
+
 
 using EntityKey = uint64_t;
 
@@ -255,7 +446,7 @@ public:
     }
   }
 
-  void get_to_points_coordinates(const EntityProcVec &to_entity_keys, ToPointsContainer &to_points)
+  void get_to_points_coordinates(const EntityProcVec & /*to_entity_keys*/, ToPointsContainer &to_points)
   {
     to_points.push_back(get_point());
   }
@@ -269,7 +460,7 @@ public:
   using MeshB = SinglePointMockMeshB;
   static unsigned filterSize;
   static int fromCount;
-  static void filter_to_nearest(EntityKeyMap & local_range_to_domain, const MeshA & mesha, const MeshB & meshb)
+  static void filter_to_nearest(EntityKeyMap & /*local_range_to_domain*/, const MeshA & /*mesha*/, const MeshB & /*meshb*/)
   {
     //no filtering needed since map is one-to-one
   }
@@ -282,8 +473,8 @@ public:
 
   //Specific to single point case right now
   void obtain_parametric_coords(typename MeshA::EntityProcVec entities_to_copy_from,
-      MeshA &FromElem,
-      const typename MeshB::ToPointsContainer & to_points_on_from_mesh,
+      MeshA & /*FromElem*/,
+      const typename MeshB::ToPointsContainer & /*to_points_on_from_mesh*/,
       typename MeshB::ToPointsDistanceContainer & to_points_distance_on_from_mesh)
   {
     for (unsigned i = 0; i < entities_to_copy_from.size(); ++i)
@@ -300,7 +491,7 @@ public:
     fromCount = from_count;
   }
 
-  static void apply(const MeshB & meshb, const MeshA & mesha, EntityKeyMap & local_range_to_domain)
+  static void apply(const MeshB & meshb, const MeshA & /*mesha*/, EntityKeyMap & local_range_to_domain)
   {
     if (stk::parallel_machine_rank(meshb.m_comm) == meshb.owning_rank())
     {
@@ -565,14 +756,14 @@ public:
   using MeshA = TwoElemMockMeshA;
   using MeshB = TwoPointMockMeshB;
 
-  static void filter_to_nearest(EntityKeyMap & local_range_to_domain, const MeshA & mesha, const MeshB & meshb)
+  static void filter_to_nearest(EntityKeyMap & /*local_range_to_domain*/, const MeshA & /*mesha*/, const MeshB & /*meshb*/)
   {
     //don't need to filter in this case
   }
 
   void obtain_parametric_coords(typename MeshA::EntityProcVec entities_to_copy_from,
-      MeshA &FromElem,
-      const typename MeshB::ToPointsContainer & to_points_on_from_mesh,
+      MeshA & /*FromElem*/,
+      const typename MeshB::ToPointsContainer & /*to_points_on_from_mesh*/,
       typename MeshB::ToPointsDistanceContainer & to_points_distance_on_from_mesh)
   {
     for (unsigned i = 0; i < entities_to_copy_from.size(); ++i)
@@ -581,11 +772,11 @@ public:
     }
   }
 
-  void mask_parametric_coords(const std::vector<int> & filter_mask_from, int from_count)
+  void mask_parametric_coords(const std::vector<int> & /*filter_mask_from*/, int /*from_count*/)
   {
   }
 
-  static void apply(const MeshB & meshb, const MeshA & mesha, EntityKeyMap & local_range_to_domain)
+  static void apply(const MeshB & meshb, const MeshA & /*mesha*/, EntityKeyMap & local_range_to_domain)
   {
     const int localRank = stk::parallel_machine_rank(MPI_COMM_WORLD);
     const unsigned numLocallyOwned = count_locally_owned(localRank, meshb.owning_ranks());
@@ -606,7 +797,7 @@ public:
       MeshA * FromElem,
       const typename MeshB::EntityProcVec & to_entity_keys_masked,
       const typename MeshA::EntityProcVec & from_entity_keys_masked,
-      const ReducedDependencyCommData & comm_data)
+      const ReducedDependencyCommData & /*comm_data*/)
   {
     if (FromElem)
     {
@@ -676,7 +867,7 @@ public:
   //Specific to single point case right now
   void obtain_parametric_coords(typename MeshA::EntityProcVec entities_to_copy_from,
       MeshA &FromElem,
-      const typename MeshB::ToPointsContainer & to_points_on_from_mesh,
+      const typename MeshB::ToPointsContainer & /*to_points_on_from_mesh*/,
       typename MeshB::ToPointsDistanceContainer & to_points_distance_on_from_mesh)
   {
     for (unsigned i = 0; i < entities_to_copy_from.size(); ++i)
@@ -689,7 +880,7 @@ public:
     }
   }
 
-  void mask_parametric_coords(const std::vector<int> & filter_mask_from, int from_count)
+  void mask_parametric_coords(const std::vector<int> & /*filter_mask_from*/, int /*from_count*/)
   {
   }
 
@@ -720,7 +911,7 @@ public:
       MeshA * FromElem,
       const typename MeshB::EntityProcVec & to_entity_keys_masked,
       const typename MeshA::EntityProcVec & from_entity_keys_masked,
-      const ReducedDependencyCommData & comm_data)
+      const ReducedDependencyCommData & /*comm_data*/)
   {
     if (FromElem)
     {
@@ -876,6 +1067,269 @@ TEST(ReducedDependencyGeometricTransferTest, ThreeElemToTwoPointLocalPointIds)
   test.meshA->elemToUse = 0;
   test.meshA->elemToFilter = 3;
   test.run(stk::search::SearchMethod::KDTREE);
+}
+
+struct Elem {
+  stk::search::Box<double> box;
+  unsigned id;
+  int owning_rank;
+};
+
+class BoxElemsMockSendMesh : public MockMeshA_Common
+{
+ public:
+  std::vector<Elem> elems;
+
+  void bounding_boxes(std::vector<BoundingBox>& domain_vector) const
+  {
+    const int rank = stk::parallel_machine_rank(m_comm);
+    for (const auto& e : elems) {
+      if (rank == e.owning_rank) {
+        domain_vector.emplace_back(e.box, EntityProc(e.id, e.owning_rank));
+      }
+    }
+  }
+
+  // Distance from a point to element eid's box (0 inside the box).
+  double distance_to_elem(unsigned eid, const stk::search::Point<double>& p) const
+  {
+    for (const auto& e : elems) {
+      if (e.id != eid) continue;
+      double d2 = 0.0;
+      for (unsigned k = 0; k < 3; ++k) {
+        const double lo = e.box.min_corner()[k];
+        const double hi = e.box.max_corner()[k];
+        const double v = p[k];
+        const double gap = (v < lo) ? (lo - v) : (v > hi) ? (v - hi) : 0.0;
+        d2 += gap * gap;
+      }
+      return std::sqrt(d2);
+    }
+    return std::numeric_limits<double>::max();
+  }
+};
+
+// Receiving mesh without the optional get_candidate_tolerances() hook: the transfer keeps the nearest candidate only.
+class NearestOnlyMockReceivingMesh : public MockMeshB_Common
+{
+ public:
+  struct Pt {
+    stk::search::Point<double> point;
+    int owning_rank;
+    double tolerance = -1.0;  // used only by CandidateTolerancesMockReceivingMesh
+  };
+  std::vector<Pt> pts;
+  double search_radius = 1.0e-6;  // enlarge to gather candidates a point does not sit inside
+
+  void bounding_boxes(std::vector<BoundingBox>& range_vector) const
+  {
+    const int rank = stk::parallel_machine_rank(m_comm);
+    for (unsigned i = 0; i < pts.size(); ++i) {
+      if (rank == pts[i].owning_rank) {
+        range_vector.emplace_back(
+            stk::search::Sphere<double>(pts[i].point, search_radius), EntityProc(i, pts[i].owning_rank));
+      }
+    }
+  }
+
+  void get_to_points_coordinates(const EntityProcVec& to_entity_keys, ToPointsContainer& to_points)
+  {
+    for (const auto& ep : to_entity_keys) {
+      to_points.push_back(pts[ep.id()].point);
+    }
+  }
+};
+
+// Receiving mesh with the optional get_candidate_tolerances() hook, returning each point's tolerance.
+class CandidateTolerancesMockReceivingMesh : public NearestOnlyMockReceivingMesh
+{
+ public:
+  void get_candidate_tolerances(const EntityProcVec& receiving_keys, std::vector<double>& tolerances) const
+  {
+    tolerances.clear();
+    for (const auto& ep : receiving_keys) {
+      tolerances.push_back(pts[ep.id()].tolerance);
+    }
+  }
+};
+
+template <class ReceivingMeshType>
+class MockSurvivorCountingInterpolate : public MockInterpolate_Common<BoxElemsMockSendMesh, ReceivingMeshType>
+{
+ public:
+  using SendMesh = BoxElemsMockSendMesh;
+  using ReceivingMesh = ReceivingMeshType;
+  using MeshA = SendMesh;
+  using MeshB = ReceivingMesh;
+  using EntityKeyMap = typename MockInterpolate_Common<SendMesh, ReceivingMesh>::EntityKeyMap;
+
+  // survivors[pointId] = number of masked candidates that survived filtering for that point.
+  static inline std::map<unsigned, int> survivors;
+
+  static void filter_to_nearest(EntityKeyMap&, const SendMesh&, const ReceivingMesh&) {}
+
+  void obtain_parametric_coords(typename SendMesh::EntityProcVec entities_to_copy_from,
+      SendMesh& sendMesh,
+      const typename ReceivingMesh::ToPointsContainer& to_points_on_from_mesh,
+      typename ReceivingMesh::ToPointsDistanceContainer& to_points_distance_on_from_mesh)
+  {
+    for (unsigned i = 0; i < entities_to_copy_from.size(); ++i) {
+      to_points_distance_on_from_mesh[i] =
+          sendMesh.distance_to_elem(entities_to_copy_from[i].id(), to_points_on_from_mesh[i]);
+    }
+  }
+
+  void mask_parametric_coords(const std::vector<int>&, int) {}
+
+  static void apply(const ReceivingMesh&, const SendMesh&, EntityKeyMap&) {}
+
+  void apply(ReceivingMesh* receivingMesh,
+      SendMesh*,
+      const typename ReceivingMesh::EntityProcVec& to_entity_keys_masked,
+      const typename SendMesh::EntityProcVec&,
+      const ReducedDependencyCommData&)
+  {
+    if (!receivingMesh) return;
+    for (const auto& ep : to_entity_keys_masked) {
+      ++survivors[ep.id()];
+    }
+  }
+};
+
+class ReducedDependencyMultipleMatchesTest : public ::testing::Test
+{
+ protected:
+  using Box = stk::search::Box<double>;
+  using Point = stk::search::Point<double>;
+
+  template <class ReceivingMesh>
+  std::shared_ptr<ReceivingMesh> make_receiving_mesh(const std::vector<typename ReceivingMesh::Pt>& pts)
+  {
+    auto receivingMesh = std::make_shared<ReceivingMesh>();
+    receivingMesh->m_comm = MPI_COMM_WORLD;
+    receivingMesh->pts = pts;
+    receivingMesh->search_radius = 0.5;  // reaches both elements so both are coarse-search candidates
+    return receivingMesh;
+  }
+
+  // Runs the transfer from elem0 (rank 0) and elem1 (rank 1) to receiving points owned by rank 1.
+  // Counts are filled on rank 1 only (empty on other ranks).
+  template <class ReceivingMesh>
+  std::map<unsigned, int> run_transfer_and_count_candidates_per_point(std::shared_ptr<ReceivingMesh> receivingMesh)
+  {
+    using Interpolate = MockSurvivorCountingInterpolate<ReceivingMesh>;
+
+    auto sendMesh = std::make_shared<BoxElemsMockSendMesh>();
+    sendMesh->m_comm = MPI_COMM_WORLD;
+    sendMesh->elems = {{elem0, 0u, 0}, {elem1, 1u, 1}};
+
+    Interpolate::survivors.clear();
+    ReducedDependencyGeometricTransfer<Interpolate> transfer(sendMesh, receivingMesh, "seam", MPI_COMM_WORLD);
+    transfer.initialize();
+    transfer.apply();
+    return Interpolate::survivors;
+  }
+
+  int run_transfer_and_count_candidates_for_one_point(const Point& point, double tol)
+  {
+    return run_transfer_and_count_candidates_per_point(
+        make_receiving_mesh<CandidateTolerancesMockReceivingMesh>({{point, 1, tol}}))[0];
+  }
+
+  bool is_receiving_rank() const { return stk::parallel_machine_rank(MPI_COMM_WORLD) == 1; }
+
+  const Box elem0{0.0, 0.0, 0.0, 1.0, 1.0, 1.0};  // send element on rank 0
+  const Box elem1{1.0, 0.0, 0.0, 2.0, 1.0, 1.0};  // adjacent send element on rank 1, shares the x=1 face
+  const Point onBoundary{1.0, 0.5, 0.5};          // on the shared face: dist 0 to both elements
+  const Point insideElem0{0.9, 0.5, 0.5};         // inside elem0 (dist 0), 0.1 from elem1
+};
+
+TEST_F(ReducedDependencyMultipleMatchesTest, MultipleMatches)
+{
+  if (stk::parallel_machine_size(MPI_COMM_WORLD) < 2) GTEST_SKIP() << "needs >= 2 ranks";
+
+  // All ranks run the (collective) transfer; rank 1 owns the point and checks the count.
+  const int case1 = run_transfer_and_count_candidates_for_one_point(onBoundary, -1.0);
+  const int case2 = run_transfer_and_count_candidates_for_one_point(onBoundary, 0.1);
+  const int case3 = run_transfer_and_count_candidates_for_one_point(insideElem0, 0.05);
+  if (is_receiving_rank()) {
+    EXPECT_EQ(1, case1);  // on boundary, negative tolerance  -> nearest element only
+    EXPECT_EQ(2, case2);  // on boundary, tolerance 0.1       -> both elements (tie at dist 0)
+    EXPECT_EQ(1, case3);  // inside elem0, tolerance 0.05 < 0.1 to elem1 -> nearest element only
+  }
+}
+
+TEST_F(ReducedDependencyMultipleMatchesTest, MultipleMatches_PerPointTolerance)
+{
+  if (stk::parallel_machine_size(MPI_COMM_WORLD) < 2) GTEST_SKIP() << "needs >= 2 ranks";
+
+  // Two receiving points on the same shared face in one transfer: only the point whose tolerance
+  // reaches the second candidate keeps both.
+  const Point onBoundaryOther(1.0, 0.25, 0.75);
+  const auto survivors = run_transfer_and_count_candidates_per_point(
+      make_receiving_mesh<CandidateTolerancesMockReceivingMesh>({{onBoundary, 1, 0.1}, {onBoundaryOther, 1, -1.0}}));
+  if (is_receiving_rank()) {
+    EXPECT_EQ(2, survivors.at(0));
+    EXPECT_EQ(1, survivors.at(1));
+  }
+}
+
+TEST_F(ReducedDependencyMultipleMatchesTest, MultipleMatches_ReceivingMeshWithoutHooksKeepsNearest)
+{
+  if (stk::parallel_machine_size(MPI_COMM_WORLD) < 2) GTEST_SKIP() << "needs >= 2 ranks";
+
+  // The tolerance on the point is ignored: this receiving mesh has no get_candidate_tolerances().
+  const auto survivors = run_transfer_and_count_candidates_per_point(
+      make_receiving_mesh<NearestOnlyMockReceivingMesh>({{onBoundary, 1, 0.1}}));
+  if (is_receiving_rank()) {
+    EXPECT_EQ(1, survivors.at(0));
+  }
+}
+
+TEST(GetRemainingDomainPoints, all_domain_points_found_multiple_passes)
+{
+  using interp_t = MockInterpolate_Common<MockMeshA_Common, MockMeshB_Common>;
+  using domain_id_t = MockMeshB_Common::EntityProc;
+  using range_id_t = MockMeshA_Common::EntityProc;
+  using domain_bounding_box_t = interp_t::MeshB::BoundingBox;
+  using domain_to_range_t = interp_t::EntityProcRelationVec;
+  using sphere_t = stk::search::Sphere<double>;
+
+  const int num_domain_pts = 10;
+  const int domain_point_found_on_first_pass = 7;
+  const int num_domain_pts_found_pass_one = 1;
+
+  std::vector<domain_bounding_box_t> domain_boxes;
+  domain_to_range_t domain_to_range_pass_one;  // 1st pass of coarse search
+  domain_to_range_t domain_to_range_pass_two;  // 2nd pass after expansion we found the rest
+
+  for (int i = 0; i < num_domain_pts; ++i) {
+    const domain_id_t domain_id(i, 0);
+
+    domain_boxes.emplace_back(sphere_t({0, 0, 0}, 1), domain_id);
+
+    const range_id_t range_id_one(0, 0);
+    const range_id_t range_id_two(1, 4);
+
+    if (i == domain_point_found_on_first_pass) {
+      domain_to_range_pass_one.emplace_back(domain_id, range_id_one);
+      domain_to_range_pass_one.emplace_back(domain_id, range_id_two);
+    } else {
+      domain_to_range_pass_two.emplace_back(domain_id, range_id_one);
+      domain_to_range_pass_two.emplace_back(domain_id, range_id_two);
+    }
+  }
+
+  impl::get_remaining_domain_points<interp_t>(domain_boxes, domain_to_range_pass_one);
+
+  EXPECT_TRUE(domain_boxes.size() == num_domain_pts - num_domain_pts_found_pass_one);
+
+  EXPECT_TRUE(impl::local_is_sorted(
+      domain_boxes.begin(), domain_boxes.end(), impl::BoundingBoxCompare<domain_bounding_box_t>()));
+
+  impl::get_remaining_domain_points<interp_t>(domain_boxes, domain_to_range_pass_two);
+
+  EXPECT_TRUE(domain_boxes.empty());
 }
 
 }

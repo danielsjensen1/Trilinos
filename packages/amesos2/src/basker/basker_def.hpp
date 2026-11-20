@@ -1,29 +1,10 @@
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //                   Basker: A Direct Linear Solver package
-//                    Copyright 2011 Sandia Corporation
 //
-// Under terms of Contract DE-AC04-94AL85000, with Sandia Corporation, the
-// U.S. Government retains certain rights in this software.
-//
-// This library is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as
-// published by the Free Software Foundation; either version 2.1 of the
-// License, or (at your option) any later version.
-//
-// This library is distributed in the hope that it will be useful, but
-// WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-// Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public
-// License along with this library; if not, write to the Free Software
-// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
-// USA
-// Questions? Contact Mike A. Heroux (maherou@sandia.gov)
-//
-// ***********************************************************************
+// Copyright 2011 NTESS and the Basker contributors.
+// SPDX-License-Identifier: LGPL-2.1-or-later
+// *****************************************************************************
 // @HEADER
 
 #ifndef BASKER_DEF_HPP
@@ -36,8 +17,6 @@
 //#include <cassert>
 #include <iostream>
 #include <cstdio>
-
-using namespace std;
 
 //#define BASKER_DEBUG 1
 //#undef UDEBUG
@@ -301,7 +280,7 @@ namespace BaskerClassicNS{
       {
 
 #ifdef BASKER_DEBUG
-        cout << "k = " << k << endl;
+        std::cout << "k = " << k << std::endl;
 #endif
 
         value = 0.0;
@@ -341,9 +320,9 @@ namespace BaskerClassicNS{
 
         xnnz = ncol - top;
 #ifdef BASKER_DEBUG
-        cout << top << endl;
-        cout << ncol << endl;
-        cout << xnnz << endl;
+        std::cout << top << std::endl;
+        std::cout << ncol << std::endl;
+        std::cout << xnnz << std::endl;
         //BASKERASSERT(xnnz <= nrow);
 #endif
         /*Lx = b where x will be the column k in L and U*/
@@ -393,7 +372,7 @@ namespace BaskerClassicNS{
 
         if(maxindex == ncol || pivot == ((Entry)0))
           {
-            cout << "Matrix is singular at index: " << maxindex << " pivot: " << pivot << endl;
+            std::cout << "Matrix is singular at index: " << maxindex << " pivot: " << pivot << std::endl;
             ierr = maxindex;
             return ierr;
           }
@@ -402,7 +381,7 @@ namespace BaskerClassicNS{
 #ifdef BASKER_DEBUG
         if(maxindex != k )
           {
-            cout << "Permuting pivot: " << k << " for row: " << maxindex << endl;
+            std::cout << "Permuting pivot: " << k << " for row: " << maxindex << std::endl;
           }
 #endif
 
@@ -411,13 +390,13 @@ namespace BaskerClassicNS{
 
             newsize = L->nnz * 1.1 + 2*nrow + 1;
 #ifdef BASKER_DEBUG
-            cout << "Out of memory -- Reallocating.  Old Size: " << L->nnz << " New Size: " << newsize << endl;
+            std::cout << "Out of memory -- Reallocating.  Old Size: " << L->nnz << " New Size: " << newsize << std::endl;
 #endif
             //L->row_idx = (Int *) BASKERREALLOC(L->row_idx, newsize*sizeof(Int));
             L->row_idx = int_realloc(L->row_idx , L->nnz, newsize);
             if(!(L->row_idx))
               {
-                cout << "WARNING: Cannot Realloc Memory" << endl;
+                std::cout << "WARNING: Cannot Realloc Memory" << std::endl;
                 ierr = -3;
                 return ierr;
               }
@@ -425,7 +404,7 @@ namespace BaskerClassicNS{
             L->val = entry_realloc(L->val, L->nnz, newsize);
             if(!(L->val))
               {
-                cout << "WARNING: Cannot Realloc Memory" << endl;
+                std::cout << "WARNING: Cannot Realloc Memory" << std::endl;
                 ierr = -3;
                 return ierr;
               }
@@ -437,13 +416,13 @@ namespace BaskerClassicNS{
           {
             newsize = U->nnz*1.1 + 2*nrow + 1;
 #ifdef BASKER_DEBUG
-            cout << "Out of memory -- Reallocating.  Old Size: " << U->nnz << " New Size: " << newsize << endl;
+            std::cout << "Out of memory -- Reallocating.  Old Size: " << U->nnz << " New Size: " << newsize << std::endl;
 #endif
             //U->row_idx = (Int *) BASKERREALLOC(U->row_idx, newsize*sizeof(Int));
             U->row_idx = int_realloc(U->row_idx, U->nnz, newsize);
             if(!(U->row_idx))
               {
-                cout << "WARNING: Cannot Realloc Memory" << endl;
+                std::cout << "WARNING: Cannot Realloc Memory" << std::endl;
                 ierr = -3;
                 return ierr;
               }
@@ -452,7 +431,7 @@ namespace BaskerClassicNS{
             U->val = entry_realloc(U->val, U->nnz, newsize);
             if(!(U->val))
               {
-                cout << "WARNING: Cannot Realloc Memory" << endl;
+                std::cout << "WARNING: Cannot Realloc Memory" << std::endl;
                 ierr = -3;
                 return ierr;
               }
@@ -481,7 +460,7 @@ namespace BaskerClassicNS{
                   {
                     if(unnz >= U->nnz)
                       {
-                        cout << "BASKER: Insufficent memory for U" << endl;
+                        std::cout << "BASKER: Insufficent memory for U" << std::endl;
                         ierr = -3;
                         return ierr;
                       }
@@ -496,7 +475,7 @@ namespace BaskerClassicNS{
                       {
 
                         last_v_temp = X[j];
-                        //cout << "Called.  t: " << t << "Val: " << last_v_temp << endl;
+                        //std::cout << "Called.  t: " << t << "Val: " << last_v_temp << std::endl;
                       }
 
                   }
@@ -504,7 +483,7 @@ namespace BaskerClassicNS{
                   {
                     if(lnnz >= L->nnz)
                       {
-                        cout << "BASKER: Insufficent memory for L" << endl;
+                        std::cout << "BASKER: Insufficent memory for L" << std::endl;
                         ierr = -3;
                         return ierr;
                       }
@@ -522,7 +501,7 @@ namespace BaskerClassicNS{
             X[j] = 0;
 
           }
-        //cout << "Value added at end: " << last_v_temp << endl;
+        //std::cout << "Value added at end: " << last_v_temp << std::endl;
         U->row_idx[unnz] = k;
         U->val[unnz] = last_v_temp;
         unnz++;
@@ -546,35 +525,35 @@ namespace BaskerClassicNS{
       {
         printf("L[%d]=%g" , k , L->val[k]);
       }
-    cout << endl;
+    std::cout << std::endl;
     for(k = 0; k < lnnz; k++)
       {
         printf("Li[%d]=%d", k, L->row_idx[k]);
       }
-    cout << endl;
+    std::cout << std::endl;
     for(k = 0; k < nrow; k++)
       {
         printf("p[%d]=%d", k, pinv[k]);
       }
-    cout << endl;
-    cout << endl;
+    std::cout << std::endl;
+    std::cout << std::endl;
 
     for(k = 0; k < ncol; k++)
       {
         printf("Up[%d]=%d", k, U->col_ptr[k]);
       }
-    cout << endl;
+    std::cout << std::endl;
 
     for(k = 0; k < unnz; k++)
       {
         printf("U[%d]=%g" , k , U->val[k]);
       }
-    cout << endl;
+    std::cout << std::endl;
     for(k = 0; k < unnz; k++)
       {
         printf("Ui[%d]=%d", k, U->row_idx[k]);
       }
-    cout << endl;
+    std::cout << std::endl;
 
 
 #endif
@@ -591,12 +570,12 @@ namespace BaskerClassicNS{
     //sort_factors();
 
 #ifdef BASKER_DEBUG
-    cout << "After Permuting" << endl;
+    std::cout << "After Permuting" << std::endl;
     for(k = 0; k < lnnz; k++)
       {
         printf("Li[%d]=%d", k, L->row_idx[k]);
       }
-    cout << endl;
+    std::cout << std::endl;
 #endif
 
     // Cleanup workspace allocations
@@ -755,7 +734,7 @@ namespace BaskerClassicNS{
         int result = solve(&(b[k]), &(x[k]));
         if(result != 0)
           {
-            cout << "Error in Solving \n";
+            std::cout << "Error in Solving \n";
             return result;
           }
       }
@@ -831,7 +810,7 @@ namespace BaskerClassicNS{
 #else
         if(val[col_ptr[i]-1] == (Entry) 0)
           {
-            cout << "Dig(" << i << ") = " << val[col_ptr[i]-1] << endl;
+            std::cout << "Dig(" << i << ") = " << val[col_ptr[i]-1] << std::endl;
             return i;
           }
 #endif

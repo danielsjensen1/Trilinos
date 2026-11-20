@@ -39,6 +39,7 @@
 // which build-dependent features are enabled, such as 'STK_HAS_MPI'.
 
 #include "stk_util/stk_config.h"
+#include "Kokkos_Core.hpp"
 
 //----------------------------------------------------------------------
 // Parallel machine
@@ -48,10 +49,6 @@
 #include "mpi.h"
 
 namespace stk {
-
-/** \addtogroup parallel_module
- * @{
- */
 
 /// \todo REFACTOR: Figure out a better way to typedef for non-MPI builds
 
@@ -67,6 +64,13 @@ typedef MPI_Datatype ParallelDatatype ;
  * @return			a <b>ParallelMachine</b> ...
  */
 inline ParallelMachine parallel_machine_null() { return MPI_COMM_NULL ; }
+
+/**
+ * @brief <b>parallel_machine_null</b> returns MPI_COMM_SELF if MPI is enabled.
+ *
+ * @return			a <b>ParallelMachine</b> ...
+ */
+inline ParallelMachine parallel_machine_self() { return MPI_COMM_SELF ; }
 
 /**
  * @brief <b>parallel_machine_init</b> calls MPI_Init.
@@ -88,7 +92,35 @@ inline void parallel_machine_finalize()
   MPI_Finalize();
 }
 
-/** \} */
+inline ParallelMachine initialize(int* argc, char*** argv)
+{
+  int mpiIsInitialized;
+  MPI_Initialized(&mpiIsInitialized);
+  if (not mpiIsInitialized) {
+    if (MPI_SUCCESS != MPI_Init(argc, argv)) {
+      throw std::runtime_error("MPI_Init() failed");
+    }
+  }
+
+  if (not Kokkos::is_initialized()) {
+    Kokkos::initialize(*argc, *argv);
+  }
+
+  return MPI_COMM_WORLD;  // CHECK: ALLOW MPI_COMM_WORLD
+}
+
+inline void finalize()
+{
+  if (Kokkos::is_initialized()) {
+    Kokkos::finalize();
+  }
+
+  int mpiIsFinalized;
+  MPI_Finalized(&mpiIsFinalized);
+  if (not mpiIsFinalized) {
+    MPI_Finalize();
+  }
+}
 
 }
 
@@ -114,11 +146,29 @@ typedef int ParallelDatatype ;
 
 inline ParallelMachine parallel_machine_null() { return 0 ; }
 
+inline ParallelMachine parallel_machine_self() { return 0 ; }
+
 inline ParallelMachine parallel_machine_init( int * , char *** )
 { return 0 ; }
 
 inline void parallel_machine_finalize()
 {}
+
+inline ParallelMachine initialize(int* argc, char*** argv)
+{
+  if (not Kokkos::is_initialized()) {
+    Kokkos::initialize(*argc, *argv);
+  }
+
+  return ParallelMachine{};
+}
+
+inline void finalize()
+{
+  if (Kokkos::is_initialized()) {
+    Kokkos::finalize();
+  }
+}
 
 }
 
@@ -188,6 +238,23 @@ private: //data
   int m_parallel_rank;
 
 }; //class Parallel
+
+
+class Environment
+{
+public:
+  Environment(int* argc, char*** argv) {
+    initialize(argc, argv);
+  }
+
+  ~Environment() {
+    finalize();
+  }
+
+  ParallelMachine comm() {
+    return MPI_COMM_WORLD; // CHECK: ALLOW MPI_COMM_WORLD
+  }
+};
 
 } //namespace stk
 

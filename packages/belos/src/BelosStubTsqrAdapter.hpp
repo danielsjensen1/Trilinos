@@ -1,29 +1,10 @@
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //                 Belos: Block Linear Solvers Package
-//                 Copyright (2010) Sandia Corporation
 //
-// Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
-// license for use of this work by or on behalf of the U.S. Government.
-//
-// This library is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as
-// published by the Free Software Foundation; either version 2.1 of the
-// License, or (at your option) any later version.
-//
-// This library is distributed in the hope that it will be useful, but
-// WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-// Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public
-// License along with this library; if not, write to the Free Software
-// Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301
-// USA
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
-//
-// ***********************************************************************
+// Copyright 2004-2016 NTESS and the Belos contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #ifndef __Belos_StubTsqrAdapter_hpp
@@ -32,7 +13,6 @@
 #include <BelosConfigDefs.hpp>
 #include <Teuchos_ParameterListAcceptorDefaultBase.hpp>
 #include <Teuchos_ScalarTraits.hpp>
-#include <Teuchos_SerialDenseMatrix.hpp>
 #include <Teuchos_TypeNameTraits.hpp>
 #include <stdexcept>
 
@@ -48,7 +28,7 @@ namespace details {
   /// TSQR (Tall Skinny QR factorization) is an orthogonalization
   /// kernel that is as accurate as Householder QR, yet requires only
   /// \f$2 \log P\f$ messages between $P$ MPI processes, independently
-  /// of the number of columns in the multivector.  
+  /// of the number of columns in the multivector.
   ///
   /// TSQR works independently of the particular multivector
   /// implementation, and interfaces to the latter via an adapter
@@ -67,14 +47,13 @@ namespace details {
   /// TsqrOrthoManagerImpl to compile successfully for unsupported MV
   /// types.  This in turn allows OrthoManagerFactory to be templated
   /// on the MV type.
-  template<class MultiVectorType>
+  template<class MultiVectorType, class DM = DefaultDenseMatrix<int,double>>
   class StubTsqrAdapter : public Teuchos::ParameterListAcceptorDefaultBase {
   public:
     typedef MultiVectorType MV;
     typedef double scalar_type; // This doesn't really matter
     typedef int ordinal_type; // This doesn't matter either
     typedef int node_type; // Nor does this
-    typedef Teuchos::SerialDenseMatrix<ordinal_type, scalar_type> dense_matrix_type;
     typedef typename Teuchos::ScalarTraits<scalar_type>::magnitudeType magnitude_type;
 
     /// \brief Constructor (that accepts a parameter list).
@@ -83,10 +62,10 @@ namespace details {
     ///   The specific parameter keys that are read depend on the TSQR
     ///   implementation.  For details, call \c getValidParameters()
     ///   and examine the documentation embedded therein.
-    StubTsqrAdapter (const Teuchos::RCP<Teuchos::ParameterList>& plist) 
+    StubTsqrAdapter (const Teuchos::RCP<Teuchos::ParameterList>& plist)
     {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::logic_error, "TSQR adapter for "
-        "multivector type \"" << Teuchos::TypeNameTraits<MV>::name() 
+        "multivector type \"" << Teuchos::TypeNameTraits<MV>::name()
         << " is not yet implemented.");
     }
 
@@ -94,7 +73,7 @@ namespace details {
     StubTsqrAdapter ()
     {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::logic_error, "TSQR adapter for "
-        "multivector type \"" << Teuchos::TypeNameTraits<MV>::name() 
+        "multivector type \"" << Teuchos::TypeNameTraits<MV>::name()
         << " is not yet implemented.");
     }
 
@@ -103,7 +82,7 @@ namespace details {
     {
       (void) rhs;
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::logic_error, "TSQR adapter for "
-        "multivector type \"" << Teuchos::TypeNameTraits<MV>::name() 
+        "multivector type \"" << Teuchos::TypeNameTraits<MV>::name()
         << " is not yet implemented.");
     }
 
@@ -112,16 +91,16 @@ namespace details {
     getValidParameters () const
     {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::logic_error, "TSQR adapter for "
-        "multivector type \"" << Teuchos::TypeNameTraits<MV>::name() 
+        "multivector type \"" << Teuchos::TypeNameTraits<MV>::name()
         << " is not yet implemented.");
     }
 
     //! Set parameters (stub; throws std::logic_error).
-    void 
+    void
     setParameterList (const Teuchos::RCP<Teuchos::ParameterList>& plist)
     {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::logic_error, "TSQR adapter for "
-        "multivector type \"" << Teuchos::TypeNameTraits<MV>::name() 
+        "multivector type \"" << Teuchos::TypeNameTraits<MV>::name()
         << " is not yet implemented.");
     }
 
@@ -129,18 +108,18 @@ namespace details {
     void
     factorExplicit (MV& A,
 		    MV& Q,
-		    dense_matrix_type& R,
+		    DM& R,
 		    const bool forceNonnegativeDiagonal=false)
     {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::logic_error, "TSQR adapter for "
-        "multivector type \"" << Teuchos::TypeNameTraits<MV>::name() 
+        "multivector type \"" << Teuchos::TypeNameTraits<MV>::name()
         << " is not yet implemented.");
     }
 
     //! Rank-revealing decomposition (stub; does nothing).
     int
     revealRank (MV& Q,
-		dense_matrix_type& R,
+		DM& R,
 		const magnitude_type& tol)
     {
       // mfh 07 Sep 2012: In order to prevent compiler warnings on
@@ -148,7 +127,7 @@ namespace details {
       // never execute anyway, since it is in an instance method and
       // all of the constructors throw exceptions.  (We've overridden
       // the default and copy constructors to throw exceptions.)
-      return 0; 
+      return 0;
     }
   };
 

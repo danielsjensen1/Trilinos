@@ -47,9 +47,11 @@
 #include <cmath>
 #include <algorithm>
 
+#include "stk_search/ObjectOutsideDomainPolicy.hpp"
 #include "stk_search/DistanceComparison.hpp"
 #include <stk_util/parallel/ParallelReduce.hpp>
 #include <stk_util/parallel/Parallel.hpp>
+#include "stk_util/environment/RuntimeWarning.hpp"
 #include "stk_util/util/ReportHandler.hpp"
 #include "stk_util/util/SortAndUnique.hpp"
 
@@ -61,41 +63,6 @@ using FilterCoarseSearchProcRelation = std::pair<typename RECVMESH::EntityProc, 
 
 template <class SENDMESH, class RECVMESH>
 using FilterCoarseSearchProcRelationVec = std::vector<FilterCoarseSearchProcRelation<SENDMESH, RECVMESH>>;
-
-//BEGINObjectOutsideDomainPolicy 
-enum class ObjectOutsideDomainPolicy { IGNORE, EXTRAPOLATE, TRUNCATE, PROJECT, ABORT, UNDEFINED_OBJFLAG = 0xff };
-//ENDObjectOutsideDomainPolicy 
-
-inline ObjectOutsideDomainPolicy get_object_outside_domain_policy(const std::string& id)
-{
-  if(id == "IGNORE") return ObjectOutsideDomainPolicy::IGNORE;
-  if(id == "EXTRAPOLATE") return ObjectOutsideDomainPolicy::EXTRAPOLATE;
-  if(id == "TRUNCATE") return ObjectOutsideDomainPolicy::TRUNCATE;
-  if(id == "PROJECT") return ObjectOutsideDomainPolicy::PROJECT;
-  if(id == "ABORT") return ObjectOutsideDomainPolicy::ABORT;
-
-  return ObjectOutsideDomainPolicy::UNDEFINED_OBJFLAG;
-}
-
-inline std::string get_object_outside_domain_policy(const ObjectOutsideDomainPolicy id)
-{
-  switch(id) {
-  case ObjectOutsideDomainPolicy::IGNORE:
-    return "IGNORE";
-  case ObjectOutsideDomainPolicy::EXTRAPOLATE:
-    return "EXTRAPOLATE";
-  case ObjectOutsideDomainPolicy::TRUNCATE:
-    return "TRUNCATE";
-  case ObjectOutsideDomainPolicy::PROJECT:
-    return "PROJECT";
-  case ObjectOutsideDomainPolicy::ABORT:
-    return "ABORT";
-  case ObjectOutsideDomainPolicy::UNDEFINED_OBJFLAG:
-    return "UNDEFINED";
-  }
-
-  return std::string("");
-}
 
 //BEGINFilterCoarseSearchOptions
 struct FilterCoarseSearchOptions
@@ -154,10 +121,10 @@ public:
 
   void add_search_filter_info(const EntityKey key,
                               const std::vector<double>& paramCoords,
-                              const double parametricDistance,
-                              const bool isWithinParametricTolerance,
-                              const double geometricDistanceSquared,
-                              const bool isWithinGeometricTolerance) override
+                              const double /*parametricDistance*/,
+                              const bool /*isWithinParametricTolerance*/,
+                              const double /*geometricDistanceSquared*/,
+                              const bool /*isWithinGeometricTolerance*/) override
   {
     m_searchFilterInfo[key] = paramCoords;
   }
@@ -196,10 +163,10 @@ public:
 
   void add_search_filter_info(const EntityKey key,
                               const std::vector<double>& paramCoords,
-                              const double parametricDistance,
-                              const bool isWithinParametricTolerance,
-                              const double geometricDistanceSquared,
-                              const bool isWithinGeometricTolerance) override
+                              const double /*parametricDistance*/,
+                              const bool /*isWithinParametricTolerance*/,
+                              const double /*geometricDistanceSquared*/,
+                              const bool /*isWithinGeometricTolerance*/) override
   {
     m_searchFilterInfo.push_back(std::make_pair(key, paramCoords));
     m_isSorted = false;
@@ -233,6 +200,7 @@ struct FilterCoarseSearchStats
 {
   unsigned numEntitiesWithinTolerance{0};
   unsigned numEntitiesOutsideTolerance{0};
+  unsigned numGeometricDistanceFailures{0};
 
   double longestParametricExtrapolation{0.0};
   double longestGeometricExtrapolation{0.0};
@@ -240,15 +208,16 @@ struct FilterCoarseSearchStats
 
 template <class MESH>
 inline
-double get_distance_squared_from_centroid(MESH& mesh, const typename MESH::EntityKey k, const double* toCoords)
+double get_distance_squared_from_centroid(MESH& mesh, const typename MESH::EntityKey k, const std::vector<double>& toCoords)
 {
-  std::vector<double> centroid = mesh.centroid(k);
-  return stk::search::distance_sq(centroid.size(), centroid.data(), toCoords);
+  std::vector<double> centroid;
+  mesh.centroid(k, centroid);
+  return stk::search::distance_sq(centroid.size(), centroid.data(), toCoords.data());
 }
 
 template <class MESH>
 inline
-double get_distance_from_centroid(MESH& mesh, const typename MESH::EntityKey k, const double* toCoords)
+double get_distance_from_centroid(MESH& mesh, const typename MESH::EntityKey k, const std::vector<double>& toCoords)
 {
   double distanceSquared = get_distance_squared_from_centroid<MESH>(mesh, k, toCoords);
   return std::sqrt(distanceSquared);
@@ -257,19 +226,11 @@ double get_distance_from_centroid(MESH& mesh, const typename MESH::EntityKey k, 
 template <typename EntityProcRelationVec>
 void remove_non_local_range_entities(EntityProcRelationVec& rangeToDomain, int localProc)
 {
-  size_t keep = 0;
-  for(size_t i=0; i<rangeToDomain.size(); ++i) {
-    int rangeProc = rangeToDomain[i].first.proc();
-    if (rangeProc == localProc) {
-      if (i > keep) {
-        rangeToDomain[keep] = rangeToDomain[i];
-      }
-      ++keep;
-    }
-  }
-  if(keep<rangeToDomain.size()) {
-    rangeToDomain.resize(keep);
-  }
+  using ValueType = typename EntityProcRelationVec::value_type;
+  rangeToDomain.erase(
+    std::remove_if(rangeToDomain.begin(), rangeToDomain.end(),
+                   [&](const ValueType& x) { return (static_cast<int>(x.first.proc()) != localProc); }),
+    rangeToDomain.end());
 }
 
 template <typename EntityProcRelationVec>
@@ -321,9 +282,10 @@ void accept_candidate(std::vector<double>& parametricCoords,
 
 template <class SENDMESH>
 void set_geometric_info(SENDMESH& sendMesh,
-                        const typename SENDMESH::EntityKey sendEntity, const double* tocoords,
+                        const typename SENDMESH::EntityKey sendEntity, const std::vector<double>& tocoords,
                         const double searchToleranceSquared, const bool useCentroidForGeometricProximity,
-                        double& geometricDistanceSquared, bool& isWithinGeometricTolerance)
+                        double& geometricDistanceSquared, bool& isWithinGeometricTolerance,
+                        bool& hasError)
 {
   if(!isWithinGeometricTolerance) {
 
@@ -332,6 +294,10 @@ void set_geometric_info(SENDMESH& sendMesh,
     }
     else {
       geometricDistanceSquared = sendMesh.get_closest_geometric_distance_squared(sendEntity, tocoords);
+
+      if( geometricDistanceSquared == std::numeric_limits<double>::max() ) {
+        hasError = true;
+      }
     }
 
     isWithinGeometricTolerance = geometricDistanceSquared <= searchToleranceSquared;
@@ -362,6 +328,8 @@ FilterCoarseSearchStats filter_coarse_search_by_range(FilterCoarseSearchProcRela
   double searchToleranceSquared = searchTolerance * searchTolerance;
 
   std::vector<double> parametricCoords;
+  std::vector<double> tocoords;
+  std::vector<double> fromcoords;
 
   while(current_key != rangeToDomain.end()) {
     FilterResult<SENDMESH, RECVMESH> bestCandidate;
@@ -373,16 +341,20 @@ FilterCoarseSearchStats filter_coarse_search_by_range(FilterCoarseSearchProcRela
 
     const typename RECVMESH::EntityKey recvEntity = current_key->first.id();
 
-    const double* tocoords = recvMesh.coord(recvEntity);
+    recvMesh.coordinates(recvEntity, tocoords);
 
     std::pair<const_iterator, const_iterator> keys = std::make_pair(current_key, next_key);
     bestCandidate.nearest = keys.second;
 
-    for(const_iterator ii = keys.first; ii != keys.second; ++ii) {
+    const_iterator ii = keys.first;
+    bool forceUseCentroid = false;
+
+    while(ii != keys.second) {
       const typename SENDMESH::EntityKey sendEntity = ii->second.id();
       sendMesh.find_parametric_coords(sendEntity, tocoords, parametricCoords, parametricDistance, isWithinParametricTolerance);
 
       if(parametricDistance == std::numeric_limits<double>::max()) {
+        ++ii;
         continue;
       }
 
@@ -390,7 +362,7 @@ FilterCoarseSearchStats filter_coarse_search_by_range(FilterCoarseSearchProcRela
                                                           geometricDistanceSquared, isWithinGeometricTolerance);
 
       if(useNearestNodeForClosestBoundingBox) {
-        const double* fromcoords = sendMesh.coord(sendEntity);
+        sendMesh.coordinates(sendEntity, fromcoords);
         double distance = recvMesh.get_distance_from_nearest_node(recvEntity, fromcoords);
         geometricDistanceSquared = std::pow(distance, 2);
         isWithinParametricTolerance = false;
@@ -403,10 +375,28 @@ FilterCoarseSearchStats filter_coarse_search_by_range(FilterCoarseSearchProcRela
         accept = parametricDistance < bestCandidate.parametricDistance;
       }
       else {
-        set_geometric_info<SENDMESH>(sendMesh, sendEntity, tocoords, searchToleranceSquared,
-                                     useCentroidForGeometricProximity,
-                                     geometricDistanceSquared,
-                                     isWithinGeometricTolerance);
+        bool hasGeometricDistanceError = false;
+        const bool useCentroid = useCentroidForGeometricProximity || forceUseCentroid;
+
+        set_geometric_info<SENDMESH>(
+          sendMesh, sendEntity, tocoords, searchToleranceSquared,
+          useCentroid,
+          geometricDistanceSquared,
+          isWithinGeometricTolerance,
+          hasGeometricDistanceError
+        );
+
+        if( hasGeometricDistanceError && !useCentroid ) {
+          // reset search info and start over using centroids if it failed 
+          // and we weren't using centroids already
+          ii = keys.first;
+          forceUseCentroid = true;
+
+          bestCandidate = FilterResult<SENDMESH, RECVMESH>();
+          bestCandidate.nearest = keys.second;
+
+          continue;
+        }
 
         accept = geometricDistanceSquared < bestCandidate.geometricDistanceSquared;
       }
@@ -417,6 +407,12 @@ FilterCoarseSearchStats filter_coarse_search_by_range(FilterCoarseSearchProcRela
                                              geometricDistanceSquared, isWithinGeometricTolerance,
                                              ii, bestCandidate);
       }
+
+      ++ii;
+    }
+
+    if( forceUseCentroid ) {
+      stats.numGeometricDistanceFailures++;
     }
 
     bool ignoredNearest = false;
@@ -518,6 +514,12 @@ void filter_coarse_search(const std::string& name,
                           FilterCoarseSearchResult<RECVMESH>& filterResult)
 //ENDfilter_coarse_search_impl
 {
+  bool sendMeshHasAcquiredFieldData = sendMesh.has_acquired_field_data();
+  bool recvMeshHasAcquiredFieldData = recvMesh.has_acquired_field_data();
+
+  if(!sendMeshHasAcquiredFieldData) sendMesh.acquire_field_data();
+  if(!recvMeshHasAcquiredFieldData) recvMesh.acquire_field_data();
+
   const double parametricTol = recvMesh.get_parametric_tolerance();
   const double geometricTol = recvMesh.get_search_tolerance();
   impl::FilterCoarseSearchStats stats = impl::filter_coarse_search_by_range(rangeToDomain, sendMesh, recvMesh,
@@ -528,6 +530,14 @@ void filter_coarse_search(const std::string& name,
 
   stats.numEntitiesWithinTolerance = stk::get_global_sum(sendMesh.comm(), stats.numEntitiesWithinTolerance);
   stats.numEntitiesOutsideTolerance = stk::get_global_sum(sendMesh.comm(), stats.numEntitiesOutsideTolerance);
+  stats.numGeometricDistanceFailures = stk::get_global_sum(sendMesh.comm(), stats.numGeometricDistanceFailures);
+
+  if(stats.numGeometricDistanceFailures) {
+    stk::RuntimeWarningP0() 
+      << "The geometric distance search failed for " 
+      << stats.numGeometricDistanceFailures 
+      << " entities and fell back to a centroid distance search\n";
+  }
 
   if(stats.numEntitiesOutsideTolerance) {
 
@@ -547,6 +557,9 @@ void filter_coarse_search(const std::string& name,
       throw std::runtime_error("Aborting search due to user specified option");
     }
   }
+
+  if(!sendMeshHasAcquiredFieldData) sendMesh.release_field_data();
+  if(!recvMeshHasAcquiredFieldData) recvMesh.release_field_data();
 }
 
 }}

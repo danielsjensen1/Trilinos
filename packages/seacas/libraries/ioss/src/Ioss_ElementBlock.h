@@ -1,4 +1,4 @@
-// Copyright(C) 1999-2024 National Technology & Engineering Solutions
+// Copyright(C) 1999-2025 National Technology & Engineering Solutions
 // of Sandia, LLC (NTESS).  Under the terms of Contract DE-NA0003525 with
 // NTESS, the U.S. Government retains certain rights in this software.
 //
@@ -25,7 +25,7 @@ namespace Ioss {
 
   /** \brief A collection of elements having the same topology.
    */
-  class IOSS_EXPORT ElementBlock : public EntityBlock
+  class IOSS_EXPORT ElementBlock final : public EntityBlock
   {
   public:
     ElementBlock(DatabaseIO *io_database, const std::string &my_name,
@@ -43,8 +43,8 @@ namespace Ioss {
     // An example would be 'element_block_count' for a region.
     IOSS_NODISCARD Property get_implicit_property(const std::string &my_name) const override;
 
-    IOSS_NODISCARD std::vector<std::string> get_block_adjacencies() const;
-    void get_block_adjacencies(std::vector<std::string> &block_adjacency) const;
+    IOSS_NODISCARD Ioss::NameList get_block_adjacencies() const;
+    void                          get_block_adjacencies(Ioss::NameList &block_adjacency) const;
     IOSS_NODISCARD AxisAlignedBoundingBox get_bounding_box() const;
     IOSS_NODISCARD bool                   operator==(const Ioss::ElementBlock &rhs) const;
     IOSS_NODISCARD bool                   operator!=(const Ioss::ElementBlock &rhs) const;

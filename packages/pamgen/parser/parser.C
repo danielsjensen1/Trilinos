@@ -1,4 +1,11 @@
-// $Id$
+// @HEADER
+// *****************************************************************************
+//                     Pamgen Package
+//
+// Copyright 2004 NTESS and the Pamgen contributors.
+// SPDX-License-Identifier: LGPL-2.1-or-later
+// *****************************************************************************
+// @HEADER
 
 #include "keyword.h"
 #include "parser.h"
@@ -129,7 +136,15 @@ void Check_for_Ambiguity(Token_Stream *token_stream,
   // The keyword table must be sorted if this function is to work properly.
 
   int error_flag = 0;
+  // See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=105329
+#if defined(__GNUC__) && __GNUC__ == 12
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wrestrict"
+#endif
   string matches = " " + string(match->name);
+  #if defined(__GNUC__) && __GNUC__ == 12
+#pragma GCC diagnostic pop
+#endif
 
   // Check if match is an exact match.  There can only be one exact match
   // unless the keyword table itself is ambiguous, which is ruled out
@@ -148,7 +163,15 @@ void Check_for_Ambiguity(Token_Stream *token_stream,
       return;
     }
     error_flag++;
+    // See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=105329
+#if defined(__GNUC__) && __GNUC__ == 12
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wrestrict"
+#endif
     matches = " " + string(p->name) + " " + matches;
+#if defined(__GNUC__) && __GNUC__ == 12
+#pragma GCC diagnostic pop
+#endif
     --p;
   }
 
@@ -161,7 +184,15 @@ void Check_for_Ambiguity(Token_Stream *token_stream,
       return;
     }
     error_flag++;
+    // See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=105329
+#if defined(__GNUC__) && __GNUC__ == 12
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wrestrict"
+#endif
     matches += " " + string(p->name);
+#if defined(__GNUC__) && __GNUC__ == 12
+#pragma GCC diagnostic pop
+#endif
     p++;
   }
 

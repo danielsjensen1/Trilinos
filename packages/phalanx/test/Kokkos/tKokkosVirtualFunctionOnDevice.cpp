@@ -1,44 +1,11 @@
 // @HEADER
-// ************************************************************************
-//
-//        Phalanx: A Partial Differential Equation Field Evaluation
+// *****************************************************************************
+//        Phalanx: A Partial Differential Equation Field Evaluation 
 //       Kernel for Flexible Management of Complex Dependency Chains
-//                    Copyright 2008 Sandia Corporation
 //
-// Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
-// license for use of this work by or on behalf of the U.S. Government.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Roger Pawlowski (rppawlo@sandia.gov), Sandia
-// National Laboratories.
-//
-// ************************************************************************
+// Copyright 2008 NTESS and the Phalanx contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #include "Teuchos_Assert.hpp"
@@ -79,12 +46,13 @@ namespace phalanx_test {
 
   // Derived class
   class IdealGasLaw : public EquationOfState {
-    double mass_;  // mass
+    // double mass_;  // mass
     double gamma_; // ratio of specific heats
-    double r_;     // Boltzmann constant
+    // double r_;     // Boltzmann constant
   public:
     KOKKOS_FUNCTION
-    IdealGasLaw() : mass_(28.0), gamma_(5./3.), r_(1.38066e-23) {}
+    // IdealGasLaw() : mass_(28.0), gamma_(5./3.), r_(1.38066e-23) {}
+    IdealGasLaw() : gamma_(5./3.) {}
 
     KOKKOS_FUNCTION
     double a(const double& rho,
@@ -117,7 +85,7 @@ namespace phalanx_test {
                                  const PHX::View<double***> p,
                                  const PHX::View<double**> rho_e,
                                  const PHX::View<double**> /* residual */) {
-    auto policy = Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0,0},{rho.extent(0),rho.extent(1)});
+    auto policy = Kokkos::MDRangePolicy<PHX::ExecutionSpace,Kokkos::Rank<2>>({0,0},{rho.extent(0),rho.extent(1)});
     EOS eos;
     Kokkos::parallel_for(policy,KOKKOS_LAMBDA (const int cell, const int pt) {
         double P = 0.0;
@@ -146,7 +114,7 @@ namespace phalanx_test {
                                    const PHX::View<double**> /* residual */,
                                    EquationOfState* eos_ptr) {
 
-    auto policy = Kokkos::MDRangePolicy<Kokkos::Rank<2>>({0,0},{rho.extent(0),rho.extent(1)});
+    auto policy = Kokkos::MDRangePolicy<PHX::ExecutionSpace,Kokkos::Rank<2>>({0,0},{rho.extent(0),rho.extent(1)});
     Kokkos::parallel_for(policy,KOKKOS_LAMBDA (const int cell, const int pt) {
 
         double P = 0.0;
@@ -202,7 +170,7 @@ namespace phalanx_test {
       Teuchos::RCP<Teuchos::Time> timer = Teuchos::TimeMonitor::getNewTimer("Inheritance");
       Teuchos::TimeMonitor tm(*timer);
       auto eos_host = Teuchos::rcp(new IdealGasLaw);
-      auto eos_device = PHX::copy_virtual_class_to_device<Kokkos::Device<PHX::ExecSpace,PHX::MemSpace>,IdealGasLaw>(*eos_host);
+      auto eos_device = PHX::copy_virtual_class_to_device<Kokkos::Device<PHX::ExecutionSpace,PHX::MemorySpace>,IdealGasLaw>(*eos_host);
       evaluateResidualInheritance(rho,p,rho_e,residual,eos_device.get());
       Kokkos::fence();
     }
@@ -251,13 +219,13 @@ namespace phalanx_test {
     std::vector<std::shared_ptr<BaseSum>> device_functors(num_functors);
     {
       DerivedSum<1> df1;
-      device_functors[0] = PHX::copy_virtual_class_to_device<Kokkos::Device<PHX::ExecSpace,PHX::MemSpace>,DerivedSum<1>>(df1);
+      device_functors[0] = PHX::copy_virtual_class_to_device<Kokkos::Device<PHX::ExecutionSpace,PHX::MemorySpace>,DerivedSum<1>>(df1);
       DerivedSum<2> df2;
-      device_functors[1] = PHX::copy_virtual_class_to_device<Kokkos::Device<PHX::ExecSpace,PHX::MemSpace>,DerivedSum<2>>(df2);
+      device_functors[1] = PHX::copy_virtual_class_to_device<Kokkos::Device<PHX::ExecutionSpace,PHX::MemorySpace>,DerivedSum<2>>(df2);
       DerivedSum<3> df3;
-      device_functors[2] = PHX::copy_virtual_class_to_device<Kokkos::Device<PHX::ExecSpace,PHX::MemSpace>,DerivedSum<3>>(df3);
+      device_functors[2] = PHX::copy_virtual_class_to_device<Kokkos::Device<PHX::ExecutionSpace,PHX::MemorySpace>,DerivedSum<3>>(df3);
       DerivedSum<4> df4;
-      device_functors[3] = PHX::copy_virtual_class_to_device<Kokkos::Device<PHX::ExecSpace,PHX::MemSpace>,DerivedSum<4>>(df4);
+      device_functors[3] = PHX::copy_virtual_class_to_device<Kokkos::Device<PHX::ExecutionSpace,PHX::MemorySpace>,DerivedSum<4>>(df4);
     }
 
     // Create a view of virtual base class pointers
@@ -268,7 +236,7 @@ namespace phalanx_test {
     Kokkos::deep_copy(sum_into_functors,host_sum_into_functors);
 
     // Run the functors on device
-    Kokkos::parallel_for("do sum into functors",Kokkos::RangePolicy<PHX::Device>(0,a.extent(0)),
+    Kokkos::parallel_for("do sum into functors",Kokkos::RangePolicy<PHX::ExecutionSpace>(0,a.extent(0)),
                          KOKKOS_LAMBDA (const int i) {
                            for (int functor=0; functor < num_functors; ++functor)
                              sum_into_functors(functor).ptr->sumInto(a(i));

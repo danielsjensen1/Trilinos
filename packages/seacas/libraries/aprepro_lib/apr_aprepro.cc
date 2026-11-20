@@ -1,4 +1,4 @@
-// Copyright(C) 1999-2023 National Technology & Engineering Solutions
+// Copyright(C) 1999-2025 National Technology & Engineering Solutions
 // of Sandia, LLC (NTESS).  Under the terms of Contract DE-NA0003525 with
 // NTESS, the U.S. Government retains certain rights in this software.
 //
@@ -8,13 +8,12 @@
 #include "apr_util.h"
 #include "aprepro.h"        // for Aprepro, symrec, file_rec, etc
 #include "aprepro_parser.h" // for Parser, Parser::token, etc
-#include "terminal_color.h"
-#if defined(FMT_SUPPORT)
-#include <fmt/ostream.h>
-#endif
 #include <cstdio>
-#include <cstdlib>  // for exit, EXIT_SUCCESS, etc
-#include <cstring>  // for strcmp
+#include <cstdlib> // for exit, EXIT_SUCCESS, etc
+#include <cstring> // for strcmp
+#include <fmt/color.h>
+#include <fmt/format.h>
+#include <fmt/ostream.h>
 #include <fstream>  // for operator<<, basic_ostream, etc
 #include <iomanip>  // for operator<<, setw, etc
 #include <iostream> // for left, cerr, cout, streampos
@@ -34,8 +33,8 @@
 #endif
 
 namespace {
-  const std::string version_short{"6.25"};
-  const std::string version_date{"(2023/10/12)"};
+  const std::string version_short{"6.41"};
+  const std::string version_date{"(2025/08/25)"};
   const std::string version_string = version_short + " " + version_date;
 
   void output_copyright();
@@ -52,6 +51,16 @@ namespace {
       value = optional_value;
     }
     return value;
+  }
+
+  void format_option(std::string_view option, std::string_view short_opt,
+                     std::string_view description)
+  {
+    fmt::print(stderr, fmt::emphasis::bold, "{}", option);
+    if (!short_opt.empty()) {
+      fmt::print(stderr, " or {}", fmt::styled(short_opt, fmt::emphasis::bold));
+    }
+    fmt::print(stderr, ":  {}\n", description);
   }
 } // namespace
 
@@ -138,7 +147,7 @@ namespace SEAMS {
 
   std::string Aprepro::long_version() const
   {
-    auto comment = getsym("_C_")->value.svar;
+    const auto &comment = getsym("_C_")->value.svar;
     return comment + " Algebraic Preprocessor (Aprepro) version " + version();
   }
 
@@ -223,27 +232,19 @@ namespace SEAMS {
 
   void Aprepro::error(const std::string &msg, bool line_info, bool prefix) const
   {
-    bool              colorize = (errorStream == &std::cerr) && isatty(fileno(stderr));
-    std::stringstream ss;
-    if (prefix) {
-      if (colorize) {
-        (*errorStream) << trmclr::red;
-      }
-      (*errorStream) << "Aprepro-" << short_version() << ": ERROR: ";
-    }
+    bool        colorize = (errorStream == &std::cerr) && isatty(fileno(stderr));
+    std::string message  = prefix ? fmt::format("Aprepro-{}: ERROR: {}", short_version(), msg)
+                                  : fmt::format("{}", msg);
+    std::string lines    = line_info ? fmt::format(" ({}, line {})", ap_file_list.top().name,
+                                                   ap_file_list.top().lineno)
+                                     : "";
 
-    ss << msg;
-    if (prefix && colorize) {
-      ss << trmclr::normal;
+    if (colorize) {
+      fmt::print(*errorStream, "{}{}\n", fmt::styled(message, fmt::fg(fmt::color::red)), lines);
     }
-
-    if (line_info) {
-      ss << " (" << ap_file_list.top().name << ", line " << ap_file_list.top().lineno << ")";
+    else {
+      fmt::print(*errorStream, "{}{}\n", message, lines);
     }
-    ss << "\n";
-
-    // Send it to the user defined stream
-    (*errorStream) << ss.str();
     parseErrorCount++;
   }
 
@@ -253,28 +254,20 @@ namespace SEAMS {
       return;
     }
 
-    bool              colorize = (warningStream == &std::cerr) && isatty(fileno(stderr));
-    std::stringstream ss;
-    if (prefix) {
-      if (colorize) {
-        (*warningStream) << trmclr::yellow;
-      }
-      (*warningStream) << "Aprepro: WARNING: ";
+    bool        colorize = (warningStream == &std::cerr) && isatty(fileno(stderr));
+    std::string message =
+        prefix ? fmt::format("Aprepro: WARNING: {}", msg) : fmt::format("{}", msg);
+    std::string lines = line_info ? fmt::format(" ({}, line {})", ap_file_list.top().name,
+                                                ap_file_list.top().lineno)
+                                  : "";
+
+    if (colorize) {
+      fmt::print(*warningStream, "{}{}\n", fmt::styled(message, fmt::fg(fmt::color::yellow)),
+                 lines);
     }
-
-    ss << msg;
-
-    if (prefix && colorize) {
-      ss << trmclr::normal;
+    else {
+      fmt::print(*warningStream, "{}{}\n", message, lines);
     }
-
-    if (line_info) {
-      ss << " (" << ap_file_list.top().name << ", line " << ap_file_list.top().lineno << ")";
-    }
-    ss << "\n";
-
-    // Send it to the user defined stream
-    (*warningStream) << ss.str();
     parseWarningCount++;
   }
 
@@ -284,27 +277,18 @@ namespace SEAMS {
       return;
     }
 
-    bool              colorize = (infoStream == &std::cout) && isatty(fileno(stdout));
-    std::stringstream ss;
-    if (prefix) {
-      if (colorize) {
-        (*infoStream) << trmclr::blue;
-      }
-      (*infoStream) << "Aprepro: INFO: ";
-    }
-    ss << msg;
+    bool        colorize = (infoStream == &std::cout) && isatty(fileno(stdout));
+    std::string message  = prefix ? fmt::format("Aprepro: INFO: {}", msg) : fmt::format("{}", msg);
+    std::string lines    = line_info ? fmt::format(" ({}, line {})", ap_file_list.top().name,
+                                                   ap_file_list.top().lineno)
+                                     : "";
 
-    if (prefix && colorize) {
-      ss << trmclr::normal;
+    if (colorize) {
+      fmt::print(*infoStream, "{}{}\n", fmt::styled(message, fmt::fg(fmt::color::blue)), lines);
     }
-
-    if (line_info) {
-      ss << " (" << ap_file_list.top().name << ", line " << ap_file_list.top().lineno << ")";
+    else {
+      fmt::print(*infoStream, "{}{}\n", message, lines);
     }
-    ss << "\n";
-
-    // Send it to the user defined stream
-    (*infoStream) << ss.str();
   }
 
   void Aprepro::set_error_streams(std::ostream *c_error, std::ostream *c_warning,
@@ -473,7 +457,7 @@ namespace SEAMS {
                       const std::string &short_opt, size_t min_length)
     {
       // See if `option` starts with 1 or 2 leading `-`.
-      int number_dash = option[0] == '-' ? (option[1] == '-' ? 2 : 1) : 0;
+      size_t number_dash = option[0] == '-' ? (option[1] == '-' ? 2 : 1) : 0;
 
       // See if `option` contains a `=`, save position...
       auto equals = option.find('=');
@@ -606,55 +590,69 @@ namespace SEAMS {
         ptr->value.svar = "";
       }
     }
+    else if (match_option(option, "legacy_output_format", "L", 6)) {
+      symrec *ptr = getsym("_FORMAT");
+      if (ptr != nullptr) {
+        ptr->value.svar = "%.10g";
+      }
+    }
 
     else if (match_option(option, "help", "h", 3)) {
-      std::cerr
-          << "\nAprepro version " << version() << "\n"
-          << "\nUsage: aprepro [options] [-I path] [-c char] [var=val] [filein] [fileout]\n"
-          << "          --debug or -d: Dump all variables, debug loops/if/endif and keep temporary "
-             "files\n"
-          << "       --dumpvars or -D: Dump all variables at end of run        \n"
-          << "  --dumpvars_json or -J: Dump all variables at end of run in json format\n"
-          << "        --version or -v: Print version number to stderr          \n"
-          << "      --immutable or -X: All variables are immutable--cannot be modified\n"
-          << "   --errors_fatal or -f: Exit program with nonzero status if errors are "
-             "encountered\n"
-          << " --errors_and_warnings_fatal or -F: Exit program with nonzero status if "
-             "warnings are encountered\n"
-          << "--require_defined or -R: Treat undefined variable warnings as fatal\n"
-          << "--one_based_index or -1: Array indexing is one-based (default = zero-based)\n"
-          << "    --interactive or -i: Interactive use, no buffering           \n"
-          << "    --include=P or -I=P: Include file or include path            \n"
-          << "                       : If P is path, then optionally prepended to all include "
-             "filenames\n"
-          << "                       : If P is file, then processed before processing input file\n"
-          << "                       : variables defined in P will be immutable.\n"
-          << "        --exit_on or -e: End when 'Exit|EXIT|exit' entered       \n"
-          << "           --help or -h: Print this list                         \n"
-          << "        --message or -M: Print INFO messages                     \n"
-          << "            --info=file: Output INFO messages (e.g. DUMP() output) to file.\n"
-          << "      --nowarning or -W: Do not print WARN messages              \n"
-          << "  --comment=char or -c=char: Change comment character to 'char'  \n"
-#if defined(FMT_SUPPORT)
-          << "    --full_precision -p: Floating point output uses as many digits as needed.\n"
-#else
-          << "    --full_precision -p: (Not supported in this build) Floating point output uses as "
-             "many digits as needed.\n"
-#endif
-          << "      --copyright or -C: Print copyright message                 \n"
-          << "   --keep_history or -k: Keep a history of aprepro substitutions.\n"
-          << "                         (not for general interactive use)       \n"
-          << "          --quiet or -q: Do not print the header output line     \n"
-          << "                var=val: Assign value 'val' to variable 'var'    \n"
-          << "                         Use var=\\\"sval\\\" for a string variable. 'var' will be "
-             "immutable.\n\n"
-          << "\tUnits Systems: si, cgs, cgs-ev, shock, swap, ft-lbf-s, ft-lbm-s, in-lbf-s\n"
-          << "\tEnter {DUMP()} for list of user-defined variables\n"
-          << "\tEnter {DUMP_FUNC()} for list of functions recognized by aprepro\n"
-          << "\tEnter {DUMP_PREVAR()} for list of predefined variables in aprepro\n\n"
-          << "\tDocumentation: "
-             "https://sandialabs.github.io/seacas-docs/sphinx/html/index.html#aprepro\n\n"
-          << "\t->->-> Send email to gdsjaar@sandia.gov for aprepro support.\n\n";
+      fmt::print(stderr,
+                 "\nAprepro version {}\n\n"
+                 "\tUsage: aprepro [options] [-I path] [-c char] [var=val] [filein] [fileout]\n\n",
+                 version());
+
+      format_option("            --debug", "-d",
+                    "Dump all variables, debug loops/if/endif and keep temporary files");
+      format_option("         --dumpvars", "-D", "Dump all variables at end of run        ");
+      format_option("    --dumpvars_json", "-J", "Dump all variables at end of run in json format");
+      format_option("          --version", "-v", "Print version number to stderr          ");
+      format_option("        --immutable", "-X", "All variables are immutable--cannot be modified");
+      format_option("     --errors_fatal", "-f",
+                    "Exit program with nonzero status if errors are encountered");
+      format_option("--errors_and_warnings_fatal", "-F",
+                    "Exit program with nonzero status if warnings are encountered");
+      format_option("  --require_defined", "-R", "Treat undefined variable warnings as fatal");
+      format_option("  --one_based_index", "-1",
+                    "Array indexing is one-based (default = zero-based)");
+      format_option("      --interactive", "-i", "Interactive use, no buffering           ");
+      format_option("      --include=P", "-I=P", "Include file or include path            ");
+      format_option("                         ", "",
+                    "If P is path, then optionally prepended to all include filenames");
+      format_option("                         ", "",
+                    "If P is file, then processed before processing input file");
+      format_option("                         ", "", "variables defined in P will be immutable.");
+      format_option("          --exit_on", "-e", "End when 'Exit|EXIT|exit' entered       ");
+      format_option("             --help", "-h", "Print this list                         ");
+      format_option("          --message", "-M", "Print INFO messages                     ");
+      format_option("              --info=file", "",
+                    "Output INFO messages (e.g. DUMP() output) to file.");
+      format_option("        --nowarning", "-W", "Do not print WARN messages              ");
+      format_option("--comment=char", "-c=char", "Change comment character to 'char'  ");
+      format_option("   --full_precision", "-p",
+                    "Floating point output uses as many digits as needed. [default]");
+      format_option("--legacy_output_format", "-L",
+                    "Floating point output uses the legacy `%.10g` format.");
+      format_option("        --copyright", "-C", "Print copyright message                 ");
+      format_option("     --keep_history", "-k", "Keep a history of aprepro substitutions.");
+      format_option("                         ", "", "(not for general interactive use)       ");
+      format_option("            --quiet", "-q", "Do not print the header output line     ");
+      format_option("                  var=val", "", "Assign value 'val' to variable 'var'");
+      format_option("                         ", "",
+                    "Use var=\\\"sval\\\" for a string variable. 'var' will be immutable.\n");
+      fmt::print(stderr,
+                 "\tUnits Systems: si, cgs, cgs-ev, shock, swap, ft-lbf-s, ft-lbm-s, in-lbf-s\n");
+      fmt::print(stderr, "\tEnter {} for list of user-defined variables\n",
+                 fmt::styled("{{DUMP()}}", fmt::emphasis::bold));
+      fmt::print(stderr, "\tEnter {} for list of functions recognized by aprepro\n",
+                 fmt::styled("{{DUMP_FUNC()}}", fmt::emphasis::bold));
+      fmt::print(stderr, "\tEnter {} for list of predefined variables in aprepro\n\n",
+                 fmt::styled("{{DUMP_PREVAR()}}", fmt::emphasis::bold));
+      fmt::print(stderr,
+                 "\tDocumentation: "
+                 "https://sandialabs.github.io/seacas-docs/sphinx/html/index.html#aprepro\n\n"
+                 "\t->->-> Send email to sierra-help@sandia.gov for aprepro support.\n\n");
       exit(EXIT_SUCCESS);
     }
     else {
@@ -663,7 +661,7 @@ namespace SEAMS {
     return ret_value;
   }
 
-  array *Aprepro::make_array(int r, int c)
+  array *Aprepro::make_array(size_t r, size_t c)
   {
     auto ptr = new array(r, c);
     array_allocations.push_back(ptr);
@@ -813,13 +811,8 @@ namespace SEAMS {
     for (const auto &ptr : get_sorted_sym_table()) {
       if (!ptr->isInternal) {
         if (ptr->type == Parser::token::VAR || ptr->type == Parser::token::IMMVAR) {
-#if defined(FMT_SUPPORT)
           fmt::print((*infoStream), "{}{}\": {}", (first ? "\"" : ",\n\""), ptr->name,
                      ptr->value.var);
-#else
-          (*infoStream) << (first ? "\"" : ",\n\"") << ptr->name << "\": " << std::setprecision(10)
-                        << ptr->value.var;
-#endif
           first = false;
         }
         else if (ptr->type == Parser::token::UNDVAR) {
@@ -853,23 +846,12 @@ namespace SEAMS {
         if (spre.empty() || ptr->name.find(spre) != std::string::npos) {
           if (doInternal == ptr->isInternal) {
             if (ptr->type == Parser::token::VAR) {
-#if defined(FMT_SUPPORT)
               fmt::print((*infoStream), "{}  {{{:<{}}\t= {}}}\n", comment, ptr->name, width,
                          ptr->value.var);
-#else
-              (*infoStream) << comment << "  {" << std::left << std::setw(width) << ptr->name
-                            << "\t= " << std::setprecision(10) << ptr->value.var << "}" << '\n';
-#endif
             }
             else if (ptr->type == Parser::token::IMMVAR) {
-#if defined(FMT_SUPPORT)
               fmt::print((*infoStream), "{}  {{{:<{}}\t= {}}} (immutable)\n", comment, ptr->name,
                          width, ptr->value.var);
-#else
-              (*infoStream) << comment << "  {" << std::left << std::setw(width) << ptr->name
-                            << "\t= " << std::setprecision(10) << ptr->value.var << "} (immutable)"
-                            << '\n';
-#endif
             }
             else if (ptr->type == Parser::token::SVAR) {
               if (strchr(ptr->value.svar.c_str(), '\n') != nullptr ||
@@ -906,33 +888,35 @@ namespace SEAMS {
     else if (type == Parser::token::FNCT || type == Parser::token::SFNCT ||
              type == Parser::token::AFNCT) {
       int fwidth = 20; // controls spacing/padding for the function names
-      (*infoStream) << trmclr::blue << "\nFunctions returning double:" << trmclr::normal << '\n';
+      fmt::print(*infoStream, "{}",
+                 fmt::styled("\nFunctions returning double:\n", fmt::fg(fmt::color::cyan)));
       for (const auto &ptr : get_sorted_sym_table()) {
         if (spre.empty() || ptr->name.find(spre) != std::string::npos) {
           if (ptr->type == Parser::token::FNCT) {
-            (*infoStream) << std::left << trmclr::green << std::setw(fwidth) << ptr->syntax
-                          << trmclr::normal << ":  " << ptr->info << '\n';
+            fmt::print(*infoStream, "{:<{}}:  {}\n",
+                       fmt::styled(ptr->syntax, fmt::fg(fmt::color::lime)), fwidth, ptr->info);
           }
         }
       }
 
-      (*infoStream) << trmclr::blue << trmclr::blue
-                    << "\nFunctions returning string:" << trmclr::normal << '\n';
+      fmt::print(*infoStream, "{}",
+                 fmt::styled("\nFunctions returning string:\n", fmt::fg(fmt::color::cyan)));
       for (const auto &ptr : get_sorted_sym_table()) {
         if (spre.empty() || ptr->name.find(spre) != std::string::npos) {
           if (ptr->type == Parser::token::SFNCT) {
-            (*infoStream) << std::left << trmclr::green << std::setw(fwidth) << ptr->syntax
-                          << trmclr::normal << ":  " << ptr->info << '\n';
+            fmt::print(*infoStream, "{:<{}}:  {}\n",
+                       fmt::styled(ptr->syntax, fmt::fg(fmt::color::lime)), fwidth, ptr->info);
           }
         }
       }
 
-      (*infoStream) << trmclr::blue << "\nFunctions returning array:" << trmclr::normal << '\n';
+      fmt::print(*infoStream, "{}",
+                 fmt::styled("\nFunctions returning array:\n", fmt::fg(fmt::color::cyan)));
       for (const auto &ptr : get_sorted_sym_table()) {
         if (spre.empty() || ptr->name.find(spre) != std::string::npos) {
           if (ptr->type == Parser::token::AFNCT) {
-            (*infoStream) << std::left << trmclr::green << std::setw(fwidth) << ptr->syntax
-                          << trmclr::normal << ":  " << ptr->info << '\n';
+            fmt::print(*infoStream, "{:<{}}:  {}\n",
+                       fmt::styled(ptr->syntax, fmt::fg(fmt::color::lime)), fwidth, ptr->info);
           }
         }
       }

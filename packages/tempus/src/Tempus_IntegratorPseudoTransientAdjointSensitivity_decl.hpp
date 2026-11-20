@@ -1,10 +1,11 @@
-// @HEADER
-// ****************************************************************************
-//                Tempus: Copyright (2017) Sandia Corporation
+//@HEADER
+// *****************************************************************************
+//          Tempus: Time Integration and Sensitivity Analysis Package
 //
-// Distributed under BSD 3-clause license (See accompanying file Copyright.txt)
-// ****************************************************************************
-// @HEADER
+// Copyright 2017 NTESS and the Tempus contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+//@HEADER
 
 #ifndef Tempus_IntegratorPseudoTransientAdjointSensitivity_decl_hpp
 #define Tempus_IntegratorPseudoTransientAdjointSensitivity_decl_hpp
@@ -266,6 +267,11 @@ class IntegratorPseudoTransientAdjointSensitivity
       const Teuchos::RCP<Thyra::ModelEvaluator<Scalar> >&
           adjoint_residual_model,
       const Teuchos::RCP<Thyra::ModelEvaluator<Scalar> >& adjoint_solve_model,
+      const Teuchos::RCP<Teuchos::ParameterList>& inputPL);
+
+  // Parameters of the adjoint integrator: a copy of the parameters without
+  // the objects of the forward problem stored by its nonlinear solver
+  static Teuchos::RCP<Teuchos::ParameterList> adjointParameters(
       const Teuchos::RCP<Teuchos::ParameterList>& inputPL);
 
   void buildSolutionHistory();

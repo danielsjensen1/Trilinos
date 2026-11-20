@@ -1,43 +1,11 @@
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //           Panzer: A partial differential equation assembly
 //       engine for strongly coupled complex multiphysics systems
-//                 Copyright (2011) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Roger P. Pawlowski (rppawlo@sandia.gov) and
-// Eric C. Cyr (eccyr@sandia.gov)
-// ***********************************************************************
+// Copyright 2011 NTESS and the Panzer contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #ifndef PANZER_STK_IOCLOSURE_MODEL_FACTORY_DECL_HPP
@@ -58,19 +26,52 @@ namespace panzer {
 
 namespace panzer_stk {
 
+  /** \brief A panzer::ClosureModelFactory decorator that provides
+    * evaluators for writing fields to exodus files. Wraps a user
+    * closure model factory. buildClosureModels() delegates to the
+    * wrapped factory for every evaluation type; the
+    * panzer::Traits::Residual specialization additionally builds the
+    * scatter evaluators needed to write selected nodal/cell fields
+    * out to the STK mesh for visualization/output, since output only
+    * needs to happen once per workset regardless of evaluation type.
+    */
   template<typename EvalT>
   class IOClosureModelFactory : public panzer::ClosureModelFactory<EvalT> {
   public:
 
+    /** \brief Construct with the fields to write specified via an output ParameterList (parsed with parseOutputList()).
+      *
+      * \param[in] userCMF_ the wrapped closure model factory to delegate buildClosureModels() calls to.
+      * \param[in] mesh the STK mesh to write output fields to.
+      * \param[in] outputList ParameterList naming the fields to write out.
+      */
     IOClosureModelFactory(const Teuchos::RCP<const panzer::ClosureModelFactory<EvalT> > userCMF_,
                           const Teuchos::RCP<STK_Interface> & mesh,
                           const Teuchos::ParameterList & outputList);
 
+    /** \brief Construct with the fields to write specified explicitly, split into nodal and cell fields per element block.
+      *
+      * \param[in] userCMF_ the wrapped closure model factory to delegate buildClosureModels() calls to.
+      * \param[in] mesh the STK mesh to write output fields to.
+      * \param[in] nodalFields nodal field names to write out, keyed by element block ID.
+      * \param[in] cellFields cell (element-averaged) field names to write out, keyed by element block ID.
+      */
     IOClosureModelFactory(const Teuchos::RCP<const panzer::ClosureModelFactory<EvalT> > userCMF_,
                           const Teuchos::RCP<STK_Interface> & mesh,
                           const std::map<std::string,std::vector<std::string> > & nodalFields,
                           const std::map<std::string,std::vector<std::string> > & cellFields);
 
+    /** \brief Delegates to the wrapped factory's buildClosureModels() for the named model.
+      *
+      * \param[in] model_id the closure model ID to build; selects which sublist of models to use.
+      * \param[in] models ParameterList of named closure model sublists, keyed by model ID.
+      * \param[in] fl the field layouts available for the current physics block.
+      * \param[in] ir the integration rule the built evaluators should evaluate on.
+      * \param[in] default_params equation-set-level parameters used as defaults when building closures.
+      * \param[in] user_data user-supplied parameters passed through to closures that need additional application data.
+      * \param[in] global_data global data (parameter library, output stream) shared across the problem.
+      * \param[in] fm the field manager the built evaluators will be registered into.
+      */
     Teuchos::RCP< std::vector< Teuchos::RCP<PHX::Evaluator<panzer::Traits> > > >
     buildClosureModels(const std::string& model_id,
 		       const Teuchos::ParameterList& models,
@@ -114,6 +115,17 @@ namespace panzer_stk {
     Teuchos::RCP<const panzer::ClosureModelFactory<EvalT> > userCMF_;
   };
 
+  /** \brief Delegates to the wrapped factory's buildClosureModels() for the named model, then adds the scatter-to-mesh evaluators needed for the fields requested at construction.
+    *
+    * \param[in] model_id the closure model ID to build; selects which sublist of models to use.
+    * \param[in] models ParameterList of named closure model sublists, keyed by model ID.
+    * \param[in] fl the field layouts available for the current physics block.
+    * \param[in] ir the integration rule the built evaluators should evaluate on.
+    * \param[in] default_params equation-set-level parameters used as defaults when building closures.
+    * \param[in] user_data user-supplied parameters passed through to closures that need additional application data.
+    * \param[in] global_data global data (parameter library, output stream) shared across the problem.
+    * \param[in] fm the field manager the built evaluators will be registered into.
+    */
   template < >
   Teuchos::RCP< std::vector< Teuchos::RCP<PHX::Evaluator<panzer::Traits> > > >
   panzer_stk::IOClosureModelFactory<panzer::Traits::Residual>::buildClosureModels(const std::string& model_id,

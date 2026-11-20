@@ -1,30 +1,10 @@
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //                           Sacado Package
-//                 Copyright (2006) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// This library is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as
-// published by the Free Software Foundation; either version 2.1 of the
-// License, or (at your option) any later version.
-//
-// This library is distributed in the hope that it will be useful, but
-// WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-// Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public
-// License along with this library; if not, write to the Free Software
-// Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301
-// USA
-// Questions? Contact David M. Gay (dmgay@sandia.gov) or Eric T. Phipps
-// (etphipp@sandia.gov).
-//
-// ***********************************************************************
+// Copyright 2006 NTESS and the Sacado contributors.
+// SPDX-License-Identifier: LGPL-2.1-or-later
+// *****************************************************************************
 // @HEADER
 
 #include "Sacado.hpp"
@@ -83,7 +63,7 @@ void run_fad_scratch(const FluxView& flux, const WgbView& wgb,
 
   const int vector_size  = 1;
   const int team_size    = is_cuda_space<execution_space>::value ? 32 : 1;
-  const int fad_size     = Kokkos::dimension_scalar(residual);
+  const int fad_size     = Sacado::dimension_scalar(residual);
   const size_t range     = (num_cells+team_size-1)/team_size;
   const size_t bytes     = 2*tmp_scratch_type::shmem_size(team_size,fad_size);
   policy_type policy(range,team_size,vector_size);

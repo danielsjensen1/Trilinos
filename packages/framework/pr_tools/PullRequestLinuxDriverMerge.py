@@ -2,22 +2,16 @@
 # -*- mode: python; py-indent-offset: 4; py-continuation-offset: 4 -*-
 # Change above to '/usr/bin/python -3' for python 3.x porting warnings
 """
-This script drives a PR testing build.  It assume that Trilinos is already
-cloned under $PWD/Trilinos and that the 'origin' remote points to
-$TRILINOS_TARGET_REPO (but that is not checked here).
+This script does the source -> target merge process for a PR CI process.
 
-As long as the ${PWD}/Trilinos git repo has the correct 'origin', this
+It assumes that Trilinos is already cloned and that the 'origin' remote
+points to the target repository (e.g. `github.com/trilinos/Trilinos.git`).
+
+As long as the Trilinos git repo has the correct 'origin', this
 script will automatically set it up to do the merge correctly, no matter
 what its state before this script is called (i.e. from a past PR
 attempt). Unless the Trilinos/.git directory becomes corrupted, there should
 *NEVER* be any need to delete and reclone this Trilinos git repo.
-
-This script can be run in a mode where the driver scripts are run from one
-Trilinos git repo and operate on another Trilinos git repo that gets
-manipulated in order to merge the "source" topic branch into the "target"
-branch.  This makes it easy to test changes to the PR scripts.  But if this
-script is run from ${PWD}/Trilinos, then these repos are one and the same
-and we get the correct behavior for PR testing.
 """
 from __future__ import print_function
 import sys
@@ -167,9 +161,9 @@ def merge_branch(source_url, target_branch, sourceSHA):
     check_call_wrapper(['git', 'reset', '--hard', 'HEAD'])
     check_call_wrapper(['git', 'checkout', '-B', target_branch, 'origin/' + target_branch])
 
-    sha_exists_as_branch_on_remote = bool(subprocess.check_output('git rev-parse --verify --quiet source_remote/' + sourceSHA + ' || true', shell=True))
+    sha_exists_as_branch_on_remote = subprocess.run(['git', 'rev-parse', '--verify', '--quiet', 'source_remote/' + sourceSHA])
 
-    if sha_exists_as_branch_on_remote:
+    if sha_exists_as_branch_on_remote.returncode == 0:
         print_wrapper("REMARK: Detected ref as a remote branch, will merge as such")
         check_call_wrapper(['git', 'merge', '--no-ff', '--no-edit', "source_remote/" + sourceSHA])
     else:

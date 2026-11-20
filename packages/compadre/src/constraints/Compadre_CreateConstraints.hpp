@@ -1,3 +1,11 @@
+// @HEADER
+// *****************************************************************************
+//     Compadre: COMpatible PArticle Discretization and REmap Toolkit
+//
+// Copyright 2018 NTESS and the Compadre contributors.
+// SPDX-License-Identifier: BSD-2-Clause
+// *****************************************************************************
+// @HEADER
 #ifndef _CREATE_CONSTRAINTS_
 #define _CREATE_CONSTRAINTS_
 
@@ -6,7 +14,7 @@
 namespace Compadre {
 
 KOKKOS_INLINE_FUNCTION
-void evaluateConstraints(scratch_matrix_right_type M, scratch_matrix_right_type PsqrtW, const ConstraintType constraint_type, const ReconstructionSpace reconstruction_space, const int NP, const double cutoff_p, const int dimension, const int num_neighbors = 0, scratch_matrix_right_type* T = NULL) {
+void evaluateConstraints(device_unmanaged_matrix_right_type M, device_unmanaged_matrix_right_type PsqrtW, const ConstraintType constraint_type, const ReconstructionSpace reconstruction_space, const int NP, const double cutoff_p, const int dimension, const int num_neighbors = 0, device_unmanaged_matrix_right_type* T = NULL) {
     if (constraint_type == ConstraintType::NEUMANN_GRAD_SCALAR) {
         if (reconstruction_space == ReconstructionSpace::ScalarTaylorPolynomial 
                 || reconstruction_space == ReconstructionSpace::VectorOfScalarClonesTaylorPolynomial) {

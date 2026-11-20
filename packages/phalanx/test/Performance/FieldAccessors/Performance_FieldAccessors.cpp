@@ -1,44 +1,11 @@
 // @HEADER
-// ************************************************************************
-//
-//        Phalanx: A Partial Differential Equation Field Evaluation
+// *****************************************************************************
+//        Phalanx: A Partial Differential Equation Field Evaluation 
 //       Kernel for Flexible Management of Complex Dependency Chains
-//                    Copyright 2008 Sandia Corporation
 //
-// Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
-// license for use of this work by or on behalf of the U.S. Government.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Roger Pawlowski (rppawlo@sandia.gov), Sandia
-// National Laboratories.
-//
-// ************************************************************************
+// Copyright 2008 NTESS and the Phalanx contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #include "Teuchos_RCP.hpp"
@@ -72,7 +39,7 @@
 
 PHX_EXTENT(P)
 
-using size_type = PHX::exec_space::size_type;
+using size_type = PHX::ExecutionSpace::size_type;
 
 template <typename Scalar,typename Device,typename Array>
 class ComputeA {
@@ -80,7 +47,7 @@ class ComputeA {
   Array b_;
   Array c_;
 public:
-  typedef PHX::Device execution_space;
+  typedef PHX::ExecutionSpace execution_space;
 
   ComputeA(Array& a,Array& b,Array& c)
   : a_(a), b_(b), c_(c)
@@ -111,8 +78,8 @@ TEUCHOS_UNIT_TEST(performance, ArrayAccessor)
   RCP<Time> k_time_pf_static = TimeMonitor::getNewTimer("KokkosView<double[][][]>(device="+PHX::print<PHX::Device>()+")");
 
   std::cout << std::endl << std::endl
-            << "PHX::Device::size_type = "
-            << PHX::print<PHX::exec_space::size_type>()
+            << "PHX::ExecutionSpace::size_type = "
+            << PHX::print<PHX::ExecutionSpace::size_type>()
             << std::endl;
 
   std::cout << "PHX::index_size_type = "
@@ -125,10 +92,10 @@ TEUCHOS_UNIT_TEST(performance, ArrayAccessor)
   // slower.
   // const size_type num_loops = 1;
   // const size_type num_cells = 10000000;
-  // using kokkos_field_static = Kokkos::View<double[10000000][25][4],PHX::MemSpace>;
+  // using kokkos_field_static = Kokkos::View<double[10000000][25][4],PHX::MemorySpace>;
   const size_type num_loops = 1;
   const size_type num_cells = 100;
-  using kokkos_field_static = Kokkos::View<double[100][25][4],PHX::MemSpace>;
+  using kokkos_field_static = Kokkos::View<double[100][25][4],PHX::MemorySpace>;
   const size_type num_ip = 25;
   const size_type num_dim = 4;
 
@@ -145,8 +112,8 @@ TEUCHOS_UNIT_TEST(performance, ArrayAccessor)
     cout << "MDField Compiletime Rank" << endl;
     TimeMonitor tm(*phx_ct_time_pf);
     for (size_type l=0; l < num_loops; ++l) {
-      Kokkos::parallel_for("MDField (Compiletime Rank)",num_cells,ComputeA<double,PHX::ExecSpace,phx_ct_field> (a,b,c));
-      typename PHX::Device().fence();
+      Kokkos::parallel_for("MDField (Compiletime Rank)",num_cells,ComputeA<double,PHX::ExecutionSpace,phx_ct_field> (a,b,c));
+      typename PHX::ExecutionSpace().fence();
     }
   }
 
@@ -162,8 +129,8 @@ TEUCHOS_UNIT_TEST(performance, ArrayAccessor)
     cout << "MDField Runtime Rank" << endl;
     TimeMonitor tm(*phx_rt_time_pf);
     for (size_type l=0; l < num_loops; ++l) {
-      Kokkos::parallel_for("MDField (Runtime Rank)",num_cells,ComputeA<double,PHX::ExecSpace,phx_rt_field> (a,b,c));
-      typename PHX::Device().fence();
+      Kokkos::parallel_for("MDField (Runtime Rank)",num_cells,ComputeA<double,PHX::ExecutionSpace,phx_rt_field> (a,b,c));
+      typename PHX::ExecutionSpace().fence();
     }
   }
 
@@ -180,7 +147,7 @@ TEUCHOS_UNIT_TEST(performance, ArrayAccessor)
     TimeMonitor tm(*k_time_pf);
     for (size_type l=0; l < num_loops; ++l)
       Kokkos::parallel_for("Kokkos View",num_cells,ComputeA<double,PHX::Device,kokkos_field>(a,b,c));
-    typename PHX::Device().fence();
+    typename PHX::ExecutionSpace().fence();
   }
 
   // Static Kokkos View
@@ -197,7 +164,7 @@ TEUCHOS_UNIT_TEST(performance, ArrayAccessor)
     TimeMonitor tm(*k_time_pf_static);
     for (size_type l=0; l < num_loops; ++l)
       Kokkos::parallel_for("Kokkos Static View",num_cells,ComputeA<double,PHX::Device,kokkos_field_static>(a,b,c));
-    typename PHX::Device().fence();
+    typename PHX::ExecutionSpace().fence();
   }
 
   TimeMonitor::summarize();

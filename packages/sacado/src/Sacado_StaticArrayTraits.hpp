@@ -1,30 +1,10 @@
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //                           Sacado Package
-//                 Copyright (2006) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// This library is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as
-// published by the Free Software Foundation; either version 2.1 of the
-// License, or (at your option) any later version.
-//
-// This library is distributed in the hope that it will be useful, but
-// WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-// Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public
-// License along with this library; if not, write to the Free Software
-// Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301
-// USA
-// Questions? Contact David M. Gay (dmgay@sandia.gov) or Eric T. Phipps
-// (etphipp@sandia.gov).
-//
-// ***********************************************************************
+// Copyright 2006 NTESS and the Sacado contributors.
+// SPDX-License-Identifier: LGPL-2.1-or-later
+// *****************************************************************************
 // @HEADER
 
 #ifndef SACADO_STATICARRAYTRAITS_HPP
@@ -67,25 +47,37 @@ namespace Sacado {
     //! Copy array from \c src to \c dest of length \c sz
     SACADO_INLINE_FUNCTION
     static void copy(const T* src, T* dest, int sz) {
-      if (sz > 0)
-#if defined( __CUDACC__) || defined(__HIPCC__ )
+      if (sz > 0) {
+#if defined( __CUDACC__) || defined(__HIPCC__ ) || defined(__SYCL_DEVICE_ONLY__)
         for (int i=0; i<sz; ++i)
           dest[i] = src[i];
 #else
-        std::memcpy(dest,src,sz*sizeof(T));
+        if constexpr (std::is_trivially_copyable_v<T>) {
+          std::memcpy(dest,src,sz*sizeof(T));
+        } else {
+          for (int i=0; i<sz; ++i)
+            dest[i] = src[i];
+        }
 #endif
+      }
     }
 
     //! Zero out array \c dest of length \c sz
     SACADO_INLINE_FUNCTION
     static void zero(T* dest, int sz) {
-      if (sz > 0)
-#if defined(__CUDACC__ ) || defined(__HIPCC__ )
+      if (sz > 0) {
+#if defined(__CUDACC__ ) || defined(__HIPCC__ ) || defined(__SYCL_DEVICE_ONLY__)
         for (int i=0; i<sz; ++i)
           dest[i] = T(0.);
 #else
-        std::memset(dest,0,sz*sizeof(T));
+        if constexpr (std::is_trivially_copyable_v<T>) {
+          std::memset(dest,0,sz*sizeof(T));
+        } else {
+          for (int i=0; i<sz; ++i)
+            dest[i] = T(0.);
+        }
 #endif
+      }
     }
 
   };

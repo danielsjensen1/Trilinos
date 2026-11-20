@@ -1,48 +1,11 @@
-/* 
- * @HEADER
- *
- * ***********************************************************************
- *
- *  Zoltan Toolkit for Load-balancing, Partitioning, Ordering and Coloring
- *                  Copyright 2012 Sandia Corporation
- *
- * Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
- * the U.S. Government retains certain rights in this software.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- * 1. Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *
- * 2. Redistributions in binary form must reproduce the above copyright
- * notice, this list of conditions and the following disclaimer in the
- * documentation and/or other materials provided with the distribution.
- *
- * 3. Neither the name of the Corporation nor the names of the
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- * Questions? Contact Karen Devine	kddevin@sandia.gov
- *                    Erik Boman	egboman@sandia.gov
- *
- * ***********************************************************************
- *
- * @HEADER
- */
+// @HEADER
+// *****************************************************************************
+//  Zoltan Toolkit for Load-balancing, Partitioning, Ordering and Coloring
+//
+// Copyright 2012 NTESS and the Zoltan contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
 
 
 #ifdef __cplusplus
@@ -333,6 +296,15 @@ int Zoltan_LB_Eval_Graph(ZZ *zzin, int print_stats, ZOLTAN_GRAPH_EVAL *graph)
   if (ierr != ZOLTAN_OK)
     goto End;
 
+  /* Parts come from the application's part query; reject invalid
+     part numbers before they are used as array indices below. */
+  for (i=0; i < num_obj; i++){
+    if (parts[i] < 0){
+      ZOLTAN_PRINT_ERROR(zz->Proc, yo, "Invalid negative part number");
+      ierr = ZOLTAN_FATAL;
+      goto End;
+    }
+  }
 
 
   /*****************************************************************
@@ -1455,6 +1427,17 @@ object_metrics(ZZ *zz, int num_obj, int *parts, float *part_sizes, int req_npart
   ierr = ZOLTAN_OK;
 
   part_dim = (vwgt_dim > 0) ? vwgt_dim : 1;
+
+  /* Parts come from the application's part query; reject invalid
+     part numbers before they are used as array indices. */
+  for (i=0; i < num_obj; i++){
+    if (parts[i] < 0){
+      ZOLTAN_PRINT_ERROR(zz->Proc, "object_metrics",
+                         "Invalid negative part number");
+      ierr = ZOLTAN_FATAL;
+      goto End;
+    }
+  }
 
   /* Get the actual number of parts, and number of objects per part */
 

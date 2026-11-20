@@ -1,43 +1,11 @@
-//@HEADER
-// ************************************************************************
-//
+// @HEADER
+// *****************************************************************************
 //                 Belos: Block Linear Solvers Package
-//                  Copyright 2004 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
-//
-// ************************************************************************
-//@HEADER
+// Copyright 2004-2016 NTESS and the Belos contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
 //
 // This driver reads a problem from a file, which must be in Matrix Market (*.mtx).  
 // The problem right-hand side will be generated randomly.
@@ -74,11 +42,12 @@ bool success = true;
   typedef int                               OT;
   typedef Kokkos::DefaultExecutionSpace     EXSP;
   typedef Teuchos::ScalarTraits<ST>        SCT;
-  typedef SCT::magnitudeType                MT;
+  typedef SCT::magnitudeType MT;
+  using SDM = Teuchos::SerialDenseMatrix<int, ST>;
   typedef Belos::KokkosMultiVec<ST, EXSP>         MV;
-  typedef Belos::MultiVec<ST> KMV;
-  typedef Belos::Operator<ST> KOP; 
-  typedef Belos::MultiVecTraits<ST,KMV>     MVT;
+  typedef Belos::MultiVec<ST, SDM> KMV;
+  typedef Belos::Operator<ST, SDM> KOP;
+  typedef Belos::MultiVecTraits<ST,KMV,SDM>     MVT;
   typedef Belos::OperatorTraits<ST,KMV,KOP>  OPT;
 
   using Teuchos::ParameterList;
@@ -156,7 +125,7 @@ try {
   //
   // Construct an unpreconditioned linear problem instance.
   //
-  Belos::LinearProblem<ST,KMV,KOP> problem( A, X, B );
+  Belos::LinearProblem<ST,KMV,KOP,SDM> problem( A, X, B );
   bool set = problem.setProblem();
   if (set == false) {
     std::cout << std::endl << "ERROR:  Belos::LinearProblem failed to set up correctly!" << std::endl;
@@ -168,8 +137,8 @@ try {
   // *******************************************************************
   //
   // Create an iterative solver manager.
-  RCP< Belos::SolverManager<ST,KMV,KOP> > newSolver
-    = rcp( new Belos::BlockGmresSolMgr<ST,KMV,KOP>(rcpFromRef(problem), rcpFromRef(belosList)) );
+  RCP< Belos::SolverManager<ST,KMV,KOP,SDM> > newSolver
+    = rcp( new Belos::BlockGmresSolMgr<ST,KMV,KOP,SDM>(rcpFromRef(problem), rcpFromRef(belosList)) );
 
   //
   // **********Print out information about problem*******************
@@ -204,12 +173,12 @@ try {
     if (actRes > tol) badRes = true;
   }
 
-  if (ret!=Belos::Converged || badRes) {
-    success = false;
-    std::cout << std::endl << "ERROR:  Belos did not converge!" << std::endl;
-  } else {
+  if (ret==Belos::Converged && !badRes) {
     success = true;
     std::cout << std::endl << "SUCCESS:  Belos converged!" << std::endl;
+  } else {
+    success = false;
+    std::cout << std::endl << "ERROR:  Belos did not converge!" << std::endl;
   }
 
   }

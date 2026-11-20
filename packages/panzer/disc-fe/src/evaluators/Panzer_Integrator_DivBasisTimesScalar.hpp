@@ -1,43 +1,11 @@
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //           Panzer: A partial differential equation assembly
 //       engine for strongly coupled complex multiphysics systems
-//                 Copyright (2011) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Roger P. Pawlowski (rppawlo@sandia.gov) and
-// Eric C. Cyr (eccyr@sandia.gov)
-// ***********************************************************************
+// Copyright 2011 NTESS and the Panzer contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #ifndef   __Panzer_Integrator_DivBasisTimesScalar_hpp__
@@ -241,7 +209,7 @@ namespace panzer
       void
       operator()(
         const FieldMultTag<NUM_FIELD_MULT>& tag,
-        const Kokkos::TeamPolicy<PHX::exec_space>::member_type& team) const;
+        const Kokkos::TeamPolicy<PHX::ExecutionSpace>::member_type& team) const;
 
       /**
        *  \brief Perform the integration. Shared memory version.
@@ -263,7 +231,7 @@ namespace panzer
       void
       operator()(
         const SharedFieldMultTag<NUM_FIELD_MULT>& tag,
-        const Kokkos::TeamPolicy<PHX::exec_space>::member_type& team) const;
+        const Kokkos::TeamPolicy<PHX::ExecutionSpace>::member_type& team) const;
 
     private:
 
@@ -285,7 +253,7 @@ namespace panzer
       using ScalarT = typename EvalT::ScalarT;
 
       /// Type for shared memory
-    using scratch_view = Kokkos::View<ScalarT* ,typename PHX::DevLayout<ScalarT>::type,typename PHX::exec_space::scratch_memory_space,Kokkos::MemoryUnmanaged>;
+    using scratch_view = Kokkos::View<ScalarT* ,typename PHX::DevLayout<ScalarT>::type,typename PHX::ExecutionSpace::scratch_memory_space,Kokkos::MemoryUnmanaged>;
 
       /**
        *  \brief An `enum` determining the behavior of this `Evaluator`.
@@ -348,11 +316,6 @@ namespace panzer
        *  \brief The scalar basis information necessary for integration.
        */
       PHX::MDField<double, panzer::Cell, panzer::BASIS, panzer::IP> basis_;
-
-      /**
-       * \brief If set to true, device shared memory will be used.
-       */
-      bool use_shared_memory;
 
     /// Temporary for non-shared calculations
     PHX::View<ScalarT*> tmp_;

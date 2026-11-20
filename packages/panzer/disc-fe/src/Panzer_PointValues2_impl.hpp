@@ -1,43 +1,11 @@
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //           Panzer: A partial differential equation assembly
 //       engine for strongly coupled complex multiphysics systems
-//                 Copyright (2011) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Roger P. Pawlowski (rppawlo@sandia.gov) and
-// Eric C. Cyr (eccyr@sandia.gov)
-// ***********************************************************************
+// Copyright 2011 NTESS and the Panzer contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #ifndef PANZER_POINT_VALUES2_IMPL_HPP
@@ -130,7 +98,7 @@ namespace panzer {
     auto s_jac_inv = Kokkos::subview(jac_inv.get_view(),cell_range,Kokkos::ALL(),Kokkos::ALL(),Kokkos::ALL());
     auto s_node_coordinates = Kokkos::subview(node_coordinates.get_view(),cell_range,Kokkos::ALL(),Kokkos::ALL());
     auto s_point_coords = Kokkos::subview(point_coords.get_view(),cell_range,Kokkos::ALL(),Kokkos::ALL());
-    Intrepid2::CellTools<PHX::exec_space> cell_tools;
+    Intrepid2::CellTools<PHX::Device> cell_tools;
 
     cell_tools.setJacobian(s_jac, coords_ref.get_view(), s_node_coordinates, *(point_rule->topology));
     cell_tools.setJacobianInv(s_jac_inv, s_jac);
@@ -151,9 +119,9 @@ namespace panzer {
       const size_type num_nodes = in_node_coords.extent(1);
       const size_type num_dims = in_node_coords.extent(2);
 
-      Kokkos::MDRangePolicy<PHX::Device::execution_space,Kokkos::Rank<3>> policy({0,0,0},{num_cells,num_nodes,num_dims});
+      Kokkos::MDRangePolicy<PHX::ExecutionSpace,Kokkos::Rank<3>> policy({0,0,0},{num_cells,num_nodes,num_dims});
       Kokkos::parallel_for("PointValues2::copyNodeCoords",policy,panzer::CopyNodeCoords<Scalar,CoordinateArray>(in_node_coords,node_coordinates));
-      PHX::Device::execution_space().fence();
+      PHX::ExecutionSpace().fence();
     }
   }
 
@@ -167,9 +135,9 @@ namespace panzer {
       const size_type num_points = in_point_coords.extent(0);
       const size_type num_dims = in_point_coords.extent(1);
 
-      Kokkos::MDRangePolicy<PHX::Device::execution_space,Kokkos::Rank<2>> policy({0,0},{num_points,num_dims});
+      Kokkos::MDRangePolicy<PHX::ExecutionSpace,Kokkos::Rank<2>> policy({0,0},{num_points,num_dims});
       Kokkos::parallel_for("PointValues2::copyPointCoords",policy,panzer::CopyPointCoords<Scalar,CoordinateArray>(in_point_coords,coords_ref));
-      PHX::Device::execution_space().fence();
+      PHX::ExecutionSpace().fence();
     }
   }
 

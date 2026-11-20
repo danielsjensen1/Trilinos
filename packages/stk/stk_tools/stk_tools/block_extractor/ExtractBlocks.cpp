@@ -1,7 +1,7 @@
 #include "mpi.h"
 #include <stk_util/stk_config.h>
 #include <stk_tools/block_extractor/ExtractBlocks.hpp>
-#include "stk_tools/transfer_utils/TransientFieldTransferById.hpp"
+#include "stk_transfer_util/TransientFieldTransferById.hpp"
 #include <stk_io/FillMesh.hpp>
 #include <stk_mesh/base/BulkData.hpp>
 #include <stk_mesh/base/MeshBuilder.hpp>
@@ -16,6 +16,7 @@
 namespace stk {
 namespace tools {
 
+namespace impl {
 bool part_selects_entities_globally(stk::mesh::BulkData & bulk, stk::mesh::Part & part)
 {
   stk::mesh::BucketVector const & buckets = bulk.get_buckets(part.primary_entity_rank(), part);
@@ -33,6 +34,7 @@ void remove_io_attribute_from_empty_parts(stk::mesh::BulkData & bulk)
       }
     }
   }
+}
 }
 
 std::vector<std::string> GetEntityNamesFromIDs(const stk::mesh::BulkData & meshBulk, stk::topology::rank_t  stkTop, const std::vector<int> & theIDs)
@@ -98,16 +100,21 @@ void extract_blocks_and_ns_from_file(const std::string &inFile,
   stk::mesh::MeshBuilder builder(comm);
   builder.set_aura_option(stk::mesh::BulkData::AUTO_AURA);
   std::shared_ptr<stk::mesh::BulkData> inBulk = builder.create();
-  stk::mesh::MetaData& inMeta = inBulk->mesh_meta_data();
-  inMeta.use_simple_fields();
-
   std::shared_ptr<stk::mesh::BulkData> outBulk = builder.create();
-  stk::mesh::MetaData& outMeta = outBulk->mesh_meta_data();
-  outMeta.use_simple_fields();
 
   stk::io::StkMeshIoBroker stkInput;
-  stk::io::fill_mesh_preexisting(stkInput, inFile, *inBulk);
+  stkInput.set_bulk_data(*inBulk);
+  stkInput.property_add(Ioss::Property("LOWER_CASE_VARIABLE_NAMES", "off"));
+  const size_t inputFileIndex = stkInput.add_mesh_database(inFile, stk::io::READ_MESH);
+  stkInput.create_input_mesh();
 
+  stkInput.add_all_mesh_fields_as_input_fields();
+  const bool delayFieldDataAllocation = true;
+  stkInput.populate_mesh(delayFieldDataAllocation);
+  stkInput.populate_field_data();
+
+  const Ioss::DatabaseIO* inputDBIO = stkInput.get_input_database(inputFileIndex);
+  const int maxSymbolLength = inputDBIO->maximum_symbol_length();
 
   stk::mesh::Selector nothingSelector_byDefaultConstruction;
   stk::mesh::Selector allSelector(!nothingSelector_byDefaultConstruction);
@@ -125,10 +132,14 @@ void extract_blocks_and_ns_from_file(const std::string &inFile,
   else // if user only asks for blocks, use extract_blocks, which completely deletes all other blocks and associated nodes
   {
     extract_blocks(*inBulk, *outBulk, blockNames);
-    remove_io_attribute_from_empty_parts(*outBulk);
+    impl::remove_io_attribute_from_empty_parts(*outBulk);
   }
 
   stk::io::StkMeshIoBroker stkOutput;
+  if (maxSymbolLength > 0) {
+    stkOutput.property_add(Ioss::Property("MAXIMUM_NAME_LENGTH", maxSymbolLength));
+  }
+
   stkOutput.set_bulk_data(*outBulk);
   stkOutput.set_attribute_field_ordering_stored_by_part_ordinal(stkInput.get_attribute_field_ordering_stored_by_part_ordinal());
 

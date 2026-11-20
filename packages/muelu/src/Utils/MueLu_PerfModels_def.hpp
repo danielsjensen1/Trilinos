@@ -1,48 +1,12 @@
 // @HEADER
-//
-// ***********************************************************************
-//
+// *****************************************************************************
 //        MueLu: A package for multigrid based preconditioning
-//                  Copyright 2012 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact
-//                    Jonathan Hu       (jhu@sandia.gov)
-//                    Andrey Prokopenko (aprokop@sandia.gov)
-//                    Ray Tuminaro      (rstumin@sandia.gov)
-//
-// ***********************************************************************
-//
+// Copyright 2012 NTESS and the MueLu contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
+
 #include "MueLu_PerfModels_decl.hpp"
 
 #include <cstdio>
@@ -52,7 +16,7 @@
 #include <chrono>
 #include <iomanip>
 #include <Teuchos_ScalarTraits.hpp>
-#include <Kokkos_ArithTraits.hpp>
+#include <KokkosKernels_ArithTraits.hpp>
 #include <Xpetra_Import.hpp>
 #if defined(HAVE_MUELU_TPETRA) && defined(HAVE_MPI)
 #include <Xpetra_TpetraImport.hpp>
@@ -62,7 +26,6 @@
 #endif
 
 #ifdef HAVE_MPI
-#include <mpi.h>
 #endif
 
 namespace MueLu {
@@ -71,7 +34,7 @@ namespace PerfDetails {
 template <class Scalar, class Node>
 double stream_vector_add(int KERNEL_REPEATS, int VECTOR_SIZE) {
   // PerfDetails' STREAM routines need to be instantiatiated on impl_scalar_type, not Scalar
-  using impl_scalar_type = typename Kokkos::ArithTraits<Scalar>::val_type;
+  using impl_scalar_type = typename KokkosKernels::ArithTraits<Scalar>::val_type;
 
   using exec_space   = typename Node::execution_space;
   using memory_space = typename Node::memory_space;
@@ -114,7 +77,7 @@ double stream_vector_add(int KERNEL_REPEATS, int VECTOR_SIZE) {
 template <class Scalar, class Node>
 double stream_vector_copy(int KERNEL_REPEATS, int VECTOR_SIZE) {
   // PerfDetails' STREAM routines need to be instantiatiated on impl_scalar_type, not Scalar
-  using impl_scalar_type = typename Kokkos::ArithTraits<Scalar>::val_type;
+  using impl_scalar_type = typename KokkosKernels::ArithTraits<Scalar>::val_type;
 
   using exec_space   = typename Node::execution_space;
   using memory_space = typename Node::memory_space;
@@ -330,6 +293,9 @@ void halopong_basic(int KERNEL_REPEATS, int MAX_SIZE, const RCP<const Xpetra::Im
 template <class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
 PerfModels<Scalar, LocalOrdinal, GlobalOrdinal, Node>::PerfModels()
   : launch_and_wait_latency_(-1.0) {}
+
+template <class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
+PerfModels<Scalar, LocalOrdinal, GlobalOrdinal, Node>::~PerfModels() = default;
 
 /****************************************************************************************/
 /****************************************************************************************/
@@ -577,7 +543,7 @@ void PerfModels<Scalar, LocalOrdinal, GlobalOrdinal, Node>::launch_latency_make_
   for (int i = 0; i < KERNEL_REPEATS; i++) {
     start = clock::now();
     Kokkos::parallel_for(
-        "empty kernel", range_policy(0, 1), KOKKOS_LAMBDA(const size_t j) {
+        "empty kernel", range_policy(0, 1), KOKKOS_LAMBDA(const size_t /*j*/) {
           ;
         });
     exec_space().fence();

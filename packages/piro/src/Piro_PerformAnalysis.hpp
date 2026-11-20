@@ -1,43 +1,10 @@
 // @HEADER
-// ************************************************************************
-//
+// *****************************************************************************
 //        Piro: Strategy package for embedded analysis capabilitites
-//                  Copyright (2010) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Andy Salinger (agsalin@sandia.gov), Sandia
-// National Laboratories.
-//
-// ************************************************************************
+// Copyright 2010 NTESS and the Piro contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #ifndef PIRO_PERFORMANALYSIS
@@ -52,9 +19,13 @@
 
 namespace Piro {
 
+  //! Stream buffer that stores the ROL output and, if echo is true, also prints it
+  //! to the standard output (with putchar, so it is not affected by redirections of std::cout).
   template<class CharT, class Traits=std::char_traits<CharT>>
   class RolOutputBuffer : public std::basic_streambuf<CharT,Traits> {
      public:
+     explicit RolOutputBuffer(bool echo = true) : echo_(echo) {}
+
      const std::stringstream& getStringStream() const;
 
      protected:
@@ -62,7 +33,10 @@ namespace Piro {
 
      private:
      std::stringstream ss;
+     bool echo_;
   };
+
+  Teuchos::RCP<Thyra::ProductVectorBase<double> > createProductVector(const Teuchos::RCP<Thyra::VectorBase<double> >& vec);
 
   //! \name Top-level Thyra analysis driver
   //@{
@@ -74,12 +48,15 @@ namespace Piro {
      Thyra::ModelEvaluatorDefaultBase<double>& piroModel,
      Teuchos::ParameterList& analysisParams,
      Teuchos::RCP< Thyra::VectorBase<double> >& result,
-     Teuchos::RCP< ROL_ObserverBase<double> > observer = Teuchos::null
+     Teuchos::RCP< ROL_ObserverBase<double> > observer = Teuchos::null,
+     const std::vector<Teuchos::RCP< Thyra::VectorBase<double> > >& x_diff_at_samples = std::vector<Teuchos::RCP< Thyra::VectorBase<double> > >(),
+     const std::vector<Teuchos::RCP< Thyra::VectorBase<double> > >& p_samples = std::vector<Teuchos::RCP< Thyra::VectorBase<double> > >()
      );
   //@}
 
   //! \brief Performs analysis of a steady state solved model using ROL.
   //! \details Requires that the ROL package is available.
+  //! Returns the exit status of the ROL algorithm (ROL::EExitStatus), 0 if no optimization is performed.
   //! \ingroup Piro_Thyra_analysis_driver_grp
   int PerformROLSteadyAnalysis(
      Thyra::ModelEvaluatorDefaultBase<double>& piroModel,
@@ -90,6 +67,7 @@ namespace Piro {
 
   //! \brief Performs analysis of a transient solved model using ROL.
   //! \details Requires that the ROL package is available.
+  //! Returns the exit status of the ROL algorithm (ROL::EExitStatus), 0 if no optimization is performed.
   //! \ingroup Piro_Thyra_analysis_driver_grp
   int PerformROLTransientAnalysis(
      Thyra::ModelEvaluatorDefaultBase<double>& piroModel,
@@ -98,8 +76,23 @@ namespace Piro {
      Teuchos::RCP< ROL_ObserverBase<double> > observer = Teuchos::null
      );
 
+  //! \brief Performs Hyper Differential Sensitivity Analysis (HDSA) of a steady model using HDSA and ROL.
+  //! \details Requires that the HDSA and ROL packages available.
+  //! \ingroup Piro_Thyra_analysis_driver_grp
+  //! p is the optimal parameter of the (lof fidelity) model that minimizes response 0.
+  int PerformHDSAAnalysis(
+     Thyra::ModelEvaluatorDefaultBase<double>& piroModel,
+     Teuchos::ParameterList& hdsaParams,
+     Teuchos::RCP< Thyra::VectorBase<double> >& p,
+     Teuchos::RCP< ROL_ObserverBase<double> > observer = Teuchos::null,
+     const std::vector<Teuchos::RCP< Thyra::VectorBase<double> > >& x_diff_at_samples = std::vector<Teuchos::RCP< Thyra::VectorBase<double> > >(),
+     const std::vector<Teuchos::RCP< Thyra::VectorBase<double> > >& p_samples = std::vector<Teuchos::RCP< Thyra::VectorBase<double> > >()
+     );
+
   //! \brief Performs analysis of a solved model using ROL.
   //! \details Requires that the ROL package is available.
+  //! Returns the exit status of the ROL algorithm (ROL::EExitStatus), except that stopping because
+  //! the step is below the step tolerance is considered a success and returns 0.
   //! \ingroup Piro_Thyra_analysis_driver_grp
   int PerformROLAnalysis(
      Thyra::ModelEvaluatorDefaultBase<double>& piroModel,

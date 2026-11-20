@@ -1,3 +1,11 @@
+// @HEADER
+// *****************************************************************************
+//     Compadre: COMpatible PArticle Discretization and REmap Toolkit
+//
+// Copyright 2018 NTESS and the Compadre contributors.
+// SPDX-License-Identifier: BSD-2-Clause
+// *****************************************************************************
+// @HEADER
 #ifndef _COMPADRE_GMLS_HPP_
 #define _COMPADRE_GMLS_HPP_
 
@@ -71,10 +79,10 @@ private:
     Kokkos::View<double*> _ref_N;
 
     //! tangent vectors information (host)
-    Kokkos::View<double*>::HostMirror _host_T;
+    Kokkos::View<double*>::host_mirror_type _host_T;
 
     //! reference outward normal vectors information (host)
-    Kokkos::View<double*>::HostMirror _host_ref_N;
+    Kokkos::View<double*>::host_mirror_type _host_ref_N;
 
     //! metric tensor inverse for all problems
     Kokkos::View<double*> _manifold_metric_tensor_inverse;
@@ -103,7 +111,7 @@ private:
 
     //! generated weights for nontraditional samples required to transform data into expected sampling 
     //! functional form (host)
-    Kokkos::View<const double*****, layout_right>::HostMirror _host_prestencil_weights;
+    Kokkos::View<const double*****, layout_right>::host_mirror_type _host_prestencil_weights;
 
     //! (OPTIONAL) connections between additional points and neighbors
     point_connections_type _additional_pc;
@@ -164,7 +172,7 @@ private:
     Kokkos::View<TargetOperation*> _operations;
 
     //! vector containing target functionals to be applied for reconstruction problem (host)
-    Kokkos::View<TargetOperation*>::HostMirror _host_operations;
+    Kokkos::View<TargetOperation*>::host_mirror_type _host_operations;
 
     //! weighting kernel type for GMLS
     WeightingFunctionType _weighting_type;
@@ -556,6 +564,14 @@ public:
             // invariant to p and n
             double x = std::abs(r/h);
             return ((1-x)+x*(1-x)*(1-2*x)) * double(x<=1.0);
+        } else if (weighting_type == WeightingFunctionType::CardinalCubicBSpline) {
+            // compactly supported on [0,h]
+            // invariant to p and n
+            // Calculate the value using a cardinal cubic b-spline kernel (often just called cubic b spline)
+            double x = std::abs(r/h);
+            if (x < 0.5) return 1.0 + 6.0 * x * x * (-1.0 + x);
+            if (x < 1.0) return 2.0 * (1.0 + x * (-3.0 + 3.0 * x - 1.0 * x * x));
+            return 0.0;
         } else if (weighting_type == WeightingFunctionType::Cosine) {
             // compactly supported on [0,h]
             double pi = 3.14159265358979323846;
@@ -576,6 +592,28 @@ public:
         } else { // unsupported type
             compadre_kernel_assert_release(false && "Invalid WeightingFunctionType selected.");
             return 0; 
+        }
+    }
+
+    //! Type for weighting kernel for GMLS problem
+    static WeightingFunctionType translateWeightingType( const std::string &wt) {
+        std::string wt_to_lower = wt;
+        transform(wt_to_lower.begin(), wt_to_lower.end(), wt_to_lower.begin(), ::tolower);
+        if (wt_to_lower == "power") {
+            return WeightingFunctionType::Power;
+        } else if (wt_to_lower == "gaussian") {
+            return WeightingFunctionType::Gaussian;
+        } else if (wt_to_lower == "cubicspline") {
+            return WeightingFunctionType::CubicSpline;
+        } else if (wt_to_lower == "cardinalcubicbspline") {
+            return WeightingFunctionType::CardinalCubicBSpline;
+        } else if (wt_to_lower == "cosine") {
+            return WeightingFunctionType::Cosine;
+        } else if (wt_to_lower == "sigmoid") {
+            return WeightingFunctionType::Sigmoid;
+        } else {
+            // Power is default
+            return WeightingFunctionType::Power;
         }
     }
 
@@ -707,7 +745,7 @@ public:
     double getTangentBundle(const int target_index, const int direction, const int component) const {
         // Component index 0.._dimensions-2 will return tangent direction
         // Component index _dimensions-1 will return the normal direction
-        scratch_matrix_right_type::HostMirror 
+        device_unmanaged_matrix_right_type::host_mirror_type 
                 T(_host_T.data() + target_index*_dimensions*_dimensions, _dimensions, _dimensions);
         return T(direction, component);
     }
@@ -715,8 +753,8 @@ public:
     //! Get component of tangent or normal directions for manifold problems
     double getReferenceNormalDirection(const int target_index, const int component) const {
         compadre_assert_debug(_reference_outward_normal_direction_provided && 
-                "getRefenceNormalDirection called, but reference outwrad normal directions were never provided.");
-        scratch_vector_type::HostMirror 
+                "getRefenceNormalDirection called, but reference outward normal directions were never provided.");
+        device_unmanaged_vector_type::host_mirror_type 
                 ref_N(_host_ref_N.data() + target_index*_dimensions, _dimensions);
         return ref_N(component);
     }
@@ -989,7 +1027,7 @@ public:
     //! Sets target coordinate information. Rows of this 2D-array should correspond to rows of the neighbor lists.
     template<typename view_type>
     void setTargetSites(coordinates_type target_coordinates) {
-        if (this->getAdditionalEvaluationIndices()->getNumberOfTargets() != target_coordinates.extent(0)) {
+        if (this->getAdditionalEvaluationIndices()->getNumberOfTargets() != target_coordinates.extent_int(0)) {
             this->setAuxiliaryEvaluationIndicesLists(
                     Kokkos::View<int*>(),
                     Kokkos::View<int*>("number of additional evaluation indices", 
@@ -1035,7 +1073,10 @@ public:
         // this allows for nonstrided views on the device later
 
         // allocate memory on device
-        _T = decltype(_T)("device tangent directions", _pc._target_coordinates.extent(0)*_dimensions*_dimensions);
+        compadre_assert_release( tangent_directions.size() % (_dimensions*_dimensions) == 0 &&
+                "tangent_directions must have cardinality #number of targets * #dimensions * #dimensions");
+        auto num_targets = tangent_directions.size() / (_dimensions*_dimensions);
+        _T = decltype(_T)("device tangent directions", num_targets*_dimensions*_dimensions);
 
         compadre_assert_release( (std::is_same<decltype(_T)::memory_space, typename view_type::memory_space>::value) &&
                 "Memory space does not match between _T and tangent_directions");
@@ -1043,8 +1084,8 @@ public:
         auto this_dimensions = _dimensions;
         auto this_T = _T;
         // rearrange data on device from data given on host
-        Kokkos::parallel_for("copy tangent vectors", Kokkos::RangePolicy<device_execution_space>(0, _pc._target_coordinates.extent(0)), KOKKOS_LAMBDA(const int i) {
-            scratch_matrix_right_type T(this_T.data() + i*this_dimensions*this_dimensions, this_dimensions, this_dimensions);
+        Kokkos::parallel_for("copy tangent vectors", Kokkos::RangePolicy<device_execution_space>(0, num_targets), KOKKOS_LAMBDA(const int i) {
+            device_unmanaged_matrix_right_type T(this_T.data() + i*this_dimensions*this_dimensions, this_dimensions, this_dimensions);
             for (int j=0; j<this_dimensions; ++j) {
                 for (int k=0; k<this_dimensions; ++k) {
                     T(j,k) = tangent_directions(i, j, k);
@@ -1150,22 +1191,7 @@ public:
 
     //! Type for weighting kernel for GMLS problem
     void setWeightingType( const std::string &wt) {
-        std::string wt_to_lower = wt;
-        transform(wt_to_lower.begin(), wt_to_lower.end(), wt_to_lower.begin(), ::tolower);
-        if (wt_to_lower == "power") {
-            _weighting_type = WeightingFunctionType::Power;
-        } else if (wt_to_lower == "gaussian") {
-            _weighting_type = WeightingFunctionType::Gaussian;
-        } else if (wt_to_lower == "cubicspline") {
-            _weighting_type = WeightingFunctionType::CubicSpline;
-        } else if (wt_to_lower == "cosine") {
-            _weighting_type = WeightingFunctionType::Cosine;
-        } else if (wt_to_lower == "sigmoid") {
-            _weighting_type = WeightingFunctionType::Sigmoid;
-        } else {
-            // Power is default
-            _weighting_type = WeightingFunctionType::Power;
-        }
+        _weighting_type = translateWeightingType(wt);
         this->resetCoefficientData();
     }
 
@@ -1177,22 +1203,7 @@ public:
 
     //! Type for weighting kernel for curvature 
     void setCurvatureWeightingType( const std::string &wt) {
-        std::string wt_to_lower = wt;
-        transform(wt_to_lower.begin(), wt_to_lower.end(), wt_to_lower.begin(), ::tolower);
-        if (wt_to_lower == "power") {
-            _curvature_weighting_type = WeightingFunctionType::Power;
-        } else if (wt_to_lower == "gaussian") {
-            _curvature_weighting_type = WeightingFunctionType::Gaussian;
-        } else if (wt_to_lower == "cubicspline") {
-            _curvature_weighting_type = WeightingFunctionType::CubicSpline;
-        } else if (wt_to_lower == "cosine") {
-            _curvature_weighting_type = WeightingFunctionType::Cosine;
-        } else if (wt_to_lower == "sigmoid") {
-            _curvature_weighting_type = WeightingFunctionType::Sigmoid;
-        } else {
-            // Power is default
-            _curvature_weighting_type = WeightingFunctionType::Power;
-        }
+        _curvature_weighting_type = translateWeightingType(wt);
         this->resetCoefficientData();
     }
 

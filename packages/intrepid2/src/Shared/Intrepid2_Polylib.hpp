@@ -1,44 +1,11 @@
 /*
 // @HEADER
-// ************************************************************************
-//
+// *****************************************************************************
 //                           Intrepid2 Package
-//                 Copyright (2007) Sandia Corporation
 //
-// Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
-// license for use of this work by or on behalf of the U.S. Government.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Kyungjoo Kim  (kyukim@sandia.gov), or
-//                    Mauro Perego  (mperego@sandia.gov)
-//
-// ************************************************************************
+// Copyright 2007 NTESS and the Intrepid2 contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 */
 
@@ -208,7 +175,8 @@ namespace Intrepid2 {
     static constexpr ordinal_type  MaxPolylibOrder =
         (Parameters::MaxOrder > Parameters::MaxCubatureDegreeEdge) ? Parameters::MaxOrder :
                                                                      Parameters::MaxCubatureDegreeEdge;
-    static constexpr ordinal_type  MaxPolylibPoint = MaxPolylibOrder/2+2;
+    // NVR: HVOL bases on tri/tet use Polylib with order + spaceDim + 2 points; in 3D this can be up to Parameters::MaxOrder + 5.
+    static constexpr ordinal_type  MaxPolylibPoint = (MaxPolylibOrder/2+2 > Parameters::MaxOrder + 5) ? MaxPolylibOrder/2+2 : Parameters::MaxOrder + 5;
 
     struct Serial {
 
@@ -531,13 +499,13 @@ namespace Intrepid2 {
       /** \brief Calculate the  derivative of Jacobi polynomials
 
           \li Generates a vector \a poly of values of the derivative of the
-          \a n-th order Jacobi polynomial \f$ P^(\alpha,\beta)_n(z)\f$ at the
+          \a n-th order Jacobi polynomial \f$ P^{\alpha,\beta}_n(z)\f$ at the
           \a np points \a z.
 
           \li To do this we have used the relation
           \n
           \f$ \frac{d}{dz} P^{\alpha,\beta}_n(z)
-          = \frac{1}{2} (\alpha + \beta + n + 1)  P^{\alpha,\beta}_n(z) \f$
+          = \frac{1}{2} (\alpha + \beta + n + 1)  P^{\alpha+1,\beta+1}_{n-1}(z) \f$
 
           \li This formulation is valid for \f$ -1 \leq z \leq 1 \f$
       */
@@ -559,8 +527,11 @@ namespace Intrepid2 {
       /** \brief  Calculate the \a n zeros, \a z, of the Jacobi polynomial, i.e.
           \f$ P_n^{\alpha,\beta}(z) = 0 \f$
 
-          This routine is only valid for \f$( \alpha > -1, \beta > -1)\f$
-          and uses polynomial deflation in a Newton iteration
+          This routine is only valid for \f$( \alpha > -1, \beta > -1)\f$.
+          By default (\a DeflationEnabled = false) the zeros are computed as the eigenvalues
+          of a tridiagonal matrix (see JacobiZerosTriDiagonal); if \a DeflationEnabled = true,
+          they are computed with polynomial deflation in a Newton iteration
+          (see JacobiZerosPolyDeflation).
       */
       template<typename zViewType,
                bool DeflationEnabled = false>

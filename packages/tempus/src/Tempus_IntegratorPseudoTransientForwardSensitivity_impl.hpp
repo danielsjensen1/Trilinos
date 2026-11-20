@@ -1,10 +1,11 @@
-// @HEADER
-// ****************************************************************************
-//                Tempus: Copyright (2017) Sandia Corporation
+//@HEADER
+// *****************************************************************************
+//          Tempus: Time Integration and Sensitivity Analysis Package
 //
-// Distributed under BSD 3-clause license (See accompanying file Copyright.txt)
-// ****************************************************************************
-// @HEADER
+// Copyright 2017 NTESS and the Tempus contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+//@HEADER
 
 #ifndef Tempus_IntegratorPseudoTransientForwardSensitivity_impl_hpp
 #define Tempus_IntegratorPseudoTransientForwardSensitivity_impl_hpp
@@ -13,6 +14,7 @@
 #include "Thyra_VectorStdOps.hpp"
 #include "Thyra_MultiVectorStdOps.hpp"
 
+#include "Tempus_StepperImplicit_decl.hpp"
 #include "Tempus_WrapStaggeredFSAModelEvaluator.hpp"
 
 namespace Tempus {
@@ -606,7 +608,14 @@ createIntegratorPseudoTransientForwardSensitivity(
     pl->remove("Cache Matrices");
     sens_model = wrapStaggeredFSAModelEvaluator(
         model, sens_residual_model, sens_solve_model, cache_matrices, pl);
-    sens_integrator = createIntegratorBasic<Scalar>(pList, sens_model);
+
+    // The sensitivity integrator uses a copy of the parameters, without the
+    // objects of the forward problem that the nonlinear solver of the forward
+    // stepper stores in them (e.g., for NOX row sum scaling), which do not
+    // apply to the sensitivity problem (see removeIntegratorSolverObjects).
+    auto sensPList = Teuchos::rcp(new Teuchos::ParameterList(*pList));
+    removeIntegratorSolverObjects(*sensPList);
+    sens_integrator = createIntegratorBasic<Scalar>(sensPList, sens_model);
   }
 
   Teuchos::RCP<Tempus::IntegratorPseudoTransientForwardSensitivity<Scalar>>

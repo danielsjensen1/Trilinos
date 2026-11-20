@@ -1,44 +1,12 @@
 /*
-//@HEADER
-// ************************************************************************
-//
+// @HEADER
+// *****************************************************************************
 //                 Belos: Block Linear Solvers Package
-//                  Copyright 2004 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
-//
-// ************************************************************************
-//@HEADER
+// Copyright 2004-2016 NTESS and the Belos contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
 */
 
 #ifndef BELOS_LSQR_STATUS_TEST_HPP
@@ -51,8 +19,9 @@
 
 #include "BelosStatusTest.hpp"
 #include "BelosLSQRIter.hpp"
+#include "BelosTypes.hpp"
 
-/*!  \class LSQRStatusTest:
+/*!  \class Belos::LSQRStatusTest
   \brief A Belos::StatusTest class for specifying convergence of LSQR.  The outer status tests passes if an inner
   status passes a user specified number of times consecutively.  The inner status test depends on information
   specific to LSQR iteration.
@@ -61,15 +30,15 @@
 namespace Belos {
 
 
-template <class ScalarType, class MV, class OP>
-class LSQRStatusTest: public Belos::StatusTest<ScalarType,MV,OP> {
+template <class ScalarType, class MV, class OP, class DM = Belos::DefaultDenseMatrix<int, ScalarType>>
+class LSQRStatusTest: public Belos::StatusTest<ScalarType,MV,OP,DM> {
 
 public:
 
   // Convenience typedefs
   typedef Teuchos::ScalarTraits<ScalarType> SCT;
   typedef typename SCT::magnitudeType MagnitudeType;
-  typedef Belos::MultiVecTraits<ScalarType,MV>  MVT;
+  typedef Belos::MultiVecTraits<ScalarType,MV,DM>  MVT;
 
   //! @name Constructor/Destructor.
   //@{
@@ -95,7 +64,7 @@ public:
   //! Check convergence status of the iterative solver: Unconverged, Converged, Failed.
   /*! This method checks if the convergence criteria are met using the current information from the iterative solver.
    */
-  Belos::StatusType checkStatus(Belos::Iteration<ScalarType,MV,OP> *iSolver );
+  Belos::StatusType checkStatus(Belos::Iteration<ScalarType,MV,OP,DM> *iSolver );
 
   //! Return the result of the most recent CheckStatus call.
   Belos::StatusType getStatus() const {return(status_);}
@@ -178,7 +147,7 @@ public:
 
   /// \brief Called in checkStatus exactly once, on the first call to checkStatus.
   ///
-  Belos::StatusType firstCallCheckStatusSetup(Belos::Iteration<ScalarType,MV,OP>* iSolver);
+  Belos::StatusType firstCallCheckStatusSetup(Belos::Iteration<ScalarType,MV,OP,DM>* iSolver);
   //@}
 
   /** \name Overridden from Teuchos::Describable */
@@ -236,8 +205,8 @@ private:
 
 };
 
-template <class ScalarType, class MV, class OP>
-LSQRStatusTest<ScalarType,MV,OP>::
+template <class ScalarType, class MV, class OP, class DM>
+LSQRStatusTest<ScalarType,MV,OP,DM>::
 LSQRStatusTest (MagnitudeType condMax /* = 0 */,
                 int term_iter_max /* = 1 */,
                 MagnitudeType rel_rhs_err /* = 0 */,
@@ -255,18 +224,18 @@ LSQRStatusTest (MagnitudeType condMax /* = 0 */,
     matResNorm_ ( Teuchos::ScalarTraits<MagnitudeType>::zero() )
 {}
 
-template <class ScalarType, class MV, class OP>
-LSQRStatusTest<ScalarType,MV,OP>::~LSQRStatusTest()
+template <class ScalarType, class MV, class OP, class DM>
+LSQRStatusTest<ScalarType,MV,OP,DM>::~LSQRStatusTest()
 {}
 
-template <class ScalarType, class MV, class OP>
-void LSQRStatusTest<ScalarType,MV,OP>::reset()
+template <class ScalarType, class MV, class OP, class DM>
+void LSQRStatusTest<ScalarType,MV,OP,DM>::reset()
 {
   status_ = Belos::Undefined;
 }
 
-template <class ScalarType, class MV, class OP>
-Belos::StatusType LSQRStatusTest<ScalarType,MV,OP>::checkStatus( Belos::Iteration<ScalarType,MV,OP>* iSolver)
+template <class ScalarType, class MV, class OP, class DM>
+Belos::StatusType LSQRStatusTest<ScalarType,MV,OP,DM>::checkStatus( Belos::Iteration<ScalarType,MV,OP,DM>* iSolver)
 {
   const MagnitudeType MTzero = Teuchos::ScalarTraits<MagnitudeType>::zero();
   const MagnitudeType MTone = Teuchos::ScalarTraits<MagnitudeType>::one();
@@ -280,7 +249,7 @@ Belos::StatusType LSQRStatusTest<ScalarType,MV,OP>::checkStatus( Belos::Iteratio
     }
 
   bool termIterFlag = false;
-  LSQRIter<ScalarType,MV,OP>* solver = dynamic_cast< LSQRIter<ScalarType,MV,OP>* > (iSolver);
+  LSQRIter<ScalarType,MV,OP,DM>* solver = dynamic_cast< LSQRIter<ScalarType,MV,OP,DM>* > (iSolver);
   TEUCHOS_ASSERT(solver != NULL);
   LSQRIterationState< ScalarType, MV > state = solver->getState();
   //
@@ -391,8 +360,8 @@ Belos::StatusType LSQRStatusTest<ScalarType,MV,OP>::checkStatus( Belos::Iteratio
   return status_;
 }
 
-template <class ScalarType, class MV, class OP>
-void LSQRStatusTest<ScalarType,MV,OP>::print(std::ostream& os, int indent) const
+template <class ScalarType, class MV, class OP, class DM>
+void LSQRStatusTest<ScalarType,MV,OP,DM>::print(std::ostream& os, int indent) const
 {
   for (int j = 0; j < indent; j++)
     os << ' ';
@@ -401,8 +370,8 @@ void LSQRStatusTest<ScalarType,MV,OP>::print(std::ostream& os, int indent) const
   os << "limit of condition number = " << condMax_ << std::endl;
 }
 
-template <class ScalarType, class MV, class OP>
-void LSQRStatusTest<ScalarType,MV,OP>::printStatus(std::ostream&os, Belos::StatusType type) const
+template <class ScalarType, class MV, class OP, class DM>
+void LSQRStatusTest<ScalarType,MV,OP,DM>::printStatus(std::ostream&os, Belos::StatusType type) const
 {
   os << std::left << std::setw(13) << std::setfill('.');
   switch (type) {

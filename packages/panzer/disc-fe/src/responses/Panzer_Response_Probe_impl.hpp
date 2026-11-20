@@ -1,48 +1,17 @@
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //           Panzer: A partial differential equation assembly
 //       engine for strongly coupled complex multiphysics systems
-//                 Copyright (2011) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Roger P. Pawlowski (rppawlo@sandia.gov) and
-// Eric C. Cyr (eccyr@sandia.gov)
-// ***********************************************************************
+// Copyright 2011 NTESS and the Panzer contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #ifndef __Panzer_Response_Probe_impl_hpp__
 #define __Panzer_Response_Probe_impl_hpp__
 
+#include "Panzer_ResponseBase.hpp"
 #include "Teuchos_Comm.hpp"
 #include "Teuchos_CommHelpers.hpp"
 #include "Teuchos_dyn_cast.hpp"
@@ -53,6 +22,7 @@
 #endif
 
 #include "Sacado_Traits.hpp"
+#include "Thyra_VectorStdOps.hpp"
 
 namespace panzer {
 
@@ -73,6 +43,10 @@ Response_Probe(const std::string & responseName, MPI_Comm comm,
 
     // set ghosted container (work space for assembly)
     linObjFactory_->initializeGhostedContainer(panzer::LinearObjContainer::X,*ghostedContainer_);
+
+    if constexpr (std::is_same<EvalT,panzer::Traits::Jacobian>::value) {
+      this->setDerivativeVectorSpace(thyraObjFactory_->getThyraDomainSpace());
+    }
   }
 }
 
@@ -126,6 +100,22 @@ scatterResponse()
 {
   using Teuchos::rcp_dynamic_cast;
 
+  // A point on a cell boundary is inside a cell on more than one process, so
+  // more than one process scatters a derivative for it. The ghost to global
+  // sum below would then add each of those contributions. Pick a single owner
+  // the same way the value does, and drop everyone else's contribution.
+  // Without this dg/dx is multiplied by the number of processes sharing the
+  // point.
+  int locProc = have_probe ? this->getComm()->getRank() : this->getComm()->getSize();
+  int glbProc = 0;
+  Teuchos::reduceAll(*this->getComm(), Teuchos::REDUCE_MIN, Thyra::Ordinal(1), &locProc, &glbProc);
+  TEUCHOS_ASSERT(glbProc < this->getComm()->getSize());
+
+  if (this->getComm()->getRank() != glbProc) {
+    auto ghosted = rcp_dynamic_cast<ThyraObjContainer<double> >(ghostedContainer_);
+    Thyra::assign(ghosted->get_x_th().ptr(),0.0);
+  }
+
   Teuchos::RCP<Thyra::MultiVectorBase<double> > dgdx_unique = getDerivative();
 
   uniqueContainer_ = linObjFactory_->buildLinearObjContainer();
@@ -158,6 +148,10 @@ template < >
 void Response_Probe<panzer::Traits::Tangent>::
 scatterResponse()
 {
+  // Nothing to scatter into: DgDp was not requested for this response.
+  if (!this->hasTargetVector())
+    return;
+
   const int n = value.size();
   const int num_deriv = this->numDeriv();
   TEUCHOS_ASSERT(n == 0 || n == num_deriv);
@@ -190,8 +184,9 @@ scatterResponse()
     // use thyra
     TEUCHOS_ASSERT(this->useThyra());
     Thyra::ArrayRCP< Thyra::ArrayRCP<double> > deriv = this->getThyraMultiVector();
-    for (int i=0; i<num_deriv; ++i)
+    for (int i=0; i<num_deriv; ++i) {
       deriv[i][0] = value.dx(i);
+    }
   }
 }
 

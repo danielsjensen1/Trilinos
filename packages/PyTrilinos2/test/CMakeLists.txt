@@ -1,44 +1,3 @@
-# @HEADER
-# ***********************************************************************
-#
-#          PyTrilinos2: Automatic Python Interfaces to Trilinos Packages
-#                 Copyright (2022) Sandia Corporation
-#
-# Under the terms of Contract DE-AC04-94AL85000 with Sandia
-# Corporation, the U.S. Government retains certain rights in this
-# software.
-#
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions are
-# met:
-#
-# 1. Redistributions of source code must retain the above copyright
-# notice, this list of conditions and the following disclaimer.
-#
-# 2. Redistributions in binary form must reproduce the above copyright
-# notice, this list of conditions and the following disclaimer in the
-# documentation and/or other materials provided with the distribution.
-#
-# 3. Neither the name of the Corporation nor the names of the
-# contributors may be used to endorse or promote products derived from
-# this software without specific prior written permission.
-#
-# THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-# EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-# PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-# CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-# EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-# PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-# PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-# LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-# NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-# SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-#
-# Questions? Contact Kim Liegeois (knliege@sandia.gov)
-#
-# ***********************************************************************
-# @HEADER
 
 ENABLE_TESTING()
 
@@ -46,3 +5,54 @@ INCLUDE(PyTrilinos2MakeTest)
 
 PyTrilinos2_MAKE_MPI_TEST(CG)
 PyTrilinos2_MAKE_MPI_TEST(parameterList)
+
+TRIBITS_COPY_FILES_TO_BINARY_DIR(Stratimikos_cp
+    SOURCE_FILES Stratimikos.py)
+
+TRIBITS_ADD_TEST(
+  ${Python3_EXECUTABLE}
+  NOEXEPREFIX
+  NOEXESUFFIX
+  NAME Stratimikos
+  POSTFIX_AND_ARGS_0 "LU"                 Stratimikos.py --problemSize=100   --solver=LU
+  POSTFIX_AND_ARGS_1 "CG"                 Stratimikos.py --problemSize=100   --solver=CG       --prec=None
+  POSTFIX_AND_ARGS_2 "CG_Jacobi"          Stratimikos.py --problemSize=100   --solver=CG       --prec=Jacobi
+  POSTFIX_AND_ARGS_3 "BiCGStab_Chebyshev" Stratimikos.py --problemSize=100   --solver=BiCGStab --prec=Chebyshev
+  POSTFIX_AND_ARGS_4 "GMRES_ILU"          Stratimikos.py --problemSize=1000  --solver=GMRES    --prec=ILU
+  POSTFIX_AND_ARGS_5 "CG_multigrid"       Stratimikos.py --problemSize=10000 --solver=CG       --prec=multigrid
+  PASS_REGULAR_EXPRESSION "OK"
+  ENVIRONMENT "PYTHONPATH=${PyTrilinos2_PYTHONPATH}:$ENV{PYTHONPATH}"
+)
+
+find_package(pybind11 REQUIRED)
+find_package(Torch REQUIRED)
+MESSAGE("TORCH_CXX_FLAGS: ${TORCH_CXX_FLAGS}")
+MESSAGE("TORCH_LIBRARIES: ${TORCH_LIBRARIES}")
+
+find_library(TORCH_PYTHON_LIBRARY torch_python PATH "${TORCH_INSTALL_PREFIX}/lib")
+MESSAGE("TORCH_PYTHON_LIBRARY: ${TORCH_PYTHON_LIBRARY}")
+
+
+TRIBITS_ADD_EXECUTABLE_AND_TEST(
+  RTC
+  SOURCES rtc.cpp
+  ENVIRONMENT "PYTHONPATH=${PyTrilinos2_PYTHONPATH}:$ENV{PYTHONPATH}"
+  NUM_MPI_PROCS 1
+)
+
+target_link_libraries(PyTrilinos2_RTC PRIVATE pybind11::embed)
+target_link_libraries(PyTrilinos2_RTC PRIVATE ${TORCH_LIBRARIES} ${TORCH_PYTHON_LIBRARY})
+
+
+TRIBITS_COPY_FILES_TO_BINARY_DIR(pl_cp
+    SOURCE_FILES test.xml)
+
+TRIBITS_ADD_EXECUTABLE_AND_TEST(
+  PL
+  SOURCES pl.cpp
+  ENVIRONMENT "PYTHONPATH=${PyTrilinos2_PYTHONPATH}:$ENV{PYTHONPATH}"
+  NUM_MPI_PROCS 1
+)
+
+target_link_libraries(PyTrilinos2_PL PRIVATE pybind11::embed)
+target_link_libraries(PyTrilinos2_PL PRIVATE ${TORCH_LIBRARIES} ${TORCH_PYTHON_LIBRARY})

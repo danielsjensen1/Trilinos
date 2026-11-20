@@ -1,5 +1,5 @@
 /*
- * Copyright(C) 1999-2024 National Technology & Engineering Solutions
+ * Copyright(C) 1999-2025 National Technology & Engineering Solutions
  * of Sandia, LLC (NTESS).  Under the terms of Contract DE-NA0003525 with
  * NTESS, the U.S. Government retains certain rights in this software.
  *
@@ -39,7 +39,7 @@
 #endif
 
 namespace Ioss {
-  IOSS_EXPORT const std::vector<std::string> &valid_decomp_methods();
+  IOSS_EXPORT const Ioss::NameList &valid_decomp_methods();
 
   class IOSS_EXPORT BlockDecompositionData
   {
@@ -185,6 +185,8 @@ namespace Ioss {
     Decomposition &operator=(Decomposition const &) = default;
     Decomposition &operator=(Decomposition &&)      = default;
 
+    void set_block_omissions(const Ioss::NameList &omissions);
+
     IOSS_NODISCARD size_t global_node_count() const { return m_globalNodeCount; }
     IOSS_NODISCARD size_t global_elem_count() const { return m_globalElementCount; }
     IOSS_NODISCARD size_t ioss_node_count() const { return nodeGTL.size(); }
@@ -258,7 +260,7 @@ namespace Ioss {
       return I->second;
     }
 
-    void show_progress(const std::string &message) const
+    void show_progress(std::string_view message) const
     {
       if (m_showProgress) {
         Ioss::ParallelUtils pu(m_comm);
@@ -277,6 +279,7 @@ namespace Ioss {
     void simple_decompose();
     void simple_node_decompose();
     void guided_decompose();
+    void line_decompose();
 
     void calculate_element_centroids(const std::vector<double> &x, const std::vector<double> &y,
                                      const std::vector<double> &z);
@@ -801,11 +804,13 @@ namespace Ioss {
     size_t m_importPreLocalNodeIndex{0};
 
     bool m_retainFreeNodes{true};
+    bool m_lineDecomp{false};
     bool m_showProgress{false};
     bool m_showHWM{false};
 
-    std::vector<INT>    m_elementToProc; // Used by "MAP" scheme...
+    std::vector<int>    m_elementToProc; // Used by "MAP" scheme...
     std::vector<double> m_centroids;
+    std::vector<float>  m_weights;
     std::vector<INT>    m_pointer;   // Index into adjacency, processor list for each element...
     std::vector<INT>    m_adjacency; // Size is sum of element connectivity sizes
 
@@ -815,7 +820,9 @@ namespace Ioss {
     // The global element at index 'I' (0-based) is on block B in the
     // file decomposition.
     // if m_fileBlockIndex[B] <= I && m_fileBlockIndex[B+1] < I
-    std::vector<size_t> m_fileBlockIndex;
+    std::vector<size_t>      m_fileBlockIndex;
+    std::vector<int64_t>     m_omittedBlocks;
+    std::vector<std::string> m_omittedBlockNames;
 
   private:
     // This processor "manages" the elements on the exodus mesh file from

@@ -1,43 +1,11 @@
-//@HEADER
-// ************************************************************************
-//
+// @HEADER
+// *****************************************************************************
 //                 Belos: Block Linear Solvers Package
-//                  Copyright 2004 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
-//
-// ************************************************************************
-//@HEADER
+// Copyright 2004-2016 NTESS and the Belos contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
 //
 // This driver reads a problem from a Harwell-Boeing (HB) file.
 // Multiple right-hand-sides are created randomly.
@@ -63,8 +31,8 @@
 #include "BelosPseudoBlockGmresSolMgr.hpp"
 
 
-template <typename ScalarType>
-int run(int argc, char *argv[]) {
+template <class ScalarType, class DM>
+int run(Teuchos::CommandLineProcessor& cmdp, int argc, char *argv[]) {
 
   using ST = typename Tpetra::CrsMatrix<ScalarType>::scalar_type;
   using LO = typename Tpetra::CrsMatrix<>::local_ordinal_type;
@@ -78,7 +46,7 @@ int run(int argc, char *argv[]) {
   using tmap_t       = Tpetra::Map<LO,GO,NT>;
   using tcrsmatrix_t = Tpetra::CrsMatrix<ST,LO,GO,NT>;
 
-  using MVT = typename Belos::MultiVecTraits<ST,MV>;
+  using MVT = typename Belos::MultiVecTraits<ST,MV,DM>;
   using OPT = typename Belos::OperatorTraits<ST,MV,OP>;
 
   using Teuchos::RCP;
@@ -108,7 +76,6 @@ int run(int argc, char *argv[]) {
     MT tol = 1.0e-5;       // relative residual tolerance
     MT aug_tol = 1.0e-5;   // relative residual tolerance for augmented system
 
-    Teuchos::CommandLineProcessor cmdp(false,true);
     cmdp.setOption("verbose","quiet",&verbose,"Print messages and results.");
     cmdp.setOption("frequency",&frequency,"Solvers frequency for printing residuals (#iters).");
     cmdp.setOption("filename",&filename,"Filename for Harwell-Boeing test matrix.");
@@ -165,7 +132,7 @@ int run(int argc, char *argv[]) {
     MVT::MvRandom( *initX );
     OPT::Apply( *A, *initX, *initB );
     initX->putScalar( 0.0 );
-    Belos::LinearProblem<ST,MV,OP> initProblem( A, initX, initB );
+    Belos::LinearProblem<ST,MV,OP,DM> initProblem( A, initX, initB );
     initProblem.setLabel("Belos Init");
 
     bool set = initProblem.setProblem();
@@ -180,16 +147,16 @@ int run(int argc, char *argv[]) {
     // *********************Perform initial solve*************************
     // *******************************************************************
 
-    RCP< Belos::SolverManager<ST,MV,OP> > initSolver
-      = rcp( new Belos::PseudoBlockGmresSolMgr<ST,MV,OP>( rcp(&initProblem,false), rcp(&belosList,false) ) );
+    RCP< Belos::SolverManager<ST,MV,OP,DM> > initSolver
+      = rcp( new Belos::PseudoBlockGmresSolMgr<ST,MV,OP,DM>( rcp(&initProblem,false), rcp(&belosList,false) ) );
 
     // Perform solve
     Belos::ReturnType ret = initSolver->solve();
 
     // Compute actual residuals
     bool badRes = false;
-    std::vector<ST> actualResids( initNumRHS );
-    std::vector<ST> rhsNorm( initNumRHS );
+    std::vector<MT> actualResids( initNumRHS );
+    std::vector<MT> rhsNorm( initNumRHS );
     MV initR( Map, initNumRHS );
     OPT::Apply( *A, *initX, initR );
     MVT::MvAddMv( -1.0, initR, 1.0, *initB, initR );
@@ -198,13 +165,16 @@ int run(int argc, char *argv[]) {
     if (procVerbose) {
       std::cout<< "---------- Actual Residuals (normalized) ----------"<<std::endl<<std::endl;
       for (int i=0; i<initNumRHS; i++) {
-        ST actRes = actualResids[i]/rhsNorm[i];
+        MT actRes = actualResids[i]/rhsNorm[i];
         std::cout<<"Problem "<<i<<" : \t"<< actRes <<std::endl;
         if (actRes > tol) badRes = true;
       }
     }
 
-    if (ret != Belos::Converged || badRes==true) {
+    if (ret == Belos::Converged && !badRes) {
+      // Ok
+    }
+    else {
       if (procVerbose)
         std::cout << std::endl << "ERROR:  Initial solve did not converge to solution!" << std::endl;
       return -1;
@@ -226,7 +196,7 @@ int run(int argc, char *argv[]) {
     tmpX->scale( 1.0, *augX );
     tmpB->scale( 1.0, *augB );
 
-    Belos::LinearProblem<ST,MV,OP> augProblem( A, augX, augB );
+    Belos::LinearProblem<ST,MV,OP,DM> augProblem( A, augX, augB );
     augProblem.setLabel("Belos Aug");
 
     set = augProblem.setProblem();
@@ -246,13 +216,16 @@ int run(int argc, char *argv[]) {
     belosList.set( "Timer Label", "Belos Aug" );          // Label used by the timers in this solver
     belosList.set( "Implicit Residual Scaling", "Norm of RHS" ); // Implicit residual scaling for convergence
     belosList.set( "Explicit Residual Scaling", "Norm of RHS" ); // Explicit residual scaling for convergence
-    RCP< Belos::SolverManager<ST,MV,OP> > augSolver
-      = rcp( new Belos::PseudoBlockGmresSolMgr<ST,MV,OP>( rcp(&augProblem,false), rcp(&belosList,false) ) );
+    RCP< Belos::SolverManager<ST,MV,OP,DM> > augSolver
+      = rcp( new Belos::PseudoBlockGmresSolMgr<ST,MV,OP,DM>( rcp(&augProblem,false), rcp(&belosList,false) ) );
 
     // Perform solve
     ret = augSolver->solve();
 
-    if (ret != Belos::Converged) {
+    if (ret == Belos::Converged) {
+      // Ok
+    }
+    else {
       if (procVerbose)
         std::cout << std::endl << "ERROR: Augmented solver did not converge to solution!" << std::endl;
       return -1;
@@ -287,19 +260,19 @@ int run(int argc, char *argv[]) {
     if (procVerbose) {
       std::cout<< "---------- Actual Residuals (normalized) ----------"<<std::endl<<std::endl;
       for ( int i=0; i<total_numrhs; i++) {
-        ST actRes = actualResids[i]/rhsNorm[i];
+        MT actRes = actualResids[i]/rhsNorm[i];
         std::cout<<"Problem "<<i<<" : \t"<< actRes <<std::endl;
         if (actRes > tol ) badRes = true;
       }
     }
-    if (ret!=Belos::Converged || badRes==true) {
-      success = false;
-      if (procVerbose)
-        std::cout << "End Result: TEST FAILED" << std::endl;
-    } else {
+    if (ret==Belos::Converged && !badRes) {
       success = true;
       if (procVerbose)
         std::cout << "End Result: TEST PASSED" << std::endl;
+    } else {
+      success = false;
+      if (procVerbose)
+        std::cout << "End Result: TEST FAILED" << std::endl;
     }
   }
   TEUCHOS_STANDARD_CATCH_STATEMENTS(verbose,std::cerr,success);
@@ -307,8 +280,8 @@ int run(int argc, char *argv[]) {
   return success ? EXIT_SUCCESS : EXIT_FAILURE;
 } // run
 
-int main(int argc, char *argv[]) {
-  // run with different ST
-  return run<double>(argc,argv);
-  // run<float>(argc,argv); // FAILS
+#include "BelosTpetraTestMain.hpp"
+
+int main(int argc, char* argv[]) {
+  return common_main(argc, argv);
 }

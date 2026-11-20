@@ -1,48 +1,11 @@
-/* 
- * @HEADER
- *
- * ***********************************************************************
- *
- *  Zoltan Toolkit for Load-balancing, Partitioning, Ordering and Coloring
- *                  Copyright 2012 Sandia Corporation
- *
- * Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
- * the U.S. Government retains certain rights in this software.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- * 1. Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *
- * 2. Redistributions in binary form must reproduce the above copyright
- * notice, this list of conditions and the following disclaimer in the
- * documentation and/or other materials provided with the distribution.
- *
- * 3. Neither the name of the Corporation nor the names of the
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- * Questions? Contact Karen Devine	kddevin@sandia.gov
- *                    Erik Boman	egboman@sandia.gov
- *
- * ***********************************************************************
- *
- * @HEADER
- */
+// @HEADER
+// *****************************************************************************
+//  Zoltan Toolkit for Load-balancing, Partitioning, Ordering and Coloring
+//
+// Copyright 2012 NTESS and the Zoltan contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
 
 
 #ifdef __cplusplus
@@ -51,6 +14,7 @@ extern "C" {
 #endif
 
 
+#include <limits.h>
 #include "zz_const.h"
 
 /*****************************************************************************/
@@ -410,6 +374,13 @@ int *actual_imp_to_part = NULL;          /* processor may not be included.  */
     total_send_size = 0;
 
     for (i = 0; i < actual_num_exp; i++) {
+      /* Never trust the application's callback to return a sane size. */
+      if (sizes[i] < 0 || sizes[i] > INT_MAX - tag_size) {
+        ZOLTAN_PRINT_ERROR(zz->Proc, yo, "Invalid object size returned from "
+                        "ZOLTAN_OBJ_SIZE(_MULTI) function.");
+        ierr = ZOLTAN_FATAL;
+        goto End;
+      }
       sizes[i] = Zoltan_Align(sizes[i]);
       total_send_size += sizes[i] + tag_size;
     }
@@ -602,6 +573,14 @@ int *actual_imp_to_part = NULL;          /* processor may not be included.  */
       idx_cnt = 0;
       for (i = 0; i < actual_num_imp; i++) {
 
+        /* Never trust the sizes embedded in the received message. */
+        if (tag_size > (import_buf + total_recv_size) - tmp) {
+          ZOLTAN_PRINT_ERROR(zz->Proc, yo,
+                          "Received message too small for object tags.");
+          ierr = ZOLTAN_FATAL;
+          goto End;
+        }
+
         /* Unpack the object's global ID */
         ZOLTAN_SET_GID(zz, &(tmp_id[i*num_gid_entries]), (ZOLTAN_ID_PTR) tmp);
         tmp += id_size;
@@ -609,6 +588,14 @@ int *actual_imp_to_part = NULL;          /* processor may not be included.  */
         /* Unpack the object's size */
         sizes[i] = *((int *)tmp);
         tmp += aligned_int;
+
+        if (sizes[i] < 0 ||
+            sizes[i] > (import_buf + total_recv_size) - tmp) {
+          ZOLTAN_PRINT_ERROR(zz->Proc, yo,
+                          "Invalid object size in received message.");
+          ierr = ZOLTAN_FATAL;
+          goto End;
+        }
 
         /* If using ZOLTAN_UNPACK_OBJ_MULTI_FN, build the index array. */
         idx_cnt += tag_size;
@@ -639,7 +626,21 @@ int *actual_imp_to_part = NULL;          /* processor may not be included.  */
     else {
       tmp = import_buf;
       for (i = 0; i < actual_num_imp; i++) {
+        /* Never trust the sizes embedded in the received message. */
+        if (tag_size > (import_buf + total_recv_size) - tmp) {
+          ZOLTAN_PRINT_ERROR(zz->Proc, yo,
+                          "Received message too small for object tags.");
+          ierr = ZOLTAN_FATAL;
+          goto End;
+        }
         tmp_size = *((int *)(tmp + id_size));
+        if (tmp_size < 0 ||
+            tmp_size > (import_buf + total_recv_size) - (tmp + tag_size)) {
+          ZOLTAN_PRINT_ERROR(zz->Proc, yo,
+                          "Invalid object size in received message.");
+          ierr = ZOLTAN_FATAL;
+          goto End;
+        }
         if (zz->Debug_Level >= ZOLTAN_DEBUG_ALL){
           printf("[%1d] DEBUG in %s: Unpacking object with gid ", zz->Proc, yo);
           ZOLTAN_PRINT_GID(zz, (ZOLTAN_ID_PTR)tmp);

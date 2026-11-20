@@ -1,4 +1,4 @@
-// Copyright(C) 1999-2024 National Technology & Engineering Solutions
+// Copyright(C) 1999-2025 National Technology & Engineering Solutions
 // of Sandia, LLC (NTESS).  Under the terms of Contract DE-NA0003525 with
 // NTESS, the U.S. Government retains certain rights in this software.
 //
@@ -33,7 +33,7 @@ namespace Ioss {
 
   /** \brief A collection of element sides having the same topology.
    */
-  class IOSS_EXPORT SideBlock : public EntityBlock
+  class IOSS_EXPORT SideBlock final : public EntityBlock
   {
   public:
     friend class SideSet;
@@ -79,7 +79,7 @@ namespace Ioss {
     IOSS_NODISCARD const SideSet *owner() const { return owner_; }
     IOSS_NODISCARD const Ioss::GroupingEntity *contained_in() const override { return owner_; }
 
-    void block_membership(std::vector<std::string> &block_members) override;
+    void block_membership(Ioss::NameList &block_members) override;
 
     // Handle implicit properties -- These are calculated from data stored
     // in the grouping entity instead of having an explicit value assigned.
@@ -137,8 +137,8 @@ namespace Ioss {
     const EntityBlock *parentBlock_{nullptr};
 
     // Pointer to the SideSet (if any) that contains this side block.
-    std::vector<std::string> blockMembership{}; // What element blocks do the
-                                                // elements in this sideset belong to.
+    Ioss::NameList blockMembership{}; // What element blocks do the
+                                      // elements in this sideset belong to.
     mutable int consistentSideNumber{-1};
   };
 } // namespace Ioss

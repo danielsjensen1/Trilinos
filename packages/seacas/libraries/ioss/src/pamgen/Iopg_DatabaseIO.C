@@ -1,4 +1,4 @@
-// Copyright(C) 1999-2023 National Technology & Engineering Solutions
+// Copyright(C) 1999-2023, 2025 National Technology & Engineering Solutions
 // of Sandia, LLC (NTESS).  Under the terms of Contract DE-NA0003525 with
 // NTESS, the U.S. Government retains certain rights in this software.
 //
@@ -72,7 +72,7 @@ namespace {
   {
     std::ostringstream errmsg;
     errmsg << "Pamgen error at line " << lineno << " in file '" << Version()
-           << "' Please report to gdsjaar@sandia.gov if you need help.";
+           << "' Please report to sierra-help@sandia.gov if you need help.";
     IOSS_ERROR(errmsg);
   }
 } // namespace
@@ -1473,8 +1473,8 @@ namespace Iopg {
     return elemMap;
   }
 
-  void DatabaseIO::compute_block_membership_nl(Ioss::SideBlock          *sideblock,
-                                               std::vector<std::string> &block_membership) const
+  void DatabaseIO::compute_block_membership_nl(Ioss::SideBlock *sideblock,
+                                               Ioss::NameList  &block_membership) const
   {
     Ioss::IntVector block_ids(elementBlockCount);
     if (elementBlockCount == 1) {

@@ -1,43 +1,10 @@
 // @HEADER
-// ************************************************************************
-//
+// *****************************************************************************
 //                           Intrepid2 Package
-//                 Copyright (2007) Sandia Corporation
 //
-// Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
-// license for use of this work by or on behalf of the U.S. Government.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Kyungjoo Kim  (kyukim@sandia.gov), or
-//                    Mauro Perego  (mperego@sandia.gov)
-//
-// ************************************************************************
+// Copyright 2007 NTESS and the Intrepid2 contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 /** \file test_01.cpp
@@ -77,7 +44,7 @@ namespace Intrepid2 {
       typedef Kokkos::DynRankView<ValueType,DeviceType> DynRankView;
       typedef Kokkos::DynRankView<ValueType,HostSpaceType>   DynRankViewHost;
 
-      const ValueType tol = tolerence();
+      const ValueType tol = tolerance();
       int errorFlag = 0;
 
       // for virtual function, value and point types are declared in the class
@@ -457,6 +424,35 @@ namespace Intrepid2 {
        errorFlag = -1000;
      }
       
+     *outStream
+     << "\n"
+     << "===============================================================================\n"
+     << "| TEST 5: sub-cell bases are defined on the topology of each sub-cell         |\n"
+     << "===============================================================================\n";
+
+     try {
+       const auto cellTopo = pyrBasis.getBaseCellTopology();
+       for (ordinal_type scDim=1;scDim<3;++scDim) {
+         const ordinal_type numSubcells = cellTopo.getSubcellCount(scDim);
+         for (ordinal_type scOrd=0;scOrd<numSubcells;++scOrd) {
+           const auto subcellBasis = pyrBasis.getSubCellRefBasis(scDim, scOrd);
+           const auto subcellTopoData = cellTopo.getCellTopologyData(scDim, scOrd);
+           if (subcellBasis->getBaseCellTopology().getKey() != subcellTopoData->key) {
+             errorFlag++;
+             *outStream << std::setw(70) << "------------- TEST FAILURE! -------------" << "\n";
+             *outStream << " getSubCellRefBasis(" << scDim << ", " << scOrd << ") is defined on "
+                        << subcellBasis->getBaseCellTopology().getName() << ", but sub-cell "
+                        << scOrd << " of dimension " << scDim << " is a " << subcellTopoData->name << "\n";
+           }
+         }
+       }
+     } catch (std::logic_error &err){
+       *outStream << "UNEXPECTED ERROR !!! ----------------------------------------------------------\n";
+       *outStream << err.what() << '\n';
+       *outStream << "-------------------------------------------------------------------------------" << "\n\n";
+       errorFlag = -1000;
+     }
+
      if (errorFlag != 0)
        std::cout << "End Result: TEST FAILED\n";
      else

@@ -1,44 +1,13 @@
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //           Panzer: A partial differential equation assembly
 //       engine for strongly coupled complex multiphysics systems
-//                 Copyright (2011) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Roger P. Pawlowski (rppawlo@sandia.gov) and
-// Eric C. Cyr (eccyr@sandia.gov)
-// ***********************************************************************
+// Copyright 2011 NTESS and the Panzer contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
+
 //
 #ifndef __Panzer_GatherSolution_Tpetra_Hessian_hpp__
 #define __Panzer_GatherSolution_Tpetra_Hessian_hpp__
@@ -54,6 +23,18 @@ namespace panzer {
 // **************************************************************
 // Hessian Specialization
 // **************************************************************
+
+/**
+ * \brief Hessian specialization of GatherSolution_Tpetra.
+ *
+ * This specialization is currently a placeholder: all of its methods
+ * are no-ops, so gathering solution values for the Hessian evaluation
+ * type from a Tpetra container is not yet implemented. It exists so
+ * that panzer::Traits::EvalTypes (which always includes Hessian when
+ * Panzer_BUILD_HESSIAN_SUPPORT is enabled) can be instantiated without
+ * a compile error where Hessian support for Tpetra gathers has not
+ * been filled in.
+ */
 template<typename TRAITS,typename LO,typename GO,typename NodeT>
 class GatherSolution_Tpetra<panzer::Traits::Hessian,TRAITS,LO,GO,NodeT>
   : public panzer::EvaluatorWithBaseImpl<TRAITS>,
@@ -63,23 +44,30 @@ class GatherSolution_Tpetra<panzer::Traits::Hessian,TRAITS,LO,GO,NodeT>
 
 public:
 
+  /// \brief Construct with a global indexer only; no-op beyond storing the indexer.
   GatherSolution_Tpetra(const Teuchos::RCP<const panzer::GlobalIndexer> & indexer) :
      globalIndexer_(indexer) {}
 
+  /// \brief No-op constructor (unimplemented for this specialization).
   GatherSolution_Tpetra(const Teuchos::RCP<const panzer::GlobalIndexer> & /* indexer */,
                         const Teuchos::ParameterList& /* p */) {}
 
+  /// \brief No-op (unimplemented for this specialization).
   void postRegistrationSetup(typename TRAITS::SetupData /* d */,
                              PHX::FieldManager<TRAITS>& /* vm */) {}
 
+  /// \brief No-op (unimplemented for this specialization).
   void preEvaluate(typename TRAITS::PreEvalData /* d */) {}
 
+  /// \brief No-op (unimplemented for this specialization).
   void evaluateFields(typename TRAITS::EvalData /* d */) {}
 
+  /// \brief Creates a copy of this evaluator configured from a new ParameterList, sharing the same global indexer.
   virtual Teuchos::RCP<CloneableEvaluator> clone(const Teuchos::ParameterList & pl) const
   { return Teuchos::rcp(new GatherSolution_Tpetra<panzer::Traits::Hessian,TRAITS,LO,GO,NodeT>(globalIndexer_,pl)); }
 
   // for testing purposes
+  /// \brief Returns the FieldTag of the i-th gathered field. For testing purposes.
   const PHX::FieldTag & getFieldTag(int i) const
   { TEUCHOS_ASSERT(i < Teuchos::as<int>(gatherFields_.size())); return gatherFields_[i].fieldTag(); }
 

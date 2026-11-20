@@ -1,10 +1,11 @@
-// @HEADER
-// ****************************************************************************
-//                Tempus: Copyright (2017) Sandia Corporation
+//@HEADER
+// *****************************************************************************
+//          Tempus: Time Integration and Sensitivity Analysis Package
 //
-// Distributed under BSD 3-clause license (See accompanying file Copyright.txt)
-// ****************************************************************************
-// @HEADER
+// Copyright 2017 NTESS and the Tempus contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+//@HEADER
 
 #ifndef TEMPUS_CDR_MODEL_TPETRA_IMPL_HPP
 #define TEMPUS_CDR_MODEL_TPETRA_IMPL_HPP
@@ -321,8 +322,8 @@ void CDR_Model_Tpetra<SC, LO, GO, Node>::evalModelImpl(
 
     RCP<tpetra_matrix> J;
     if (nonnull(W_out)) {
-      auto W_epetra = tpetra_extract::getTpetraOperator(W_out);
-      J             = rcp_dynamic_cast<tpetra_matrix>(W_epetra);
+      auto W_tpetra = tpetra_extract::getTpetraOperator(W_out);
+      J             = rcp_dynamic_cast<tpetra_matrix>(W_tpetra);
       TEUCHOS_ASSERT(nonnull(J));
     }
 

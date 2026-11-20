@@ -1,43 +1,10 @@
 // @HEADER
-// ************************************************************************
-//
+// *****************************************************************************
 //        Piro: Strategy package for embedded analysis capabilitites
-//                  Copyright (2010) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Andy Salinger (agsalin@sandia.gov), Sandia
-// National Laboratories.
-//
-// ************************************************************************
+// Copyright 2010 NTESS and the Piro contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #include "Piro_TempusSolver.hpp"
@@ -141,7 +108,7 @@ void Piro::TempusSolver<Scalar>::initialize(
     RCP<Teuchos::ParameterList> tempusPL = sublist(appParams, "Tempus", true);
     abort_on_failure_ = tempusPL->get<bool>("Abort on Failure", true); 
 
-    RCP<Teuchos::ParameterList> integratorPL = sublist(tempusPL, "Tempus Integrator", true);
+    RCP<Teuchos::ParameterList> integratorPL = sublist(tempusPL, tempusPL->get<std::string>("Integrator Name", "Tempus Integrator"), true);
     //IKT, 10/31/16, FIXME: currently there is no Verbosity Sublist in Tempus, but
     //Curt will add this at some point.  When this option is added, set Verbosity
     //based on that sublist, rather than hard-coding it here.
@@ -195,26 +162,15 @@ void Piro::TempusSolver<Scalar>::initialize(
       t_final_ = timeStepControlPL->get<Scalar>("Final Time", t_initial_);
     }
     //*out_ << "tempusPL = " << *tempusPL << "\n";
-    RCP<Teuchos::ParameterList> stepperPL = sublist(tempusPL, "Tempus Stepper", true);
+    RCP<Teuchos::ParameterList> stepperPL = sublist(tempusPL, integratorPL->get<std::string>("Stepper Name", "Tempus Stepper"), true);
     //*out_ << "stepperPL = " << *stepperPL << "\n";
     const std::string stepperType = stepperPL->get<std::string>("Stepper Type", "Backward Euler");
     //*out_ << "Stepper Type = " << stepperType << "\n";
 
-    //
-    // *out_ << "\nB) Create the Stratimikos linear solver factory ...\n";
-    //
-    // This is the linear solve strategy that will be used to solve for the
-    // linear system with the W.
-    //
-    Stratimikos::DefaultLinearSolverBuilder linearSolverBuilder;
-
-#ifdef HAVE_PIRO_MUELU
-    Stratimikos::enableMueLu(linearSolverBuilder);
-#endif
-
-    linearSolverBuilder.setParameterList(sublist(tempusPL, "Stratimikos", true));
-    tempusPL->validateParameters(*getValidTempusParameters(),0);
-    RCP<Thyra::LinearOpWithSolveFactoryBase<double> > lowsFactory = createLinearSolveStrategy(linearSolverBuilder);
+    tempusPL->validateParameters(*getValidTempusParameters(
+      tempusPL->get<std::string>("Integrator Name", "Tempus Integrator"), 
+      integratorPL->get<std::string>("Stepper Name", "Tempus Stepper")
+    ), 0);
 
     //
     *out_ << "\nC) Create and initalize the forward model ...\n";
@@ -317,16 +273,11 @@ void Piro::TempusSolver<Scalar>::initialize(
       }	
     }
     
-    // C.2) Create the Thyra-wrapped ModelEvaluator
-
-    thyraModel_ = rcp(new Thyra::DefaultModelEvaluatorWithSolveFactory<Scalar>(model_, lowsFactory));
-    const RCP<const Thyra::VectorSpaceBase<double> > x_space = thyraModel_->get_x_space();
-
     //
     *out_ << "\nD) Create the stepper and integrator for the forward problem ...\n";
 
     //Create Tempus integrator with observer using tempusPL, model_ and sensitivity method
-    bool sens_param_index = tempusSensPL.get<int>("Sensitivity Parameter Index", 0);
+    const int sens_param_index = tempusSensPL.get<int>("Sensitivity Parameter Index", 0);
     typedef Thyra::ModelEvaluatorBase MEB;
     if (sens_method_ != NONE) {
       const bool is_scalar_param = model_->createOutArgs().supports(MEB::OUT_ARG_DfDp, sens_param_index).supports(MEB::DERIV_MV_JACOBIAN_FORM);
@@ -439,9 +390,25 @@ void Piro::TempusSolver<Scalar>::evalModelImpl(
 
   // Set initial time and initial condition 
   Thyra::ModelEvaluatorBase::InArgs<Scalar> state_ic = model_->getNominalValues();
+
+  // Set parameters as part of initial conditions
+  for (int l = 0; l < num_p_; ++l) {
+    auto p_in = inArgs.get_p(l);
+    if (Teuchos::nonnull(p_in)) {
+      state_ic.set_p(l, p_in);
+    }
+  }
+
+  // Make the initial state consistent with the parameters (e.g., the algebraic components
+  // of a DAE), unless it was set with setInitialState
+  const bool make_consistent = static_cast<bool>(consistentInitialStateFunction_) && !initial_state_reset_;
+  const bool supports_t = state_ic.supports(Thyra::ModelEvaluatorBase::IN_ARG_t);
+
   Teuchos::RCP<const Thyra::VectorBase<Scalar>> xinit, xdotinit, xdotdotinit; 
-  if(t_initial_ > 0.0 && state_ic.supports(Thyra::ModelEvaluatorBase::IN_ARG_t)) {
-    state_ic.set_t(t_initial_);
+  if((t_initial_ > 0.0 && supports_t) || make_consistent) {
+    if (supports_t) {
+      state_ic.set_t(t_initial_);
+    }
     //If initial state has not been reset, get the initial state from ME in args
     if (!initial_state_reset_) { 
       if (state_ic.supports(Thyra::ModelEvaluatorBase::IN_ARG_x)) {
@@ -452,6 +419,13 @@ void Piro::TempusSolver<Scalar>::evalModelImpl(
       }
       if (state_ic.supports(Thyra::ModelEvaluatorBase::IN_ARG_x_dot_dot)) {
         xdotdotinit = state_ic.get_x_dot_dot();
+      }
+      if (make_consistent) {
+        TEUCHOS_TEST_FOR_EXCEPTION(xinit.is_null(), std::logic_error,
+          "\n Error! Piro::TempusSolver: the model has no nominal initial state x to make consistent.\n");
+        const RCP<Thyra::VectorBase<Scalar>> x0 = xinit->clone_v();
+        consistentInitialStateFunction_(model_, state_ic, *x0);
+        xinit = x0;
       }
       piroTempusIntegrator_->initializeSolutionHistory(t_initial_, xinit, xdotinit, xdotdotinit); 
       //Reset observer.  This is necessary for correct observation of solution
@@ -486,14 +460,6 @@ void Piro::TempusSolver<Scalar>::evalModelImpl(
         *out_ << "\n*** Piro::TempusSolver::evalModelImpl xdotdotinit at time = " << t_initial_ << " ***\n";
       }
 #endif
-    }
-  }
-  
-  // Set parameters as part of initial conditions
-  for (int l = 0; l < num_p_; ++l) {
-    auto p_in = inArgs.get_p(l); 
-    if (Teuchos::nonnull(p_in)) {
-      state_ic.set_p(l, p_in);
     }
   }
 
@@ -557,17 +523,15 @@ void Piro::TempusSolver<Scalar>::evalModelImpl(
     auto p_in = inArgs.get_p(l); 
     modelInArgs.set_p(l, p_in);
   }
-  //Set time to be final time at which the solve occurs (< t_final_ in the case we don't make it to t_final_).
-  //IKT: get final time from solutionHistory workingSpace.
-  //IKT, 11/1/16, FIXME? workingState pointer is null right now, so the following
-  //code is commented out for now.  Use t_final_ and soln_dt in set_t instead for now.
-  /*RCP<Tempus::SolutionState<Scalar> > workingState = solutionHistory->getWorkingState();
-  const Scalar time = workingState->getTime();
-  const Scalar dt   = workingState->getTimeStep();
-  const Scalar t = time + dt;
-  modelInArgs.set_t(t);*/
-  const Scalar soln_dt = solutionState->getTimeStep();
-  modelInArgs.set_t(t_final_ - soln_dt);
+  //Evaluate the responses at the final state: final time at which the solve occurs
+  //(< t_final_ in the case we don't make it to t_final_) and corresponding time derivatives,
+  //consistently with the response used by the Tempus adjoint sensitivities.
+  if (modelInArgs.supports(Thyra::ModelEvaluatorBase::IN_ARG_t))
+    modelInArgs.set_t(time);
+  if (modelInArgs.supports(Thyra::ModelEvaluatorBase::IN_ARG_x_dot))
+    modelInArgs.set_x_dot(piroTempusIntegrator_->getXDot());
+  if (modelInArgs.supports(Thyra::ModelEvaluatorBase::IN_ARG_x_dot_dot))
+    modelInArgs.set_x_dot_dot(piroTempusIntegrator_->getXDotDot());
 
   //Calculate responses and sensitivities 
   this->evalConvergedModelResponsesAndSensitivities(modelInArgs, outArgs);
@@ -577,7 +541,7 @@ void Piro::TempusSolver<Scalar>::evalModelImpl(
 
 template <typename Scalar>
 Teuchos::RCP<const Teuchos::ParameterList>
-Piro::TempusSolver<Scalar>::getValidTempusParameters() const
+Piro::TempusSolver<Scalar>::getValidTempusParameters(const std::string integratorName, const std::string stepperName) const
 {
   Teuchos::RCP<Teuchos::ParameterList> validPL =
     Teuchos::rcp(new Teuchos::ParameterList("ValidTempusSolverParams"));
@@ -597,9 +561,9 @@ Piro::TempusSolver<Scalar>::getValidTempusParameters() const
   validPL->set<bool>("Invert Mass Matrix", true, "Boolean to tell code whether or not to invert mass matrix");
   validPL->set<bool>("Constant Mass Matrix", false, "Boolean to tell code if mass matrix is constant in time");
   validPL->set<bool>("Abort on Failure", true, "");
-  validPL->set<std::string>("Integrator Name", "Tempus Integrator", "");
-  validPL->sublist("Tempus Integrator", false, "");
-  validPL->sublist("Tempus Stepper", false, "");
+  validPL->set<std::string>("Integrator Name", integratorName, "");
+  validPL->sublist(integratorName, false, "");
+  validPL->sublist(stepperName, false, "");
   validPL->sublist("Time Step Control", false, "");
   validPL->sublist("Sensitivities", false, "");
   return validPL;
@@ -680,8 +644,12 @@ template <typename Scalar>
 void Piro::TempusSolver<Scalar>::
 setObserver() const
 {
-  Teuchos::RCP<Tempus::IntegratorObserverBasic<Scalar> > observer = Teuchos::null;
-  if (Teuchos::nonnull(piroObserver_)) {
+  // Do not create the tempus observer adapter if the user-provided Piro observer is already a tempus observer
+  Teuchos::RCP<Tempus::IntegratorObserver<Scalar> > observer;
+  observer = Teuchos::rcp_dynamic_cast<Tempus::IntegratorObserver<Scalar>>(piroObserver_);
+  if (Teuchos::is_null(observer) and Teuchos::nonnull(piroObserver_)) {
+    // The user did not provide a Tempus observer, so create an adapter one
+
     //Get solutionHistory from integrator
     const Teuchos::RCP<const Tempus::SolutionHistory<Scalar> > solutionHistory = piroTempusIntegrator_->getSolutionHistory();
     const Teuchos::RCP<const Tempus::TimeStepControl<Scalar> > timeStepControl = piroTempusIntegrator_->getTimeStepControl();
@@ -689,6 +657,7 @@ setObserver() const
     observer = Teuchos::rcp(new ObserverToTempusIntegrationObserverAdapter<Scalar>(solutionHistory,
                                 timeStepControl, piroObserver_, supports_x_dotdot_, abort_on_fail_at_min_dt_, sens_method_));
   }
+
   if (Teuchos::nonnull(observer)) {
     //Set observer in integrator
     piroTempusIntegrator_->clearObservers();

@@ -1,43 +1,11 @@
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //           Panzer: A partial differential equation assembly
 //       engine for strongly coupled complex multiphysics systems
-//                 Copyright (2011) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Roger P. Pawlowski (rppawlo@sandia.gov) and
-// Eric C. Cyr (eccyr@sandia.gov)
-// ***********************************************************************
+// Copyright 2011 NTESS and the Panzer contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #ifndef PANZER_GATHER_TANGENT_BLOCKED_TPETRA_IMPL_HPP
@@ -50,7 +18,10 @@
 #include "Panzer_BlockedDOFManager.hpp"
 #include "Panzer_PureBasis.hpp"
 #include "Panzer_TpetraLinearObjFactory.hpp"
+#include "Panzer_LOCPair_GlobalEvaluationData.hpp"
 #include "Panzer_BlockedTpetraLinearObjContainer.hpp"
+#include "Panzer_BlockedVector_ReadOnly_GlobalEvaluationData.hpp"
+#include "Panzer_TpetraVector_ReadOnly_GlobalEvaluationData.hpp"
 #include "Panzer_GlobalEvaluationDataContainer.hpp"
 
 #include "Teuchos_FancyOStream.hpp"
@@ -65,7 +36,7 @@ panzer::GatherTangent_BlockedTpetra<EvalT, TRAITS,S,LO,GO,NodeT>::
 GatherTangent_BlockedTpetra(
   const Teuchos::RCP<const BlockedDOFManager> & indexer,
   const Teuchos::ParameterList& p)
-  : gidIndexer_(indexer)
+  : globalIndexer_(indexer)
   , useTimeDerivativeSolutionVector_(false)
   , globalDataKey_("Tangent Gather Container")
 {
@@ -82,6 +53,10 @@ GatherTangent_BlockedTpetra(
     gatherFields_[fd] =
       PHX::MDField<ScalarT,Cell,NODE>(names[fd],basis->functional);
     this->addEvaluatedField(gatherFields_[fd]);
+    // If blockedContainer_ is null, the evalaution is a no-op. In this
+    // case we need to preserve zero initial value. Do this by not
+    // sharing.
+    this->addUnsharedField(gatherFields_[fd].fieldTag().clone());
   }
 
   if (p.isType<bool>("Use Time Derivative Solution Vector"))
@@ -96,18 +71,43 @@ GatherTangent_BlockedTpetra(
 // **********************************************************************
 template <typename EvalT,typename TRAITS,typename S,typename LO,typename GO,typename NodeT>
 void panzer::GatherTangent_BlockedTpetra<EvalT, TRAITS,S,LO,GO,NodeT>::
-postRegistrationSetup(typename TRAITS::SetupData /* d */,
+postRegistrationSetup(typename TRAITS::SetupData d,
                       PHX::FieldManager<TRAITS>& /* fm */)
 {
   TEUCHOS_ASSERT(gatherFields_.size() == indexerNames_->size());
 
-  fieldIds_.resize(gatherFields_.size());
+  const Workset & workset_0 = (*d.worksets_)[0];
+  const std::string blockId = this->wda(workset_0).block_id;
 
+  fieldIds_.resize(gatherFields_.size());
+  fieldOffsets_.resize(gatherFields_.size());
+  fieldGlobalIndexers_.resize(gatherFields_.size());
+  productVectorBlockIndex_.resize(gatherFields_.size());
+  int maxElementBlockGIDCount = -1;
   for (std::size_t fd = 0; fd < gatherFields_.size(); ++fd) {
     // get field ID from DOF manager
     const std::string& fieldName = (*indexerNames_)[fd];
-    fieldIds_[fd] = gidIndexer_->getFieldNum(fieldName);
+    const int globalFieldNum = globalIndexer_->getFieldNum(fieldName); // Field number in the aggregate BlockDOFManager
+    productVectorBlockIndex_[fd] = globalIndexer_->getFieldBlock(globalFieldNum);
+    fieldGlobalIndexers_[fd] = globalIndexer_->getFieldDOFManagers()[productVectorBlockIndex_[fd]];
+    fieldIds_[fd] = fieldGlobalIndexers_[fd]->getFieldNum(fieldName); // Field number in the sub-global-indexer
+
+    const std::vector<int>& offsets = fieldGlobalIndexers_[fd]->getGIDFieldOffsets(blockId,fieldIds_[fd]);
+    fieldOffsets_[fd] = PHX::View<int*>("GatherSolution_BlockedTpetra(Residual):fieldOffsets",offsets.size());
+    auto hostFieldOffsets = Kokkos::create_mirror_view(fieldOffsets_[fd]);
+    for(std::size_t i=0; i < offsets.size(); ++i)
+      hostFieldOffsets(i) = offsets[i];
+    Kokkos::deep_copy(fieldOffsets_[fd],hostFieldOffsets);
+
+    maxElementBlockGIDCount = std::max(fieldGlobalIndexers_[fd]->getElementBlockGIDCount(blockId),maxElementBlockGIDCount);
   }
+
+  // We will use one workset lid view for all fields, but has to be
+  // sized big enough to hold the largest elementBlockGIDCount in the
+  // ProductVector.
+  worksetLIDs_ = PHX::View<LO**>("GatherSolution_BlockedTpetra(Residual):worksetLIDs",
+                                                gatherFields_[0].extent(0),
+                                                maxElementBlockGIDCount);
 
   indexerNames_ = Teuchos::null;  // Don't need this anymore
 }
@@ -117,10 +117,33 @@ template <typename EvalT,typename TRAITS,typename S,typename LO,typename GO,type
 void panzer::GatherTangent_BlockedTpetra<EvalT, TRAITS,S,LO,GO,NodeT>::
 preEvaluate(typename TRAITS::PreEvalData d)
 {
-  // try to extract linear object container
-  if (d.gedc->containsDataObject(globalDataKey_)) {
-    blockedContainer_ = Teuchos::rcp_dynamic_cast<const ContainerType>(d.gedc->getDataObject(globalDataKey_),true);
+  using Teuchos::RCP;
+  using Teuchos::rcp_dynamic_cast;
+  using BVROGED = panzer::BlockedVector_ReadOnly_GlobalEvaluationData;
+
+  if (!d.gedc->containsDataObject(globalDataKey_))
+    return;
+
+  RCP<GlobalEvaluationData> ged = d.gedc->getDataObject(globalDataKey_);
+
+  // try to extract a linear object container, possibly wrapped in a LOCPair
+  {
+    RCP<const ContainerType> blockedContainer = rcp_dynamic_cast<const ContainerType>(ged);
+    RCP<LOCPair_GlobalEvaluationData> loc_pair =
+      rcp_dynamic_cast<LOCPair_GlobalEvaluationData>(ged);
+
+    if(loc_pair!=Teuchos::null)
+      blockedContainer = rcp_dynamic_cast<const ContainerType>(loc_pair->getGhostedLOC(),true);
+
+    if(blockedContainer!=Teuchos::null) {
+      blockedContainer_ = blockedContainer;
+      return;
+    }
   }
+
+  // otherwise it must be a blocked read-only ghosted vector, which is what the
+  // model evaluator hands out for the tangent gather containers (throws if not)
+  xBvRoGed_ = rcp_dynamic_cast<BVROGED>(ged,true);
 }
 
 // **********************************************************************
@@ -128,73 +151,63 @@ template <typename EvalT,typename TRAITS,typename S,typename LO,typename GO,type
 void panzer::GatherTangent_BlockedTpetra<EvalT, TRAITS,S,LO,GO,NodeT>::
 evaluateFields(typename TRAITS::EvalData workset)
 {
-   using Teuchos::RCP;
-   using Teuchos::ArrayRCP;
-   using Teuchos::ptrFromRef;
-   using Teuchos::rcp_dynamic_cast;
+  using Teuchos::RCP;
+  using Teuchos::rcp_dynamic_cast;
+  using Thyra::VectorBase;
+  using Thyra::ProductVectorBase;
 
-   using Thyra::VectorBase;
-   using Thyra::SpmdVectorBase;
-   using Thyra::ProductVectorBase;
+  // If neither source was initialized, then no global evaluation data
+  // container was set, in which case this evaluator becomes a no-op
+  if (blockedContainer_ == Teuchos::null && xBvRoGed_ == Teuchos::null) return;
 
-   // If blockedContainer_ was not initialized, then no global evaluation data
-   // container was set, in which case this evaluator becomes a no-op
-   if (blockedContainer_ == Teuchos::null)
-     return;
+  const PHX::View<const int*>& localCellIds = this->wda(workset).cell_local_ids_k;
 
-   Teuchos::FancyOStream out(Teuchos::rcpFromRef(std::cout));
-   out.setShowProcRank(true);
-   out.setOutputToRootOnly(-1);
+  RCP<ProductVectorBase<ScalarT>> thyraBlockSolution;
+  if (blockedContainer_ != Teuchos::null) {
+    if (useTimeDerivativeSolutionVector_)
+      thyraBlockSolution = rcp_dynamic_cast<ProductVectorBase<ScalarT>>(blockedContainer_->get_dxdt(),true);
+    else
+      thyraBlockSolution = rcp_dynamic_cast<ProductVectorBase<ScalarT>>(blockedContainer_->get_x(),true);
+  }
+  
+  // Loop over gathered fields
+  int currentWorksetLIDSubBlock = -1;
+  for (std::size_t fieldIndex = 0; fieldIndex < gatherFields_.size(); fieldIndex++) {
+    // workset LIDs only change for different sub blocks 
+    if (productVectorBlockIndex_[fieldIndex] != currentWorksetLIDSubBlock) {
+      const std::string blockId = this->wda(workset).block_id;
+      const int num_dofs = fieldGlobalIndexers_[fieldIndex]->getElementBlockGIDCount(blockId);
+      fieldGlobalIndexers_[fieldIndex]->getElementLIDs(localCellIds,worksetLIDs_,num_dofs); 
+      currentWorksetLIDSubBlock = productVectorBlockIndex_[fieldIndex];
+    }
 
-   std::vector<std::pair<int,GO> > GIDs;
-   std::vector<LO> LIDs;
+    // Pull the ghosted sub-block vector from whichever source preEvaluate() found
+    const int blockIndex = productVectorBlockIndex_[fieldIndex];
+    RCP<const VectorType> tpetraSolution;
+    if (thyraBlockSolution != Teuchos::null) {
+      tpetraSolution = rcp_dynamic_cast<Thyra::TpetraVector<ScalarT,LO,GO,NodeT>>(
+        thyraBlockSolution->getNonconstVectorBlock(blockIndex),true)->getConstTpetraVector();
+    }
+    else {
+      using TVROGED = panzer::TpetraVector_ReadOnly_GlobalEvaluationData<S,LO,GO,NodeT>;
+      tpetraSolution = rcp_dynamic_cast<TVROGED>(xBvRoGed_->getGEDBlock(blockIndex),true)
+        ->getGhostedVector_Tpetra();
+    }
+    const auto& kokkosSolution = tpetraSolution->getLocalViewDevice(Tpetra::Access::ReadOnly);
 
-   // for convenience pull out some objects from workset
-   std::string blockId = this->wda(workset).block_id;
-   const std::vector<std::size_t> & localCellIds = this->wda(workset).cell_local_ids;
+    // Class data fields for lambda capture
+    const auto& fieldOffsets = fieldOffsets_[fieldIndex];
+    const auto& worksetLIDs = worksetLIDs_;
+    const auto& fieldValues = gatherFields_[fieldIndex];
 
-   Teuchos::RCP<ProductVectorBase<double> > x;
-   if (useTimeDerivativeSolutionVector_)
-     x = rcp_dynamic_cast<ProductVectorBase<double> >(blockedContainer_->get_dxdt());
-   else
-     x = rcp_dynamic_cast<ProductVectorBase<double> >(blockedContainer_->get_x());
-
-   // gather operation for each cell in workset
-   for(std::size_t worksetCellIndex=0;worksetCellIndex<localCellIds.size();++worksetCellIndex) {
-      LO cellLocalId = localCellIds[worksetCellIndex];
-
-      gidIndexer_->getElementGIDsPair(cellLocalId,GIDs,blockId);
-
-      // caculate the local IDs for this element
-      LIDs.resize(GIDs.size());
-      for(std::size_t i=0;i<GIDs.size();i++) {
-         // used for doing local ID lookups
-         RCP<const MapType> x_map = blockedContainer_->getMapForBlock(GIDs[i].first);
-
-         LIDs[i] = x_map->getLocalElement(GIDs[i].second);
+    Kokkos::parallel_for(Kokkos::RangePolicy<PHX::ExecutionSpace>(0,workset.num_cells), KOKKOS_LAMBDA (const int& cell) {       
+      for(int basis=0; basis < static_cast<int>(fieldOffsets.size()); ++basis) {
+        const int lid = worksetLIDs(cell,fieldOffsets(basis));
+        fieldValues(cell,basis) = kokkosSolution(lid,0);        
       }
+    });
+  }
 
-      // loop over the fields to be gathered
-      Teuchos::ArrayRCP<const double> local_x;
-      for (std::size_t fieldIndex=0; fieldIndex<gatherFields_.size();fieldIndex++) {
-         int fieldNum = fieldIds_[fieldIndex];
-         int indexerId = gidIndexer_->getFieldBlock(fieldNum);
-
-         // grab local data for inputing
-         RCP<SpmdVectorBase<double> > block_x = rcp_dynamic_cast<SpmdVectorBase<double> >(x->getNonconstVectorBlock(indexerId));
-         block_x->getLocalData(ptrFromRef(local_x));
-
-         const std::vector<int> & elmtOffset = gidIndexer_->getGIDFieldOffsets(blockId,fieldNum);
-
-         // loop over basis functions and fill the fields
-         for(std::size_t basis=0;basis<elmtOffset.size();basis++) {
-            int offset = elmtOffset[basis];
-            int lid = LIDs[offset];
-
-            (gatherFields_[fieldIndex])(worksetCellIndex,basis) = local_x[lid];
-         }
-      }
-   }
 }
 
 // **********************************************************************

@@ -215,15 +215,16 @@ double_double_int_type()
   return s_mpi_double_double_int;
 }
 
+#ifndef STK_HIDE_DEPRECATED_CODE // Delete after Sept 2026
 namespace {
 
 extern "C" {
   void
-  mpi_double_complex_sum(
+  mpi_double_std_complex_sum(
     void *		invec,
     void *		inoutvec,
     int *		len,
-    MPI_Datatype *	datatype)
+    MPI_Datatype *	/*datatype*/)
   {
     std::complex<double> *complex_in = static_cast<std::complex<double> *>(invec);
     std::complex<double> *complex_inout = static_cast<std::complex<double> *>(inoutvec);
@@ -236,7 +237,7 @@ extern "C" {
 } // namespace <unnamed>
 
 
-MPI_Op
+STK_DEPRECATED MPI_Op
 double_complex_sum_op()
 {
   static MPI_Op s_mpi_double_complex_sum;
@@ -245,10 +246,11 @@ double_complex_sum_op()
   if (!initialized) {
     initialized = true;
 
-    MPI_Op_create(mpi_double_complex_sum, true, &s_mpi_double_complex_sum);
+    MPI_Op_create(mpi_double_std_complex_sum, true, &s_mpi_double_complex_sum);
   }
   return s_mpi_double_complex_sum;
 }
+#endif
 
 namespace {
 
@@ -288,19 +290,19 @@ struct ReduceCheck : public ReduceInterface
     m_size = size;
   }
 
-  virtual void size(void *&inbuf) const {
+  virtual void size(void *&inbuf) const override {
     unsigned *t = align_cast<unsigned>(inbuf);
     t += sizeof(unsigned);
     inbuf = t;
   }
 
-  virtual void copyin(void *&inbuf) const {
+  virtual void copyin(void *&inbuf) const override {
     unsigned *t = align_cast<unsigned>(inbuf);
     *t++ = m_size;
     inbuf = t;
   }
 
-  virtual void copyout(void *&outbuf) const {
+  virtual void copyout(void *&outbuf) const override {
     unsigned *t = align_cast<unsigned>(outbuf);
 
     unsigned size = *t++;
@@ -310,7 +312,7 @@ struct ReduceCheck : public ReduceInterface
     outbuf = t;
   }
 
-  virtual void op(void *&inbuf, void *&outbuf) const {
+  virtual void op(void *&inbuf, void *&outbuf) const override {
     unsigned *tin = align_cast<unsigned>(inbuf);
     unsigned *tout = align_cast<unsigned>(outbuf);
 
@@ -348,9 +350,9 @@ ReduceSet::size() const {
   }
 
   ReduceCheck *reduce_check = static_cast<ReduceCheck *>(m_reduceVector.front());
-  reduce_check->setSize(reinterpret_cast<char *>(buffer_end) - static_cast<char*>(0));
+  reduce_check->setSize(reinterpret_cast<size_t>(buffer_end));
 
-  return reinterpret_cast<char *>(buffer_end) - static_cast<char*>(0);
+  return reinterpret_cast<size_t>(buffer_end);
 }
 
 void

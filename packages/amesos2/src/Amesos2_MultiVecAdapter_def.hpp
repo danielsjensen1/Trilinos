@@ -1,44 +1,10 @@
 // @HEADER
-//
-// ***********************************************************************
-//
+// *****************************************************************************
 //           Amesos2: Templated Direct Sparse Solver Package
-//                  Copyright 2011 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
-//
-// ***********************************************************************
-//
+// Copyright 2011 NTESS and the Amesos2 contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 
@@ -46,7 +12,6 @@
 #define AMESOS2_MULTIVECADAPTER_DEF_HPP
 
 #include "Amesos2_TpetraMultiVecAdapter_def.hpp"
-// EpetraMultiVecAdapter_def.hpp not included because the specialization is not a template
 #include "Amesos2_KokkosMultiVecAdapter_def.hpp"
 
 #include "Amesos2_Util.hpp"     // for getDistributionMap
@@ -199,10 +164,64 @@ namespace Amesos2{
         map.is_null (), std::invalid_argument,
         "Amesos2::get_1d_copy_helper::do_get(3 args): mv->getMap() is null.");
 
-
       do_get (mv, vals, ldx, Teuchos::ptrInArg (*map), ROOTED); // ROOTED the default here for now
     }
 
+    // KV
+    template <class MV, typename KV>
+    bool diff_type_get_view<MV, KV>::
+    apply (bool bInitialize,
+           const Teuchos::Ptr<const MV>& mv,
+           KV& kokkos_vals,
+           const size_t ldx,
+           Teuchos::Ptr<const Tpetra::Map<typename MV::local_ordinal_t, typename MV::global_ordinal_t, typename MV::node_t> > distribution_map,
+           EDistribution distribution)
+    {
+      using input_scalar_type  = typename MV::scalar_t;
+      using output_scalar_type = typename KV::non_const_value_type;
+      using execution_space = typename KV::execution_space;
+      using memory_space    = typename execution_space::memory_space;
+
+      // copy to workspace (of same type as input scalar type)
+      Kokkos::View<input_scalar_type**, Kokkos::LayoutLeft, memory_space> output_view;
+      bool bAssigned = mv->get1dCopy_kokkos_view(bInitialize, output_view, ldx, distribution_map, distribution);
+
+      // copy back (of the output scalar type)
+      const size_t nrows = output_view.extent(0);
+      const size_t ncols = output_view.extent(1);
+      Kokkos::resize(kokkos_vals, ldx, ncols);
+
+      #if 1
+      auto h_output_view = Kokkos::create_mirror_view(output_view);
+      auto h_kokkos_vals = Kokkos::create_mirror_view(kokkos_vals);
+      Kokkos::deep_copy(output_view, h_output_view);
+      for (size_t j=0; j<ncols; j++) {
+        for (size_t i=0; i<nrows; i++) h_kokkos_vals(i,j) = Teuchos::as<output_scalar_type> (h_output_view(i,j));
+      }
+      Kokkos::deep_copy(kokkos_vals, h_kokkos_vals);
+      #else
+      //Kokkos::parallel_for("Amesos2::MultiVecAdapter::diff_type_get_view::apply", Kokkos::RangePolicy<execution_space>(0, nrows),
+      //  KOKKOS_LAMBDA(const int i) { for (size_t j=0; j<ncols; j++) kokkos_vals(i,j) = Teuchos::as<output_scalar_type> (output_view(i,j)); });
+      #endif
+
+      // made a copy, instead of assigning input pointer (so safe to shallow-copy, which won't over-write the original memory space)
+      bAssigned = false;
+      return bAssigned;
+    }
+
+    template <class MV, class KV>
+    bool same_type_get_view<MV, KV>::
+    apply (bool bInitialize,
+           const Teuchos::Ptr<const MV>& mv,
+           KV& kokkos_vals,
+           const size_t ldx,
+           Teuchos::Ptr<const Tpetra::Map<typename MV::local_ordinal_t, typename MV::global_ordinal_t, typename MV::node_t> > distribution_map,
+           EDistribution distribution)
+    {
+      return mv->get1dCopy_kokkos_view(bInitialize, kokkos_vals, ldx, distribution_map, distribution);
+    }
+
+    // > entry point
     template <class MV, typename KV>
     bool get_1d_copy_helper_kokkos_view<MV,KV>::
     do_get (bool bInitialize,
@@ -212,7 +231,16 @@ namespace Amesos2{
             Teuchos::Ptr<const Tpetra::Map<typename MV::local_ordinal_t, typename MV::global_ordinal_t, typename MV::node_t> > distribution_map,
             EDistribution distribution)
     {
-      return mv->get1dCopy_kokkos_view(bInitialize, kokkos_vals, ldx, distribution_map, distribution);
+      // TODO: check input-scalar (host vs non-host)
+      //using input_scalar_type  = typename MV::scalar_t;
+      using input_scalar_type  = typename MV::host_value_t;
+      using output_scalar_type = typename KV::non_const_value_type;
+
+      // call appropriate apply based on if the input and output scalar types are the same or different
+      bool bAssigned = std::conditional_t<std::is_same_v<input_scalar_type, output_scalar_type>,
+               same_type_get_view<MV, KV>,
+               diff_type_get_view<MV, KV>>::apply (bInitialize, mv, kokkos_vals, ldx, distribution_map, distribution);
+      return bAssigned;
     }
 
     template <class MV, typename KV>
@@ -258,9 +286,10 @@ namespace Amesos2{
         "Amesos2::get_1d_copy_helper::do_get(3 args): mv is null.");
 
       Teuchos::RCP<const map_type> map = mv->getMap ();
-      TEUCHOS_TEST_FOR_EXCEPTION(
-        map.is_null (), std::invalid_argument,
-        "Amesos2::get_1d_copy_helper_kokkos_view::do_get(3 args): mv->getMap() is null.");
+      //NOTE: KokkosMultiVecAdapter returns null map
+      //TEUCHOS_TEST_FOR_EXCEPTION(
+      //  map.is_null (), std::invalid_argument,
+      //  "Amesos2::get_1d_copy_helper_kokkos_view::do_get(3 args): mv->getMap() is null.");
 
       return do_get (bInitialize, mv, kokkos_vals, ldx, Teuchos::ptrInArg (*map), ROOTED); // ROOTED the default here for now
     }
@@ -363,6 +392,53 @@ namespace Amesos2{
       do_put (mv, data, ldx, Teuchos::ptrInArg (*map), ROOTED); // Default as ROOTED for now
     }
 
+    // KV
+    template <class MV, class KV>
+    void same_type_put_view<MV,KV>::apply(const Teuchos::Ptr<MV>& mv,
+                                          KV& kokkos_data,
+                                          const size_t ldx,
+                                          Teuchos::Ptr<const Tpetra::Map<typename MV::local_ordinal_t, typename MV::global_ordinal_t, typename MV::node_t> > distribution_map,
+                                          EDistribution distribution )
+    {
+      mv->put1dData_kokkos_view(kokkos_data, ldx, distribution_map, distribution);
+    }
+
+    template <class MV, class KV>
+    void diff_type_put_view<MV,KV>::apply(const Teuchos::Ptr<MV>& mv,
+                                          KV& kokkos_data,
+                                          const size_t ldx,
+                                          Teuchos::Ptr<const Tpetra::Map<typename MV::local_ordinal_t, typename MV::global_ordinal_t, typename MV::node_t> > distribution_map,
+                                          EDistribution distribution )
+    {
+      // TODO: check input-scalar (host vs non-host)
+      //using output_scalar_type  = typename MV::scalar_t;
+      using output_scalar_type  = typename MV::host_value_t;
+      using execution_space = typename KV::execution_space;
+      using memory_space    = typename execution_space::memory_space;
+
+      // copy to input workspace (of same type as output scalar type)
+      const size_t nrows = kokkos_data.extent(0);
+      const size_t ncols = kokkos_data.extent(1);
+      Kokkos::View<output_scalar_type**, Kokkos::LayoutLeft, memory_space> output_view ("output_view", ldx, ncols);
+
+      #if 1
+      auto h_output_view = Kokkos::create_mirror_view(output_view);
+      auto h_kokkos_data = Kokkos::create_mirror_view(kokkos_data);
+      Kokkos::deep_copy(h_kokkos_data, kokkos_data);
+      for (size_t j=0; j<ncols; j++) {
+        for (size_t i=0; i<nrows; i++) h_output_view(i,j) = Teuchos::as<output_scalar_type> (h_kokkos_data(i,j));
+      }
+      Kokkos::deep_copy(output_view, h_output_view);
+      #else
+      // TODO: how to custom-cast within parallel-for
+      Kokkos::parallel_for("Amesos2::MultiVecAdapter::diff_type_get_view::apply", Kokkos::RangePolicy<execution_space>(0, nrows),
+        KOKKOS_LAMBDA(const int i) { for (size_t j=0; j<ncols; j++) output_view(i,j) = Teuchos::as<output_scalar_type> (kokkos_data(i,j)); });
+      #endif
+
+      // put to output (of output scalar type)
+      mv->put1dData_kokkos_view(output_view, ldx, distribution_map, distribution);
+    }
+
     template <class MV, typename KV>
     void put_1d_data_helper_kokkos_view<MV,KV>::do_put(const Teuchos::Ptr<MV>& mv,
                                           KV& kokkos_data,
@@ -370,7 +446,12 @@ namespace Amesos2{
                                           Teuchos::Ptr<const Tpetra::Map<typename MV::local_ordinal_t, typename MV::global_ordinal_t, typename MV::node_t> > distribution_map,
                                           EDistribution distribution )
     {
-      mv->put1dData_kokkos_view(kokkos_data, ldx, distribution_map, distribution);
+      // call appropriate apply based on if the input and output scalar types are the same or different
+      using input_scalar_type   = typename KV::non_const_value_type;
+      using output_scalar_type  = typename MV::scalar_t;
+      std::conditional_t<std::is_same_v<input_scalar_type, output_scalar_type>,
+               same_type_put_view<MV, KV>,
+               diff_type_put_view<MV, KV>>::apply (mv, kokkos_data, ldx, distribution_map, distribution);
     }
 
     template <class MV, typename KV>
@@ -410,4 +491,4 @@ namespace Amesos2{
 
 } // end namespace Amesos2
 
-#endif  // AMESOS2_EPETRAMULTIVECADAPTER_DEF
+#endif  // AMESOS2_MULTIVECADAPTER_DEF_HPP

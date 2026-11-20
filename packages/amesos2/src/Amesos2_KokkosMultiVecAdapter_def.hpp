@@ -1,44 +1,10 @@
 // @HEADER
-//
-// ***********************************************************************
-//
+// *****************************************************************************
 //           Amesos2: Templated Direct Sparse Solver Package
-//                  Copyright 2011 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
-//
-// ***********************************************************************
-//
+// Copyright 2011 NTESS and the Amesos2 contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 /**
@@ -123,14 +89,45 @@ namespace Amesos2 {
       "Not implemented.");
   }
 
+  template <typename Scalar, typename ExecutionSpace>
+  template<typename KV, typename host_ordinal_type_array>
+  int
+  MultiVecAdapter<
+    Kokkos::View<Scalar**, Kokkos::LayoutLeft, ExecutionSpace> >::gather (
+      KV& kokkos_new_view,
+      host_ordinal_type_array &perm_g2l,
+      host_ordinal_type_array &recvCountRows,
+      host_ordinal_type_array &recvDisplRows,
+      EDistribution distribution ) const
+  {
+    return -1;
+  }
+
+  template <typename Scalar, typename ExecutionSpace>
+  template<typename KV, typename host_ordinal_type_array>
+  int
+  MultiVecAdapter<
+    Kokkos::View<Scalar**, Kokkos::LayoutLeft, ExecutionSpace> >::scatter (
+      KV& kokkos_new_view,
+      host_ordinal_type_array &perm_g2l,
+      host_ordinal_type_array &recvCountRows,
+      host_ordinal_type_array &recvDisplRows,
+      EDistribution distribution ) const
+  {
+    return -1;
+  }
+
   template <typename Scalar, typename ExecutionSpace >
   std::string
   MultiVecAdapter<
     Kokkos::View<Scalar**, Kokkos::LayoutLeft, ExecutionSpace> >::description() const
   {
     std::ostringstream oss;
+    size_t m = mv_->extent(0);
+    size_t n = mv_->extent(1);
     oss << "Amesos2 adapter wrapping: ";
-    oss << mv_->description();
+    oss << " Kokkos::View(" << std::to_string(m) << " x " << std::to_string(n) << ")";
+    oss << " of type " << std::string(typeid(Scalar).name());
     return oss.str();
   }
 
@@ -141,7 +138,22 @@ namespace Amesos2 {
     Kokkos::View<Scalar**, Kokkos::LayoutLeft, ExecutionSpace> >::describe (Teuchos::FancyOStream& os,
                                    const Teuchos::EVerbosityLevel verbLevel) const
   {
-    mv_->describe (os, verbLevel);
+    size_t m = mv_->extent(0);
+    size_t n = mv_->extent(1);
+    os << "Amesos2 adapter wrapping: ";
+    os << " Kokkos::View(" << std::to_string(m) << " x " << std::to_string(n) << ")";
+    os << " of type " << std::string(typeid(Scalar).name()) << std::endl;
+    if (verbLevel == Teuchos::VERB_EXTREME) {
+      auto mv_h = Kokkos::create_mirror_view(*mv_);
+      Kokkos::deep_copy(mv_h, *mv_);
+      os << "[" << std::endl;
+      for (size_t i = 0; i < mv_h.extent(0); i++) {
+        os << i << " ";
+        for (size_t j = 0; j < mv_h.extent(1); j++) os << mv_h(i,j) << " ";
+        os << std::endl;
+      }
+      os << "];" << std::endl;
+    }
   }
 
 } // end namespace Amesos2

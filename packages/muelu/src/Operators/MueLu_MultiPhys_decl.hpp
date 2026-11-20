@@ -1,48 +1,12 @@
 // @HEADER
-//
-// ***********************************************************************
-//
+// *****************************************************************************
 //        MueLu: A package for multigrid based preconditioning
-//                  Copyright 2012 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact
-//                    Jonathan Hu       (jhu@sandia.gov)
-//                    Andrey Prokopenko (aprokop@sandia.gov)
-//                    Ray Tuminaro      (rstumin@sandia.gov)
-//
-// ***********************************************************************
-//
+// Copyright 2012 NTESS and the MueLu contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
+
 #ifndef MUELU_MULTIPHYS_DECL_HPP
 #define MUELU_MULTIPHYS_DECL_HPP
 
@@ -59,10 +23,6 @@
 #include "MueLu_RAPFactory_fwd.hpp"
 #include "MueLu_PerfUtils_fwd.hpp"
 #include "MueLu_SmootherBase.hpp"
-
-#if defined(HAVE_MUELU_KOKKOS_REFACTOR)
-#include "MueLu_Utilities_kokkos_fwd.hpp"
-#endif
 
 #include "Xpetra_Map_fwd.hpp"
 #include "Xpetra_Matrix_fwd.hpp"
@@ -108,6 +68,8 @@ class MultiPhys : public VerboseObject, public Xpetra::Operator<Scalar, LocalOrd
    * \param[in] nBlks                 nBlks x nBlks gives the block dimensions of the multiphysics operator
    * \param[in] List Parameter list
    * \param[in] ComputePrec If true, compute the preconditioner immediately
+   * \param[in] arrayOfMaterials      Material multivectors used to generate subblock prolongators for multiphysics system
+   * \param[in] OmitSubblockSmoother If true, omit construction of subblock-level smoothers
    */
   MultiPhys(const Teuchos::RCP<Matrix>& AmatMultiPhysics,
             const Teuchos::ArrayRCP<RCP<Matrix>> arrayOfAuxMatrices,
@@ -115,13 +77,17 @@ class MultiPhys : public VerboseObject, public Xpetra::Operator<Scalar, LocalOrd
             const Teuchos::ArrayRCP<Teuchos::RCP<RealValuedMultiVector>> arrayOfCoords,
             const int nBlks,
             Teuchos::ParameterList& List,
-            bool ComputePrec = true)
+            bool /*ComputePrec*/                                                = true,
+            const Teuchos::ArrayRCP<Teuchos::RCP<MultiVector>> arrayOfMaterials = Teuchos::null,
+            bool OmitSubblockSmoother                                           = true)
     : AmatMultiphysics_(AmatMultiPhysics)
     , arrayOfAuxMatrices_(arrayOfAuxMatrices)
     , arrayOfNullspaces_(arrayOfNullspaces)
     , arrayOfCoords_(arrayOfCoords)
+    , arrayOfMaterials_(arrayOfMaterials)
+    , OmitSubblockSmoother_(OmitSubblockSmoother)
     , nBlks_(nBlks) {
-    initialize(AmatMultiPhysics, arrayOfAuxMatrices, arrayOfNullspaces, arrayOfCoords, nBlks, List);
+    initialize(AmatMultiPhysics, arrayOfAuxMatrices, arrayOfNullspaces, arrayOfCoords, nBlks, List, arrayOfMaterials);
     compute(false);
   }
 
@@ -165,6 +131,16 @@ class MultiPhys : public VerboseObject, public Xpetra::Operator<Scalar, LocalOrd
     this->apply(X, R, Teuchos::NO_TRANS, -STS::one(), STS::one());
   }
 
+  //! Return the multiphysics hierarchy
+  Teuchos::RCP<Hierarchy> multiphysicsHierarchy() {
+    return hierarchyMultiphysics_;
+  }
+
+  //! Return an array of hierarchies corresponding to each diagonal subblock
+  Teuchos::ArrayRCP<Teuchos::RCP<Hierarchy>> subblockHierarchies() {
+    return arrayOfHierarchies_;
+  }
+
  private:
   /** Initialize with matrices except the Jacobian (don't compute the preconditioner)
    *
@@ -174,13 +150,15 @@ class MultiPhys : public VerboseObject, public Xpetra::Operator<Scalar, LocalOrd
    * \param[in] arrayOfCoords         Array of coordinate multivectors used to generate subblock prolongators for multiphysics system
    * \param[in] nBlks                 nBlks x nBlks gives the block dimensions of the multiphysics operator
    * \param[in] List Parameter list
+   * \param[in] arrayOfMaterials      Array of material multivectors used to generate subblock prolongators for multiphysics system
    */
   void initialize(const Teuchos::RCP<Matrix>& AmatMultiPhysics,
                   const Teuchos::ArrayRCP<RCP<Matrix>> arrayOfAuxMatrices,
                   const Teuchos::ArrayRCP<Teuchos::RCP<MultiVector>> arrayOfNullspaces,
                   const Teuchos::ArrayRCP<Teuchos::RCP<RealValuedMultiVector>> arrayOfCoords,
                   const int nBlks,
-                  Teuchos::ParameterList& List);
+                  Teuchos::ParameterList& List,
+                  const Teuchos::ArrayRCP<Teuchos::RCP<MultiVector>> arrayOfMaterials);
 
   //! apply standard MultiPhys cycle
   void applyInverse(const MultiVector& RHS, MultiVector& X) const;
@@ -205,6 +183,9 @@ class MultiPhys : public VerboseObject, public Xpetra::Operator<Scalar, LocalOrd
   Teuchos::ArrayRCP<Teuchos::RCP<Matrix>> arrayOfAuxMatrices_;            // array of discretization/auxiliary matrices used to generate subblock prolongators
   Teuchos::ArrayRCP<Teuchos::RCP<MultiVector>> arrayOfNullspaces_;        // array of nullspaces for smoothed aggregation.
   Teuchos::ArrayRCP<Teuchos::RCP<RealValuedMultiVector>> arrayOfCoords_;  // array of coordinates for smoothed aggregation/rebalancing.
+  Teuchos::ArrayRCP<Teuchos::RCP<MultiVector>> arrayOfMaterials_;         // array of materials for smoothed aggregation.
+
+  bool OmitSubblockSmoother_;
 
   int nBlks_;  // number of PDE sub-systems within multiphysics system
   bool useKokkos_, enable_reuse_, syncTimers_;

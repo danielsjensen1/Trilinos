@@ -1,33 +1,13 @@
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //                           Sacado Package
-//                 Copyright (2006) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// This library is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as
-// published by the Free Software Foundation; either version 2.1 of the
-// License, or (at your option) any later version.
-//
-// This library is distributed in the hope that it will be useful, but
-// WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-// Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public
-// License along with this library; if not, write to the Free Software
-// Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301
-// USA
-// Questions? Contact David M. Gay (dmgay@sandia.gov) or Eric T. Phipps
-// (etphipp@sandia.gov).
-//
-// ***********************************************************************
+// Copyright 2006 NTESS and the Sacado contributors.
+// SPDX-License-Identifier: LGPL-2.1-or-later
+// *****************************************************************************
 // @HEADER
 
-#define SACADO_VIEW_CUDA_HIERARCHICAL_DFAD 1
+#define SACADO_GPU_HIERARCHICAL_DFAD 1
 #define SACADO_KOKKOS_USE_MEMORY_POOL 1
 
 #include "Sacado.hpp"
@@ -99,7 +79,7 @@ void run_mat_vec_hierarchical_dfad_scratch(
 
   const int m = A.extent(0);
   const int n = A.extent(1);
-  const int p = dimension_scalar(A);
+  const int p = Sacado::dimension_scalar(A);
   const int N = (m+TeamSize-1)/TeamSize;
 
   Policy policy(N, TeamSize, VectorSize);
@@ -127,11 +107,11 @@ check_deriv_hierarchical_dfad(const ViewTypeA& A, const ViewTypeB& b, const View
 {
   const double tol = 1.0e-14;
   typedef typename ViewTypeC::value_type value_type;
-  typename ViewTypeC::HostMirror h_c = Kokkos::create_mirror_view(c);
+  typename ViewTypeC::host_mirror_type h_c = Kokkos::create_mirror_view(c);
   Kokkos::deep_copy(h_c, c);
   const size_t m = A.extent(0);
   const size_t n = A.extent(1);
-  const size_t p = Kokkos::dimension_scalar(A);
+  const size_t p = Sacado::dimension_scalar(A);
   for (size_t i=0; i<m; ++i) {
     for (size_t j=0; j<p; ++j) {
       value_type t = (j == p-1 ? n : 2*n);
@@ -152,9 +132,9 @@ do_time_fad_hierarchical_dfad(const size_t m, const size_t n, const size_t p,
   typedef Kokkos::View<FadType*,  ViewArgs...> ViewTypeB;
   typedef Kokkos::View<FadType*,  ViewArgs...> ViewTypeC;
   typedef typename ViewTypeA::execution_space execution_space;
-  typedef Kokkos::LayoutContiguous<typename ViewTypeA::array_layout> ConLayoutA;
-  typedef Kokkos::LayoutContiguous<typename ViewTypeB::array_layout> ConLayoutB;
-  typedef Kokkos::LayoutContiguous<typename ViewTypeC::array_layout> ConLayoutC;
+  typedef Sacado::LayoutContiguous<typename ViewTypeA::array_layout> ConLayoutA;
+  typedef Sacado::LayoutContiguous<typename ViewTypeB::array_layout> ConLayoutB;
+  typedef Sacado::LayoutContiguous<typename ViewTypeC::array_layout> ConLayoutC;
   typedef Kokkos::View<FadType**, ConLayoutA, execution_space> ConViewTypeA;
   typedef Kokkos::View<FadType*,  ConLayoutB, execution_space> ConViewTypeB;
   typedef Kokkos::View<FadType*,  ConLayoutC, execution_space> ConViewTypeC;
@@ -166,8 +146,8 @@ do_time_fad_hierarchical_dfad(const size_t m, const size_t n, const size_t p,
   // FadType a(p, 1.0);
   // for (size_t k=0; k<p; ++k)
   //   a.fastAccessDx(k) = 1.0;
-  Kokkos::deep_copy(typename ConViewTypeA::array_type(A), 1.0);
-  Kokkos::deep_copy(typename ConViewTypeB::array_type(b), 1.0);
+  Kokkos::deep_copy(typename ConViewTypeA::type(A), 1.0);
+  Kokkos::deep_copy(typename ConViewTypeB::type(b), 1.0);
 
   Kokkos::Timer wall_clock;
   Perf perf;
@@ -228,9 +208,9 @@ do_time_fad_hierarchical_dfad_scratch(
   typedef Kokkos::View<FadType*,  ViewArgs...> ViewTypeB;
   typedef Kokkos::View<FadType*,  ViewArgs...> ViewTypeC;
   typedef typename ViewTypeA::execution_space execution_space;
-  typedef Kokkos::LayoutContiguous<typename ViewTypeA::array_layout> ConLayoutA;
-  typedef Kokkos::LayoutContiguous<typename ViewTypeB::array_layout> ConLayoutB;
-  typedef Kokkos::LayoutContiguous<typename ViewTypeC::array_layout> ConLayoutC;
+  typedef Sacado::LayoutContiguous<typename ViewTypeA::array_layout> ConLayoutA;
+  typedef Sacado::LayoutContiguous<typename ViewTypeB::array_layout> ConLayoutB;
+  typedef Sacado::LayoutContiguous<typename ViewTypeC::array_layout> ConLayoutC;
   typedef Kokkos::View<FadType**, ConLayoutA, execution_space> ConViewTypeA;
   typedef Kokkos::View<FadType*,  ConLayoutB, execution_space> ConViewTypeB;
   typedef Kokkos::View<FadType*,  ConLayoutC, execution_space> ConViewTypeC;
@@ -242,8 +222,8 @@ do_time_fad_hierarchical_dfad_scratch(
   // FadType a(p, 1.0);
   // for (size_t k=0; k<p; ++k)
   //   a.fastAccessDx(k) = 1.0;
-  Kokkos::deep_copy(typename ConViewTypeA::array_type(A), 1.0);
-  Kokkos::deep_copy(typename ConViewTypeB::array_type(b), 1.0);
+  Kokkos::deep_copy(typename ConViewTypeA::type(A), 1.0);
+  Kokkos::deep_copy(typename ConViewTypeB::type(b), 1.0);
 
   Kokkos::Timer wall_clock;
   Perf perf;

@@ -1,44 +1,11 @@
 // @HEADER
-// ************************************************************************
-//
-//        Phalanx: A Partial Differential Equation Field Evaluation
+// *****************************************************************************
+//        Phalanx: A Partial Differential Equation Field Evaluation 
 //       Kernel for Flexible Management of Complex Dependency Chains
-//                    Copyright 2008 Sandia Corporation
 //
-// Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
-// license for use of this work by or on behalf of the U.S. Government.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Roger Pawlowski (rppawlo@sandia.gov), Sandia
-// National Laboratories.
-//
-// ************************************************************************
+// Copyright 2008 NTESS and the Phalanx contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #ifndef PHX_DAG_MANAGER_DEF_HPP
@@ -104,13 +71,24 @@ requireField(const PHX::FieldTag& t)
 //=======================================================================
 template<typename Traits>
 void PHX::DagManager<Traits>::
+setAddIndexToTimerNames(bool add_index)
+{
+  add_index_to_timer_names_ = add_index;
+}
+
+//=======================================================================
+template<typename Traits>
+void PHX::DagManager<Traits>::
 registerEvaluator(const Teuchos::RCP<PHX::Evaluator<Traits> >& p)
 {
 #ifdef PHX_TEUCHOS_TIME_MONITOR
-  // Add counter to name so that all timers have unique names
+  // Optionally add index to name so that all timers have unique names
   static int count=0;
   std::stringstream uniqueName;
-  uniqueName << "Phalanx: Evaluator " << count++ <<": [" << evaluation_type_name_ << "] ";
+  uniqueName << "Phalanx: Evaluator";
+  if (add_index_to_timer_names_)
+    uniqueName << " " << count++ ;
+  uniqueName << ": [" << evaluation_type_name_ << "] ";
   evalTimers.push_back(
      Teuchos::TimeMonitor::getNewTimer(uniqueName.str() + p->getName()));
 #endif
@@ -489,8 +467,6 @@ evaluateFields(typename Traits::EvalData d)
     using clock = std::chrono::steady_clock;
     std::chrono::time_point<clock> start = clock::now();
 
-    typename PHX::Device().fence(); // temporary fence until UVM in evaluateFields fixed
-
     nodes_[topoSortEvalIndex[n]].getNonConst()->evaluateFields(d);
 
     nodes_[topoSortEvalIndex[n]].sumIntoExecutionTime(clock::now()-start);
@@ -545,7 +521,7 @@ namespace PHX {
       data_(data) {}
 
     KOKKOS_INLINE_FUNCTION
-    void operator()(const Kokkos::TeamPolicy<PHX::exec_space>::member_type& team) const
+    void operator()(const Kokkos::TeamPolicy<PHX::ExecutionSpace>::member_type& team) const
     {
       const int num_evaluators = static_cast<int>(evaluators_.extent(0));
       for (int e=0; e < num_evaluators; ++e) {
@@ -574,7 +550,7 @@ evaluateFieldsDeviceDag(const int& work_size,
   //! DAG support on CUDA (i.e. RDC off), so this ifdef will hide the
   //! RDC required code.
 #if defined(PHX_ENABLE_DEVICE_DAG)
-  Kokkos::parallel_for(Kokkos::TeamPolicy<PHX::exec_space>(work_size,team_size,vector_size),
+  Kokkos::parallel_for(Kokkos::TeamPolicy<PHX::ExecutionSpace>(work_size,team_size,vector_size),
                        PHX::RunDeviceDag<Traits>(device_evaluators_,d));
 #else
   TEUCHOS_TEST_FOR_EXCEPTION(true,std::runtime_error,
@@ -589,8 +565,8 @@ void PHX::DagManager<Traits>::
 evaluateFieldsTaskParallel(const int& work_size,
 			   typename Traits::EvalData d)
 {
-  using execution_space = PHX::exec_space;
-  using memory_space = PHX::Device::memory_space;
+  using execution_space = PHX::ExecutionSpace;
+  using memory_space = PHX::MemorySpace;
   using policy_type = Kokkos::TaskScheduler<execution_space>;
 
   // Requested the ability to query policy for required sizes of calls
@@ -606,7 +582,7 @@ evaluateFieldsTaskParallel(const int& work_size,
 
   // Issue in reusing vector. The assign doesn't like the change of policy.
   //node_futures_.resize(nodes_.size());
-  std::vector<Kokkos::Future<void,PHX::exec_space>> node_futures_(nodes_.size());
+  std::vector<Kokkos::Future<void,PHX::ExecutionSpace>> node_futures_(nodes_.size());
 
   for (std::size_t n = 0; n < topoSortEvalIndex.size(); ++n) {
 

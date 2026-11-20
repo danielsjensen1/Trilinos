@@ -1,10 +1,11 @@
-// @HEADER
-// ****************************************************************************
-//                Tempus: Copyright (2017) Sandia Corporation
+//@HEADER
+// *****************************************************************************
+//          Tempus: Time Integration and Sensitivity Analysis Package
 //
-// Distributed under BSD 3-clause license (See accompanying file Copyright.txt)
-// ****************************************************************************
-// @HEADER
+// Copyright 2017 NTESS and the Tempus contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+//@HEADER
 
 #ifndef Tempus_StepperLeapfrogModifierXBase_hpp
 #define Tempus_StepperLeapfrogModifierXBase_hpp
@@ -52,7 +53,7 @@ class StepperLeapfrogModifierXBase
    */
   void execute(
       Teuchos::RCP<SolutionHistory<Scalar> > sh,
-      Teuchos::RCP<StepperLeapfrog<Scalar> > stepper,
+      Teuchos::RCP<StepperLeapfrog<Scalar> > /*stepper*/,
       const typename StepperLeapfrogAppAction<Scalar>::ACTION_LOCATION actLoc)
   {
     using Teuchos::RCP;

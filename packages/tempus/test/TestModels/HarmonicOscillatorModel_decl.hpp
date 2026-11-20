@@ -1,10 +1,11 @@
-// @HEADER
-// ****************************************************************************
-//                Tempus: Copyright (2017) Sandia Corporation
+//@HEADER
+// *****************************************************************************
+//          Tempus: Time Integration and Sensitivity Analysis Package
 //
-// Distributed under BSD 3-clause license (See accompanying file Copyright.txt)
-// ****************************************************************************
-// @HEADER
+// Copyright 2017 NTESS and the Tempus contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+//@HEADER
 
 #ifndef TEMPUS_TEST_HARMONIC_OSCILLATOR_MODEL_DECL_HPP
 #define TEMPUS_TEST_HARMONIC_OSCILLATOR_MODEL_DECL_HPP
@@ -42,12 +43,9 @@ namespace Tempus_Test {
  * \f$c \neq 0\f$, we do not consider that case here.  When \f$c = k = 0\f$,
  * \f$m=1\f$, and \f$f=-1\f$, our ODE simplies to a canonical differential
  * equation model of a ball thrown up in the air, with a parabolic trajectory
- * solution, namely \f[ x(t) = t(1-0.5t) \f] where \f$t\in [0,2]\f$.  An
- * EpetraExt version of this simplified version of the test is implemented in
- * Piro::MockModelEval_B (see Trilinos/packages/piro/test), where it is used to
- * test the Piro (EpetraExt) Newmark-Beta scheme (see input_Solver_NB.xml input
- * file).  When \f$c = f = 0\f$ and  \f$m=k = 1\f$, this test is equivalent to
- * the SinCos model..
+ * solution, namely \f[ x(t) = t(1-0.5t) \f] where \f$t\in [0,2]\f$.
+ * When \f$c = f = 0\f$ and  \f$m=k = 1\f$, this test is equivalent to
+ * the SinCos model.
  */
 
 template <class Scalar>

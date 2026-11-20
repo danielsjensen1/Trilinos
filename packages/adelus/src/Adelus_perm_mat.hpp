@@ -1,46 +1,11 @@
 /*
 //@HEADER
-// ************************************************************************
+// *****************************************************************************
+//                        Adelus
 //
-//                        Adelus v. 1.0
-//       Copyright (2020) National Technology & Engineering
-//               Solutions of Sandia, LLC (NTESS).
-//
-// Under the terms of Contract DE-NA0003525 with NTESS,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of NTESS nor the names of the contributors may be
-// used to endorse or promote products derived from this software without
-// specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY NTESS "AS IS" AND ANY EXPRESS OR IMPLIED
-// WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
-// MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
-// IN NO EVENT SHALL NTESS OR THE CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
-// INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-// (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
-// SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-// HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
-// STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
-// IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE 
-// POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Vinh Dang (vqdang@sandia.gov)
-//                    Joseph Kotulski (jdkotul@sandia.gov)
-//                    Siva Rajamanickam (srajama@sandia.gov)
-//
-// ************************************************************************
+// Copyright 2020 NTESS and the Adelus contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 //@HEADER
 */
 
@@ -59,7 +24,7 @@
 namespace Adelus {
 
   template<class HandleType, class PViewType>
-  inline 
+  inline
   void exchange_pivots(HandleType& ahandle, PViewType& lpiv_view, PViewType& permute) {
 
     using pival_type  = typename PViewType::value_type;
@@ -87,7 +52,7 @@ namespace Adelus {
           if (me == rank_row) {//I am the right process to do
             int j=k/nprocs_row;
             int i=k/nprocs_col;
-            permute(i) = lpiv_view(j); 
+            permute(i) = lpiv_view(j);
           }
         }
         else {//on different ranks
@@ -96,7 +61,7 @@ namespace Adelus {
             MPI_Send(reinterpret_cast<char*>(lpiv_view.data()+j),sizeof(pival_type),MPI_CHAR,rank_row,0,comm);
           }
           if (me == rank_row) {
-            int i=k/nprocs_col; 
+            int i=k/nprocs_col;
             MPI_Recv(reinterpret_cast<char*>(permute.data()+i),sizeof(pival_type),MPI_CHAR,pivot_col,0,comm,&msgstatus);
           }
         }
@@ -107,7 +72,7 @@ namespace Adelus {
     MPI_Bcast(reinterpret_cast<char*>(permute.data()),my_rows*sizeof(pival_type),MPI_CHAR,0,row_comm);
 
   }// End of function exchange_pivots
-  
+
   template<class HandleType, class ZViewType, class PViewType>
   inline
   void permute_mat(HandleType& ahandle, ZViewType& Z, PViewType& lpiv_view, PViewType& permute) {
@@ -116,13 +81,23 @@ namespace Adelus {
     using execution_space = typename ZViewType::device_type::execution_space ;
     using memory_space    = typename ZViewType::device_type::memory_space ;
     using ViewVectorType  = Kokkos::View<value_type*, Kokkos::LayoutLeft, memory_space>;
-#ifdef ADELUS_HOST_PINNED_MEM_MPI
-  #if defined(KOKKOS_ENABLE_CUDA)
+#if defined(KOKKOS_ENABLE_CUDA)
     using ViewVectorHostPinnType = Kokkos::View<value_type*, Kokkos::LayoutLeft, Kokkos::CudaHostPinnedSpace>;//CudaHostPinnedSpace
-  #elif defined(KOKKOS_ENABLE_HIP)
+#elif defined(KOKKOS_ENABLE_HIP)
     using ViewVectorHostPinnType = Kokkos::View<value_type*, Kokkos::LayoutLeft, Kokkos::HIPHostPinnedSpace>;//HIPHostPinnedSpace
-  #endif
+#else
+    using ViewVectorHostPinnType = Kokkos::View<value_type*, Kokkos::LayoutLeft>;//fallback placeholder
 #endif
+
+    constexpr bool isOnDeviceSpace =
+#if defined( KOKKOS_ENABLE_CUDA )
+      std::is_same_v<memory_space, Kokkos::CudaSpace>;
+#elif defined( KOKKOS_ENABLE_HIP )
+      std::is_same_v<memory_space, Kokkos::HIPSpace>;
+#else
+      false;
+#endif
+
     MPI_Comm col_comm = ahandle.get_col_comm();
     int myrow         = ahandle.get_myrow();
     int mycol         = ahandle.get_mycol();
@@ -143,10 +118,11 @@ namespace Adelus {
 #else
     ViewVectorType tmpr( "tmpr", Z.extent(1) );
     ViewVectorType tmps( "tmps", Z.extent(1) );
-#if defined(ADELUS_HOST_PINNED_MEM_MPI) && (defined(KOKKOS_ENABLE_CUDA) || defined(KOKKOS_ENABLE_HIP))
-    ViewVectorHostPinnType h_tmpr( "h_tmpr", Z.extent(1) );
-    ViewVectorHostPinnType h_tmps( "h_tmps", Z.extent(1) );
-#endif
+    ViewVectorHostPinnType h_tmpr, h_tmps;
+    if (!(ahandle.get_gpuawarempi_behavior()) && isOnDeviceSpace) {
+      h_tmpr = ViewVectorHostPinnType( Kokkos::view_alloc(Kokkos::WithoutInitializing, "h_tmpr"), Z.extent(1) );
+      h_tmps = ViewVectorHostPinnType( Kokkos::view_alloc(Kokkos::WithoutInitializing, "h_tmps"), Z.extent(1) );
+    }
 #endif
 
 #ifdef GET_TIMING
@@ -239,17 +215,18 @@ namespace Adelus {
               tmps(i) = Z(curr_lrid,i);
             });
 
-#if defined(ADELUS_HOST_PINNED_MEM_MPI) && (defined(KOKKOS_ENABLE_CUDA) || defined(KOKKOS_ENABLE_HIP))
-            Kokkos::deep_copy(h_tmps,tmps);
-            MPI_Send(reinterpret_cast<char *>(h_tmps.data()),min_len*sizeof(value_type),MPI_CHAR,pivot_row_pid,2,col_comm);
-            MPI_Recv(reinterpret_cast<char *>(h_tmpr.data()),min_len*sizeof(value_type),MPI_CHAR,pivot_row_pid,3,col_comm,&msgstatus);
-            Kokkos::deep_copy(tmpr,h_tmpr);
-#else //GPU-aware MPI
-            Kokkos::fence();
+            if (!(ahandle.get_gpuawarempi_behavior()) && isOnDeviceSpace) {
+              Kokkos::deep_copy(h_tmps,tmps);
+              MPI_Send(reinterpret_cast<char *>(h_tmps.data()),min_len*sizeof(value_type),MPI_CHAR,pivot_row_pid,2,col_comm);
+              MPI_Recv(reinterpret_cast<char *>(h_tmpr.data()),min_len*sizeof(value_type),MPI_CHAR,pivot_row_pid,3,col_comm,&msgstatus);
+              Kokkos::deep_copy(tmpr,h_tmpr);
+            }
+            else { //GPU-aware MPI
+              Kokkos::fence();
 
-            MPI_Send(reinterpret_cast<char *>(tmps.data()),min_len*sizeof(value_type),MPI_CHAR,pivot_row_pid,2,col_comm);
-            MPI_Recv(reinterpret_cast<char *>(tmpr.data()),min_len*sizeof(value_type),MPI_CHAR,pivot_row_pid,3,col_comm,&msgstatus);
-#endif
+              MPI_Send(reinterpret_cast<char *>(tmps.data()),min_len*sizeof(value_type),MPI_CHAR,pivot_row_pid,2,col_comm);
+              MPI_Recv(reinterpret_cast<char *>(tmpr.data()),min_len*sizeof(value_type),MPI_CHAR,pivot_row_pid,3,col_comm,&msgstatus);
+            }
 
             Kokkos::parallel_for(Kokkos::RangePolicy<execution_space>(0,min_len), KOKKOS_LAMBDA (const int i) {
               Z(curr_lrid,i) = tmpr(i);
@@ -262,17 +239,18 @@ namespace Adelus {
               tmps(i) = Z(piv_lrid,i);
             });
 
-#if defined(ADELUS_HOST_PINNED_MEM_MPI) && (defined(KOKKOS_ENABLE_CUDA) || defined(KOKKOS_ENABLE_HIP))
-            Kokkos::deep_copy(h_tmps,tmps);
-            MPI_Recv(reinterpret_cast<char *>(h_tmpr.data()),min_len*sizeof(value_type),MPI_CHAR,k_row,2,col_comm,&msgstatus);
-            MPI_Send(reinterpret_cast<char *>(h_tmps.data()),min_len*sizeof(value_type),MPI_CHAR,k_row,3,col_comm);
-            Kokkos::deep_copy(tmpr,h_tmpr);
-#else // GPU-aware MPI
-            Kokkos::fence();
+            if (!(ahandle.get_gpuawarempi_behavior()) && isOnDeviceSpace) {
+              Kokkos::deep_copy(h_tmps,tmps);
+              MPI_Recv(reinterpret_cast<char *>(h_tmpr.data()),min_len*sizeof(value_type),MPI_CHAR,k_row,2,col_comm,&msgstatus);
+              MPI_Send(reinterpret_cast<char *>(h_tmps.data()),min_len*sizeof(value_type),MPI_CHAR,k_row,3,col_comm);
+              Kokkos::deep_copy(tmpr,h_tmpr);
+            }
+            else { // GPU-aware MPI
+              Kokkos::fence();
 
-            MPI_Recv(reinterpret_cast<char *>(tmpr.data()),min_len*sizeof(value_type),MPI_CHAR,k_row,2,col_comm,&msgstatus);
-            MPI_Send(reinterpret_cast<char *>(tmps.data()),min_len*sizeof(value_type),MPI_CHAR,k_row,3,col_comm);
-#endif
+              MPI_Recv(reinterpret_cast<char *>(tmpr.data()),min_len*sizeof(value_type),MPI_CHAR,k_row,2,col_comm,&msgstatus);
+              MPI_Send(reinterpret_cast<char *>(tmps.data()),min_len*sizeof(value_type),MPI_CHAR,k_row,3,col_comm);
+            }
 
             Kokkos::parallel_for(Kokkos::RangePolicy<execution_space>(0,min_len), KOKKOS_LAMBDA (const int i) {
               Z(piv_lrid,i) = tmpr(i);
@@ -290,7 +268,7 @@ namespace Adelus {
     showtime(ahandle.get_comm_id(), ahandle.get_comm(), ahandle.get_myrank(), ahandle.get_nprocs_cube(),
              "Time to exchange pivot information", &exchpivtime);
     showtime(ahandle.get_comm_id(), ahandle.get_comm(), ahandle.get_myrank(), ahandle.get_nprocs_cube(),
-             "Time to permute matrix", &permutemattime);    
+             "Time to permute matrix", &permutemattime);
 #endif
   }// End of function permute_mat
 

@@ -1,48 +1,10 @@
 // @HEADER
-//
-// ***********************************************************************
-//
+// *****************************************************************************
 //                            Sphynx
-//           Copyright 2020 National Technology & Engineering
-//                  Solutions of Sandia, LLC (NTESS).
 //
-// Under the terms of Contract DE-NA0003525 with NTESS,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY NTESS "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL NTESS OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Seher Acer        (sacer@sandia.gov)
-//                    Erik Boman        (egboman@sandia.gov)
-//                    Siva Rajamanickam (srajama@sandia.gov)
-//                    Karen Devine      (kddevin@sandia.gov)
-//
-// ***********************************************************************
-//
+// Copyright 2020 NTESS and the Sphynx contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #ifndef _ZOLTAN2_SPHYNXALGORITHM_HPP_
@@ -463,7 +425,7 @@ namespace Zoltan2 {
         using offset_view_t = Kokkos::View<size_t*, typename node_t::device_type>;
         using vector_t = Tpetra::Vector<scalar_t, lno_t, gno_t, node_t>;
         using dual_view_t = typename vector_t::dual_view_type;
-        using KAT = Kokkos::ArithTraits<scalar_t>;
+        using KAT = KokkosKernels::ArithTraits<scalar_t>;
 
         const size_t numEnt = graph_->getLocalNumEntries();
         const size_t numRows = graph_->getLocalNumRows();
@@ -479,7 +441,7 @@ namespace Zoltan2 {
 
         // D^{-1/2}
         dual_view_t dv ("MV::DualView", numRows, 1);
-        auto deginvsqrt = dv.d_view;
+        auto deginvsqrt = dv.view_device();
 
         // Get the diagonal offsets
         offset_view_t diagOffsets(Kokkos::view_alloc("Diag Offsets", Kokkos::WithoutInitializing), numRows);
@@ -540,6 +502,7 @@ namespace Zoltan2 {
       bool randomInit_;          // obtained from user params or decided internally
       int verbosity_;            // obtained from user params
       bool skipPrep_;            // obtained from user params
+      std::vector<std::vector<weight_t>> weightStorage_;
   };
 
   ///////////////////////////////////////////////////////////////////////////
@@ -970,9 +933,11 @@ namespace Zoltan2 {
       int numConstraints = numWeights > 0 ? numWeights : 1;
 
       size_t myNumVertices = adapter_->getLocalNumVertices();
-      weight_t ** weights = new weight_t*[numConstraints];
+
+      weightStorage_.clear();
+      weightStorage_.resize(numConstraints);
       for(int j = 0; j < numConstraints; j++)
-        weights[j] = new weight_t[myNumVertices];
+        weightStorage_[j].resize(myNumVertices);
 
       // Will be needed if we use degree as weight
       const offset_t *offset;
@@ -984,9 +949,9 @@ namespace Zoltan2 {
         // Compute the weight of vertex i as the number of nonzeros in row i.
         adapter_->getEdgesView(offset, columnId);
         for (size_t i = 0; i < myNumVertices; i++)
-          weights[0][i] = offset[i+1] - offset[i] - 1;
+          weightStorage_[0][i] = offset[i+1] - offset[i] - 1;
 
-        vecweights.push_back(weights[0]);
+        vecweights.push_back(weightStorage_[0].data());
         strides.push_back(1);
       }
       else {
@@ -998,7 +963,7 @@ namespace Zoltan2 {
             // Compute the weight of vertex i as the number of nonzeros in row i.
             adapter_->getEdgesView(offset, columnId);
             for (size_t i = 0; i < myNumVertices; i++)
-              weights[j][i] = offset[i+1] - offset[i];
+              weightStorage_[j][i] = offset[i+1] - offset[i];
           }
           else{
             int stride;
@@ -1006,10 +971,10 @@ namespace Zoltan2 {
             adapter_->getVertexWeightsView(wgt, stride, j);
 
             for (size_t i = 0; i < myNumVertices; i++)
-              weights[j][i] = wgt[i];
+              weightStorage_[j][i] = wgt[i];
           }
 
-          vecweights.push_back(weights[j]);
+          vecweights.push_back(weightStorage_[j].data());
           strides.push_back(1);
 
         }

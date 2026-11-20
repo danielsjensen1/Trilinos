@@ -34,18 +34,17 @@
 #ifndef STK_ENTITYLESS_HPP
 #define STK_ENTITYLESS_HPP
 
+#include <stk_util/stk_config.h>
 #include <stk_mesh/base/Types.hpp>
+#include <stk_mesh/base/BulkData.hpp>
 
 namespace stk {
 namespace mesh {
 
 class EntityLess {
 public:
-#ifdef SIERRA_MIGRATION
-  EntityLess(const BulkData& mesh);
-#else
   inline EntityLess(const BulkData& mesh);
-#endif
+
   /** \brief  Comparison operator */
   inline bool operator()(const Entity lhs, const Entity rhs) const;
   inline bool operator()(const Entity lhs, const EntityKey & rhs) const;
@@ -54,13 +53,50 @@ public:
   inline bool operator()( const EntityProc & lhs, const EntityKey & rhs) const;
 private:
   const BulkData* m_mesh;
-#ifdef SIERRA_MIGRATION
-  const bool m_shouldSortFacesByNodeIds;
-  const EntityRank m_sideRank;
-#endif
 }; //struct EntityLess
 
+inline
+EntityLess::EntityLess(const BulkData& mesh) : m_mesh(&mesh) {}
+
+inline bool 
+EntityLess::operator()(const Entity lhs, const Entity rhs) const
+{
+  const EntityKey lhs_key = m_mesh->entity_key(lhs);
+  const EntityKey rhs_key = m_mesh->entity_key(rhs);
+  return (lhs_key < rhs_key);
 }
+
+inline bool 
+EntityLess::operator()(const Entity lhs, const EntityKey & rhs) const
+{
+  const EntityKey lhs_key = m_mesh->entity_key(lhs);
+  return lhs_key < rhs; 
 }
+
+inline bool 
+EntityLess::operator()( const EntityProc & lhs, const EntityProc & rhs) const
+{
+  const EntityKey lhs_key = m_mesh->entity_key(lhs.first);
+  const EntityKey rhs_key = m_mesh->entity_key(rhs.first);
+  return lhs_key != rhs_key ? lhs_key < rhs_key : lhs.second < rhs.second ;
+}
+
+inline bool 
+EntityLess::operator()( const EntityProc & lhs, const Entity rhs) const
+{
+  const EntityKey lhs_key = m_mesh->entity_key(lhs.first);
+  const EntityKey rhs_key = m_mesh->entity_key(rhs);
+  return lhs_key < rhs_key;
+}
+
+inline bool 
+EntityLess::operator()( const EntityProc & lhs, const EntityKey & rhs) const
+{
+  const EntityKey lhs_key = m_mesh->entity_key(lhs.first);
+  return lhs_key < rhs ;
+}
+
+} // namespace mesh
+} // namespace stk
 
 #endif

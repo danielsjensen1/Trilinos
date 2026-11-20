@@ -1,3 +1,13 @@
+// @HEADER
+// *****************************************************************************
+//           Panzer: A partial differential equation assembly
+//       engine for strongly coupled complex multiphysics systems
+//
+// Copyright 2011 NTESS and the Panzer contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
+
 #ifndef MINIEM_TENSORCONDUCTIVITY_DECL_HPP
 #define MINIEM_TENSORCONDUCTIVITY_DECL_HPP
 
@@ -18,12 +28,23 @@ namespace mini_em {
 
   using panzer::Cell;
   using panzer::Point;
+  using panzer::Dim;
 
+  /** \brief Computes a constant, spatially-uniform magnetized
+    * (Hall-effect) conductivity tensor field, of the form
+    * sigma/(1+|beta|^2)*(I + beta⊗beta + [beta]_x), where sigma is the
+    * scalar conductivity and beta=(betax,betay,betaz) is the
+    * (dimensionless) Hall parameter vector, with [beta]_x the
+    * cross-product matrix of beta ([beta]_x v = beta x v). In 2D the
+    * field lies in the x-y plane, so the tensor is the in-plane block of
+    * the 3D tensor.
+    */
   template<typename EvalT, typename Traits>
   class TensorConductivity : public panzer::EvaluatorWithBaseImpl<Traits>,
                        public PHX::EvaluatorDerived<EvalT, Traits>  {
 
   public:
+    /// \brief Constructor.
     TensorConductivity(const std::string & name,
                  const panzer::IntegrationRule & ir,
                  const panzer::FieldLayoutLibrary & fl,
@@ -33,6 +54,7 @@ namespace mini_em {
                  const double & betaz_,
                  const std::string& DoF_);
 
+    /// \brief Computes the conductivity tensor field for this workset per the class description.
     void evaluateFields(typename Traits::EvalData d);
 
 

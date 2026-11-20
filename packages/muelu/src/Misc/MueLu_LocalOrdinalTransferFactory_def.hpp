@@ -1,48 +1,12 @@
 // @HEADER
-//
-// ***********************************************************************
-//
+// *****************************************************************************
 //        MueLu: A package for multigrid based preconditioning
-//                  Copyright 2012 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact
-//                    Jonathan Hu       (jhu@sandia.gov)
-//                    Andrey Prokopenko (aprokop@sandia.gov)
-//                    Ray Tuminaro      (rstumin@sandia.gov)
-//
-// ***********************************************************************
-//
+// Copyright 2012 NTESS and the MueLu contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
+
 #ifndef MUELU_LOCALORDINALTRANSFER_FACTORY_DEF_HPP
 #define MUELU_LOCALORDINALTRANSFER_FACTORY_DEF_HPP
 
@@ -58,6 +22,7 @@
 
 #include "MueLu_Level.hpp"
 #include "MueLu_Monitor.hpp"
+#include "MueLu_Behavior.hpp"
 
 namespace MueLu {
 
@@ -143,40 +108,40 @@ void LocalOrdinalTransferFactory<LocalOrdinal, GlobalOrdinal, Node>::BuildFC(Lev
     }
   }
 
-#ifdef HAVE_MUELU_DEBUG
-  size_t error_count = 0;
-  {
-    RCP<LocalOrdinalVector> coarseTVghosted;
-    RCP<const Import> importer = P->getImporter();
-    if (!importer.is_null()) {
-      coarseTVghosted = LocalOrdinalVectorFactory::Build(P->getColMap(), 1);
-      coarseTVghosted->doImport(*coarseTV, *importer, Xpetra::INSERT);
-    } else {
-      coarseTVghosted = coarseTV;
-    }
-    ArrayRCP<LO> coarseDataGhosted = coarseTVghosted->getDataNonConst(0);
-    for (LO col = 0; col < (LO)P->getColMap()->getLocalNumElements(); col++) {
-      if (coarseDataGhosted[col] == LO_INVALID)
-        error_count++;
-    }
-    for (LO row = 0; row < (LO)P->getLocalNumRows(); row++) {
-      LO fineNumber = fineData[row];
-      ArrayView<const LO> indices;
-      P->getLocalRowView(row, indices);
-      for (LO j = 0; j < (LO)indices.size(); j++) {
-        if (coarseDataGhosted[indices[j]] != fineNumber)
+  if (Behavior::debug()) {
+    size_t error_count = 0;
+    {
+      RCP<LocalOrdinalVector> coarseTVghosted;
+      RCP<const Import> importer = P->getImporter();
+      if (!importer.is_null()) {
+        coarseTVghosted = LocalOrdinalVectorFactory::Build(P->getColMap(), 1);
+        coarseTVghosted->doImport(*coarseTV, *importer, Xpetra::INSERT);
+      } else {
+        coarseTVghosted = coarseTV;
+      }
+      ArrayRCP<LO> coarseDataGhosted = coarseTVghosted->getDataNonConst(0);
+      for (LO col = 0; col < (LO)P->getColMap()->getLocalNumElements(); col++) {
+        if (coarseDataGhosted[col] == LO_INVALID)
           error_count++;
       }
+      for (LO row = 0; row < (LO)P->getLocalNumRows(); row++) {
+        LO fineNumber = fineData[row];
+        ArrayView<const LO> indices;
+        P->getLocalRowView(row, indices);
+        for (LO j = 0; j < (LO)indices.size(); j++) {
+          if (coarseDataGhosted[indices[j]] != fineNumber)
+            error_count++;
+        }
+      }
+    }
+
+    // Error checking:  All nodes in an aggregate must share a local ordinal
+    if (error_count > 0) {
+      std::ostringstream ofs;
+      ofs << "LocalOrdinalTransferFactory(" << TransferVecName_ << "): ERROR:  Each coarse dof must have a unique LO value.  We had " << std::to_string(error_count) << " unknowns that did not match.";
+      throw std::runtime_error(ofs.str());
     }
   }
-
-  // Error checking:  All nodes in an aggregate must share a local ordinal
-  if (error_count > 0) {
-    std::ostringstream ofs;
-    ofs << "LocalOrdinalTransferFactory(" << TransferVecName_ << "): ERROR:  Each coarse dof must have a unique LO value.  We had " << std::to_string(error_count) << " unknowns that did not match.";
-    throw std::runtime_error(ofs.str());
-  }
-#endif
 
   Set<RCP<LocalOrdinalVector> >(coarseLevel, TransferVecName_, coarseTV);
 }

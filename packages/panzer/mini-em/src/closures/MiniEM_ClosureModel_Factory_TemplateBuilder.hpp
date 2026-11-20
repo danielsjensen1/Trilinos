@@ -1,3 +1,13 @@
+// @HEADER
+// *****************************************************************************
+//           Panzer: A partial differential equation assembly
+//       engine for strongly coupled complex multiphysics systems
+//
+// Copyright 2011 NTESS and the Panzer contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
+
 #ifndef __MiniEM_ClosureModel_Factory_TemplateBuilder_hpp__
 #define __MiniEM_ClosureModel_Factory_TemplateBuilder_hpp__
 
@@ -8,15 +18,19 @@
 
 namespace mini_em {
 
+/** \brief Builder functor used with Sacado::mpl::TemplateManager to
+  * construct one mini_em::ModelFactory<EvalT> per evaluation type.
+  */
 class ClosureModelFactory_TemplateBuilder {
 public:
-    
+
+   /// \brief Constructs a mini_em::ModelFactory<EvalT> for the given evaluation type.
    template <typename EvalT>
-   Teuchos::RCP<panzer::ClosureModelFactoryBase> build() const 
+   Teuchos::RCP<panzer::ClosureModelFactoryBase> build() const
    {
       return Teuchos::rcp( static_cast<panzer::ClosureModelFactoryBase*>(new mini_em::ModelFactory<EvalT>) );
    }
-    
+
 };
   
 }

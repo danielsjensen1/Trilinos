@@ -1,5 +1,5 @@
 /*
- * Copyright(C) 1999-2024 National Technology & Engineering Solutions
+ * Copyright(C) 1999-2025 National Technology & Engineering Solutions
  * of Sandia, LLC (NTESS).  Under the terms of Contract DE-NA0003525 with
  * NTESS, the U.S. Government retains certain rights in this software.
  *
@@ -33,10 +33,10 @@ namespace Ioss {
 namespace Ioex {
   struct IOEX_EXPORT BlockFieldData
   {
-    int64_t                  id{0};
-    size_t                   comp_count{0};
-    std::vector<std::string> var_name;
-    std::vector<size_t>      var_index;
+    int64_t             id{0};
+    size_t              comp_count{0};
+    Ioss::NameList      var_name;
+    std::vector<size_t> var_index;
 
     BlockFieldData() : id(0), comp_count(0) {}
     BlockFieldData(const int64_t id_) : id(id_), comp_count(0) {}
@@ -50,11 +50,11 @@ namespace Ioex {
     DecompositionDataBase(const DecompositionDataBase &)            = delete;
     DecompositionDataBase &operator=(const DecompositionDataBase &) = delete;
 
-    virtual ~DecompositionDataBase()                           = default;
-    IOSS_NODISCARD virtual int    int_size() const             = 0;
-    virtual void                  decompose_model(int filePtr) = 0;
-    IOSS_NODISCARD virtual size_t ioss_node_count() const      = 0;
-    IOSS_NODISCARD virtual size_t ioss_elem_count() const      = 0;
+    virtual ~DecompositionDataBase()               = default;
+    IOSS_NODISCARD virtual int    int_size() const = 0;
+    virtual void                  decompose_model(int filePtr, const std::string &filename) = 0;
+    IOSS_NODISCARD virtual size_t ioss_node_count() const                                   = 0;
+    IOSS_NODISCARD virtual size_t ioss_elem_count() const                                   = 0;
 
     IOSS_NODISCARD virtual int    spatial_dimension() const = 0;
     IOSS_NODISCARD virtual size_t global_node_count() const = 0;
@@ -66,6 +66,9 @@ namespace Ioex {
     IOSS_NODISCARD virtual size_t decomp_elem_count() const  = 0;
 
     IOSS_NODISCARD virtual std::vector<double> &centroids() = 0;
+    IOSS_NODISCARD virtual std::vector<float>  &weights()   = 0;
+
+    virtual void set_block_omissions(const Ioss::NameList &omissions) = 0;
 
     Ioss_MPI_Comm comm_;
 
@@ -120,7 +123,7 @@ namespace Ioex {
 
     IOSS_NODISCARD int int_size() const { return sizeof(INT); }
 
-    void decompose_model(int filePtr);
+    void decompose_model(int filePtr, const std::string &filename);
 
     IOSS_NODISCARD int spatial_dimension() const { return m_decomposition.m_spatialDimension; }
 
@@ -136,6 +139,12 @@ namespace Ioex {
     IOSS_NODISCARD size_t decomp_elem_count() const { return m_decomposition.file_elem_count(); }
 
     IOSS_NODISCARD std::vector<double> &centroids() { return m_decomposition.m_centroids; }
+    IOSS_NODISCARD std::vector<float> &weights() { return m_decomposition.m_weights; }
+
+    void set_block_omissions(const Ioss::NameList &omissions)
+    {
+      m_decomposition.set_block_omissions(omissions);
+    }
 
     template <typename T>
     void communicate_element_data(T *file_data, T *ioss_data, size_t comp_count) const
@@ -266,6 +275,7 @@ namespace Ioex {
     }
 
     void generate_adjacency_list(int filePtr, Ioss::Decomposition<INT> &decomposition);
+    void generate_omitted_block_weights(int filePtr, Ioss::Decomposition<INT> &decomposition);
 
     void get_common_set_data(int filePtr, ex_entity_type set_type,
                              std::vector<Ioss::SetDecompositionData> &sets,

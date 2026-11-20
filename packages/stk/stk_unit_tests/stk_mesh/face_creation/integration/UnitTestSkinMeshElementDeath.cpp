@@ -5,6 +5,7 @@
 #include <stk_io/IossBridge.hpp>        // for put_io_part_attribute
 #include <stk_mesh/base/BulkData.hpp>   // for BulkData
 #include <stk_mesh/baseImpl/elementGraph/ElemElemGraph.hpp>  // for process_killed_elements, etc
+#include <stk_mesh/baseImpl/elementGraph/ProcessKilledElements.hpp>
 #include <stk_mesh/base/GetEntities.hpp>  // for get_selected_entities
 #include <stk_mesh/base/MetaData.hpp>   // for MetaData
 #include <stk_topology/topology.hpp>    // for topology, etc
@@ -24,25 +25,6 @@ namespace
 {
 using stk::unit_test_util::build_mesh;
 using stk::mesh::MeshBuilder;
-
-class BulkDataTester : public stk::mesh::BulkData
-{
-public:
-  BulkDataTester(stk::mesh::MetaData &mesh_meta_data, MPI_Comm comm) :
-    stk::mesh::BulkData(std::shared_ptr<stk::mesh::MetaData>(&mesh_meta_data, [](auto pointerWeWontDelete){}), comm)
-  {
-  }
-
-  virtual ~BulkDataTester()
-  {
-  }
-
-  void set_sorting_by_face()
-  {
-    m_shouldSortFacesByNodeIds = true;
-  }
-};
-
 
 void kill_element(stk::mesh::Entity element, stk::mesh::BulkData& bulkData, stk::mesh::Part& active, stk::mesh::Part& skin)
 {
@@ -96,16 +78,15 @@ TEST(ElementDeath, compare_death_and_skin_mesh)
   {
     unsigned spatialDim = 3;
 
-    stk::mesh::MetaData meta(spatialDim);
-    meta.use_simple_fields();
+    std::shared_ptr<stk::mesh::BulkData> bulkPtr = stk::mesh::MeshBuilder(comm).set_spatial_dimension(spatialDim).create();
+    stk::mesh::MetaData& meta = bulkPtr->mesh_meta_data();
     stk::mesh::Part& skin  = meta.declare_part_with_topology("skin", stk::topology::QUAD_4);
     stk::io::put_io_part_attribute(skin);
-    BulkDataTester bulkData(meta, comm);
-    bulkData.set_sorting_by_face();
+    stk::mesh::BulkData& bulkData = *bulkPtr;
 
     stk::mesh::Part& active = meta.declare_part("active"); // can't specify rank, because it gets checked against size of rank_names
     stk::io::fill_mesh("generated:1x1x4", bulkData);
-    stk::unit_test_util::simple_fields::put_mesh_into_part(bulkData, active);
+    stk::unit_test_util::put_mesh_into_part(bulkData, active);
 
     ElemGraphTestUtils::skin_boundary(bulkData, active, {&skin, &active});
 
@@ -121,7 +102,6 @@ TEST(ElementDeath, compare_death_and_skin_mesh)
     compare_skin(num_gold_skinned_faces, bulkData, skin, active);
   }
 }
-
 
 } // end namespace
 

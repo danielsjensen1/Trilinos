@@ -1,3 +1,11 @@
+// @HEADER
+// *****************************************************************************
+//            NOX: An Object-Oriented Nonlinear Solver Package
+//
+// Copyright 2002 NTESS and the NOX contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
 #ifndef NOX_MATRIX_FREE_MODEL_EVALUATOR_DECORATOR_HPP
 #define NOX_MATRIX_FREE_MODEL_EVALUATOR_DECORATOR_HPP
 
@@ -31,10 +39,10 @@ namespace NOX {
       outArgs.setModelEvalDescription(this->description());
 
       if (outArgs.supports( ::Thyra::ModelEvaluatorBase::OUT_ARG_W_op))
-      return std::move(outArgs);
+      return outArgs;
 
       outArgs.setSupports( ::Thyra::ModelEvaluatorBase::OUT_ARG_W_op,true);
-      return std::move(outArgs);
+      return outArgs;
     }
 
     void evalModelImpl(const ::Thyra::ModelEvaluatorBase::InArgs<ScalarT> &inArgs,

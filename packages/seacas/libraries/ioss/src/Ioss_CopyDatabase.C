@@ -1,8 +1,11 @@
-// Copyright(C) 2021, 2022, 2023, 2024 National Technology & Engineering Solutions
+// Copyright(C) 2021, 2022, 2023, 2024, 2025 National Technology & Engineering Solutions
 // of Sandia, LLC (NTESS).  Under the terms of Contract DE-NA0003525 with
 // NTESS, the U.S. Government retains certain rights in this software.
 //
 // See packages/seacas/LICENSE for details
+
+#include <numeric>
+#include <random>
 
 #include "Ioss_CopyDatabase.h"
 #include "Ioss_DataPool.h"
@@ -258,7 +261,7 @@ void Ioss::copy_database(Ioss::Region &region, Ioss::Region &output_region,
   auto max_field = calculate_maximum_field_size(region);
   if (options.verbose && rank == 0) {
     std::string label = "MiB";
-    double      size  = (double)max_field.first / 1024 / 1024;
+    double      size  = static_cast<double>(max_field.first) / 1024.0 / 1024.0;
     if (size > 1024.0) {
       label = "GiB";
       size /= 1024.0;
@@ -309,21 +312,19 @@ void Ioss::copy_database(Ioss::Region &region, Ioss::Region &output_region,
   // to the output region based on values in `options`
   std::vector<int> selected_steps = get_selected_steps(region, options);
 
-  int step_count = (int)region.get_property("state_count").get_int();
+  int step_count = static_cast<int>(selected_steps.size() - 1);
 #ifdef SEACAS_HAVE_MPI
   int min_step_count = dbi->util().global_minmax(step_count, Ioss::ParallelUtils::DO_MIN);
   int max_step_count = dbi->util().global_minmax(step_count, Ioss::ParallelUtils::DO_MAX);
   if (min_step_count != max_step_count) {
-    std::ostringstream errmsg;
-    fmt::print(errmsg,
-               "ERROR: Number of timesteps does not match on all ranks.  Range from {} to {}.\n",
-               min_step_count, max_step_count);
-    IOSS_ERROR(errmsg);
+    IOSS_ERROR(fmt::format(
+        "ERROR: Number of timesteps does not match on all ranks.  Range from {} to {}.\n",
+        min_step_count, max_step_count));
   }
 #endif
   for (int istep = 1; istep <= step_count; istep++) {
-    if (selected_steps[istep] == 1) {
-      transfer_step(region, output_region, data_pool, istep, options, rank);
+    if (selected_steps[istep] != 0) {
+      transfer_step(region, output_region, data_pool, selected_steps[istep], options, rank);
     }
   }
 
@@ -348,7 +349,7 @@ namespace {
     // This routine checks all steps of the input database and selects those which
     // meet the requirements specified in `options`.  The returned (1-based) vector will have a
     // value of `1` if the step is to be output and `0` if skipped.
-    int              step_count = (int)region.get_property("state_count").get_int();
+    int              step_count = static_cast<int>(region.get_property("state_count").get_int());
     std::vector<int> selected_steps(step_count + 1);
 
     // If user specified a list of times to transfer to output database,
@@ -367,7 +368,23 @@ namespace {
           }
         }
         if (selected_step > 0) {
-          selected_steps[selected_step] = 1;
+          selected_steps[selected_step] = selected_step;
+        }
+      }
+    }
+    else if (!options.selected_steps.empty()) {
+      for (const auto &step : options.selected_steps) {
+        if (step == 0 || abs(step) > step_count) {
+          fmt::print(std::cerr,
+                     "WARNING: Step {} is out of range. Must be non-zero and maximum of {}.\n",
+                     step, step_count);
+          continue;
+        }
+        if (step > 0) {
+          selected_steps[step] = step;
+        }
+        else {
+          selected_steps[step_count + 1 + step] = step_count + 1 + step;
         }
       }
     }
@@ -375,7 +392,7 @@ namespace {
       // User did not select specific times to be output...
       // Just select them all
       for (int i = 1; i <= step_count; i++) {
-        selected_steps[i] = 1;
+        selected_steps[i] = i;
       }
     }
 
@@ -389,6 +406,26 @@ namespace {
         selected_steps[istep] = 0;
       }
     }
+
+    if (options.shuffle_times) {
+      std::random_device rd;
+      std::mt19937       g(rd());
+      std::shuffle(selected_steps.begin() + 1, selected_steps.end(), g);
+    }
+
+    if (options.sort_times) {
+      std::vector<std::pair<double, size_t>> times;
+      for (size_t i = 1; i <= selected_steps.size() - 1; i++) {
+        times.emplace_back(region.get_state_time(i), selected_steps[i]);
+      }
+      std::sort(times.begin(), times.end(), [](auto &a, auto &b) { return a.first < b.first; });
+
+      size_t i = 1;
+      for (auto &[time, step] : times) {
+        selected_steps[i++] = step;
+      }
+    }
+
     return selected_steps;
   }
 
@@ -408,16 +445,16 @@ namespace {
     if (options.define_geometry && options.boundary_sideset) {
       Ioss::FaceGenerator face_generator(region);
       if (region.get_database()->int_byte_size_api() == 4) {
-        face_generator.generate_faces((int)0, false);
+        face_generator.generate_faces(static_cast<int>(0), false);
       }
       else {
-        face_generator.generate_faces((int64_t)0, false);
+        face_generator.generate_faces(static_cast<int64_t>(0), false);
       }
 
       // Get vector of all boundary faces which will be output as the skin...
       const auto &faces = face_generator.faces("ALL");
       for (const auto &face : faces) {
-        if (face.elementCount_ == 1) {
+        if (face.element_count() == 1) {
           boundary.push_back(face);
         }
       }
@@ -436,9 +473,7 @@ namespace {
     dbi->progress("DEFINING MODEL");
     if (!output_region.begin_mode(Ioss::STATE_DEFINE_MODEL)) {
       if (options.verbose) {
-        std::ostringstream errmsg;
-        fmt::print(errmsg, "ERROR: Could not put output region into define model state\n");
-        IOSS_ERROR(errmsg);
+        IOSS_ERROR("ERROR: Could not put output region into define model state\n");
       }
       else {
         std::exit(EXIT_FAILURE);
@@ -447,7 +482,9 @@ namespace {
 
     // Get all properties of input database...
     transfer_properties(&region, &output_region);
-    transfer_qa_info(region, output_region);
+    if (!options.ignore_qa_info) {
+      transfer_qa_info(region, output_region);
+    }
 
     if (rank == 0 && options.output_summary) {
       fmt::print(std::cout, "\n\n Input Region summary for rank 0:\n");
@@ -668,10 +705,10 @@ namespace {
         if (ss != nullptr) {
           auto *sb = ss->get_side_block("boundary");
           if (output_region.get_database()->int_byte_size_api() == 4) {
-            output_boundary_sideset(sb, boundary, (int)0);
+            output_boundary_sideset(sb, boundary, static_cast<int>(0));
           }
           else {
-            output_boundary_sideset(sb, boundary, (int64_t)0);
+            output_boundary_sideset(sb, boundary, static_cast<int64_t>(0));
           }
         }
       }
@@ -736,7 +773,9 @@ namespace {
                      int istep, const Ioss::MeshCopyOptions &options, int rank)
   {
     double time  = region.get_state_time(istep);
-    int    ostep = output_region.add_state(time);
+    double otime = time * options.time_scale + options.time_offset;
+    int    ostep = output_region.add_state(otime);
+
     show_step(istep, time, options, rank);
 
     output_region.begin_state(ostep);
@@ -845,6 +884,19 @@ namespace {
         fmt::print(Ioss::DebugOut(), " Number of Nodes                = {:14}\n",
                    fmt::group_digits(num_nodes));
       }
+
+      if (options.omitted_blocks) {
+        size_t isize = inb->get_field("node_connectivity_status").get_size();
+        pool.data.resize(isize);
+        inb->get_field_data("node_connectivity_status", pool.data.data(), isize);
+
+        // Count number of "active" nodes
+        size_t active =
+            std::count_if(pool.data.begin(), pool.data.end(), [](auto &val) { return val >= 2; });
+        fmt::print(Ioss::DebugOut(), " Number of Active Nodes         = {:14}\n",
+                   fmt::group_digits(active));
+      }
+
       auto *nb = new Ioss::NodeBlock(*inb);
       output_region.add(nb);
 
@@ -1019,27 +1071,36 @@ namespace {
   {
     const auto &fss = region.get_sidesets();
     for (const auto &ss : fss) {
-      const std::string &name = ss->name();
-      if (options.debug && rank == 0) {
-        fmt::print(Ioss::DebugOut(), "{}, ", name);
-      }
-      auto *surf = new Ioss::SideSet(*ss);
-      output_region.add(surf);
+      const std::string &name    = ss->name();
+      auto               lc_name = Ioss::Utils::lowercase(name);
+      if (std::find(options.omitted_sets.begin(), options.omitted_sets.end(), lc_name) ==
+          options.omitted_sets.end()) {
+        if (options.debug && rank == 0) {
+          fmt::print(Ioss::DebugOut(), "{}, ", name);
+        }
+        auto *surf = new Ioss::SideSet(*ss);
+        output_region.add(surf);
 
-      // Fix up the optional 'owner_block' in copied SideBlocks...
-      const auto &fbs = ss->get_side_blocks();
-      for (const auto &ifb : fbs) {
-        if (ifb->parent_block() != nullptr) {
-          const auto &fb_name = ifb->parent_block()->name();
-          auto       *parent  = dynamic_cast<Ioss::EntityBlock *>(
-              output_region.get_entity(fb_name, Ioss::ELEMENTBLOCK));
-          if (parent == nullptr) {
-            parent = dynamic_cast<Ioss::EntityBlock *>(
-                output_region.get_entity(fb_name, Ioss::STRUCTUREDBLOCK));
+        // Fix up the optional 'owner_block' in copied SideBlocks...
+        const auto &fbs = ss->get_side_blocks();
+        for (const auto &ifb : fbs) {
+          if (ifb->parent_block() != nullptr) {
+            const auto &fb_name = ifb->parent_block()->name();
+            auto       *parent  = dynamic_cast<Ioss::EntityBlock *>(
+                output_region.get_entity(fb_name, Ioss::ELEMENTBLOCK));
+            if (parent == nullptr) {
+              parent = dynamic_cast<Ioss::EntityBlock *>(
+                  output_region.get_entity(fb_name, Ioss::STRUCTUREDBLOCK));
+            }
+
+            auto *ofb = surf->get_side_block(ifb->name());
+            ofb->set_parent_block(parent);
           }
-
-          auto *ofb = surf->get_side_block(ifb->name());
-          ofb->set_parent_block(parent);
+        }
+      }
+      else {
+        if (options.debug && rank == 0) {
+          fmt::print(Ioss::DebugOut(), "{}(omitted), ", name);
         }
       }
     }
@@ -1060,16 +1121,24 @@ namespace {
     if (!sets.empty()) {
       size_t total_entities = 0;
       for (const auto &set : sets) {
-        const std::string &name = set->name();
-        if (options.debug && rank == 0) {
-          fmt::print(Ioss::DebugOut(), "{}, ", name);
+        const std::string &name    = set->name();
+        auto               lc_name = Ioss::Utils::lowercase(name);
+        if (std::find(options.omitted_sets.begin(), options.omitted_sets.end(), lc_name) ==
+            options.omitted_sets.end()) {
+          if (options.debug && rank == 0) {
+            fmt::print(Ioss::DebugOut(), "{}, ", name);
+          }
+          size_t count = set->entity_count();
+          total_entities += count;
+          auto *o_set = new T(*set);
+          output_region.add(o_set);
         }
-        size_t count = set->entity_count();
-        total_entities += count;
-        auto *o_set = new T(*set);
-        output_region.add(o_set);
+        else {
+          if (options.debug && rank == 0) {
+            fmt::print(Ioss::DebugOut(), "{}(omitted), ", name);
+          }
+        }
       }
-
       if (options.output_summary && rank == 0) {
         fmt::print(Ioss::DebugOut(), " Number of {:20s} = {:14}",
                    (*sets.begin())->type_string() + "s", fmt::group_digits(sets.size()));
@@ -1189,8 +1258,6 @@ namespace {
     size_t isize = ige->get_field(field_name).get_size();
     assert(isize == oge->get_field(field_name).get_size());
 
-    int basic_type = ige->get_field(field_name).get_type();
-
     if (field_name == "mesh_model_coordinates_x") {
       return;
     }
@@ -1242,29 +1309,14 @@ namespace {
     else {
     }
 
+#ifdef SEACAS_HAVE_KOKKOS
+    int basic_type = ige->get_field(field_name).get_type();
+#endif
+
     assert(pool.data.size() >= isize);
 
     switch (options.data_storage_type) {
     case 1: ige->get_field_data(field_name, pool.data.data(), isize); break;
-    case 2:
-      if ((basic_type == Ioss::Field::CHARACTER) || (basic_type == Ioss::Field::STRING)) {
-        ige->get_field_data(field_name, pool.data);
-      }
-      else if (basic_type == Ioss::Field::INT32) {
-        ige->get_field_data(field_name, pool.data_int);
-      }
-      else if (basic_type == Ioss::Field::INT64) {
-        ige->get_field_data(field_name, pool.data_int64);
-      }
-      else if (basic_type == Ioss::Field::REAL) {
-        ige->get_field_data(field_name, pool.data_double);
-      }
-      else if (basic_type == Ioss::Field::COMPLEX) {
-        ige->get_field_data(field_name, pool.data_complex);
-      }
-      else {
-      }
-      break;
 #ifdef SEACAS_HAVE_KOKKOS
     case 3:
       if ((basic_type == Ioss::Field::CHARACTER) || (basic_type == Ioss::Field::STRING)) {
@@ -1340,25 +1392,6 @@ namespace {
 
     switch (options.data_storage_type) {
     case 1: oge->put_field_data(field_name, pool.data.data(), isize); break;
-    case 2:
-      if ((basic_type == Ioss::Field::CHARACTER) || (basic_type == Ioss::Field::STRING)) {
-        oge->put_field_data(field_name, pool.data);
-      }
-      else if (basic_type == Ioss::Field::INT32) {
-        oge->put_field_data(field_name, pool.data_int);
-      }
-      else if (basic_type == Ioss::Field::INT64) {
-        oge->put_field_data(field_name, pool.data_int64);
-      }
-      else if (basic_type == Ioss::Field::REAL) {
-        oge->put_field_data(field_name, pool.data_double);
-      }
-      else if (basic_type == Ioss::Field::COMPLEX) {
-        oge->put_field_data(field_name, pool.data_complex);
-      }
-      else {
-      }
-      break;
 #ifdef SEACAS_HAVE_KOKKOS
     case 3:
       if ((basic_type == Ioss::Field::CHARACTER) || (basic_type == Ioss::Field::STRING)) {
@@ -1433,7 +1466,7 @@ namespace {
   {
     out.add_information_records(in.get_information_records());
 
-    const std::vector<std::string> &qa = in.get_qa_records();
+    const Ioss::NameList &qa = in.get_qa_records();
     for (size_t i = 0; i < qa.size(); i += 4) {
       out.add_qa_record(qa[i + 0], qa[i + 1], qa[i + 2], qa[i + 3]);
     }

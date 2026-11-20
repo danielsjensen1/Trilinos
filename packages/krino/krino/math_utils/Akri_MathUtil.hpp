@@ -9,14 +9,14 @@
 #ifndef KRINO_INCLUDE_AKRI_MATHUTIL_H_
 #define KRINO_INCLUDE_AKRI_MATHUTIL_H_
 #include <stk_math/StkVector.hpp>
-#include <vector>
 #include <functional>
 
 namespace krino {
 
 double compute_parametric_square_distance(const stk::math::Vector3d childPCoords);
 
-stk::math::Vector3d get_parametric_coordinates_of_point(const std::vector<stk::math::Vector3d> & nodeCoords, const stk::math::Vector3d & pt);
+template<typename NODECOORDCONTAINER>
+stk::math::Vector3d get_parametric_coordinates_of_point(const NODECOORDCONTAINER & nodeCoords, const stk::math::Vector3d & pt);
 
 std::pair<bool, double> find_root( const std::function<double(const double)> & f,
     const double xa,
@@ -30,6 +30,8 @@ std::pair<bool, double> find_root_newton_raphson( const std::function<std::pair<
     const double guess,
     const unsigned maxIters = 100,
     const double fTol = 1.e-4);
+
+double find_quadratic_crossing( const double d0, const double d1, const double d2 );
 
 }
 

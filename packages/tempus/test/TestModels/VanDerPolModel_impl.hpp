@@ -1,10 +1,11 @@
-// @HEADER
-// ****************************************************************************
-//                Tempus: Copyright (2017) Sandia Corporation
+//@HEADER
+// *****************************************************************************
+//          Tempus: Time Integration and Sensitivity Analysis Package
 //
-// Distributed under BSD 3-clause license (See accompanying file Copyright.txt)
-// ****************************************************************************
-// @HEADER
+// Copyright 2017 NTESS and the Tempus contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+//@HEADER
 
 #ifndef TEMPUS_TEST_VANDERPOL_MODEL_IMPL_HPP
 #define TEMPUS_TEST_VANDERPOL_MODEL_IMPL_HPP
@@ -52,7 +53,7 @@ VanDerPolModel<Scalar>::VanDerPolModel(
 
 template <class Scalar>
 Thyra::ModelEvaluatorBase::InArgs<Scalar>
-VanDerPolModel<Scalar>::getExactSolution(double t) const
+VanDerPolModel<Scalar>::getExactSolution(double /*t*/) const
 {
   TEUCHOS_TEST_FOR_EXCEPTION(
       true, std::logic_error,
@@ -62,7 +63,7 @@ VanDerPolModel<Scalar>::getExactSolution(double t) const
 
 template <class Scalar>
 Thyra::ModelEvaluatorBase::InArgs<Scalar>
-VanDerPolModel<Scalar>::getExactSensSolution(int j, double t) const
+VanDerPolModel<Scalar>::getExactSensSolution(int /*j*/, double /*t*/) const
 {
   TEUCHOS_TEST_FOR_EXCEPTION(
       !isInitialized_, std::logic_error,

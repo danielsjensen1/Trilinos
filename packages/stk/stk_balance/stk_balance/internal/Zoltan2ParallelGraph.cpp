@@ -108,28 +108,76 @@ stk::balance::GraphEdge create_graph_edge(const stk::mesh::BulkData &bulk,
                                           const stk::balance::BalanceSettings &balanceSettings,
                                           const stk::mesh::impl::LocalIdMapper& localIds,
                                           const stk::mesh::Entity & element1,
-                                          const stk::mesh::Entity & element2)
+                                          const stk::mesh::Entity & element2,
+                                          const stk::mesh::Selector & cohesiveElementsSelector,
+                                          const stk::mesh::Selector& spiderLegSelector)
 {
   const stk::topology element1Topology = bulk.bucket(element1).topology();
   const stk::topology element2Topology = bulk.bucket(element2).topology();
   const stk::mesh::EntityId element2Id = stk::balance::internal::get_local_id(localIds, element2);
   double edgeWeight = balanceSettings.getGraphEdgeWeight(element1Topology, element2Topology) *
                       balanceSettings.getGraphEdgeWeightMultiplier();
+  
+  if (balanceSettings.hasCohesiveElements()) {
+    double cohesiveEdgeWeight = 10.5;
+
+    bool requiresEdgeOrient1 = cohesiveElementsSelector(bulk.bucket(element1)) && 
+                               !(cohesiveElementsSelector(bulk.bucket(element2)));
+    bool requiresEdgeOrient2 = !(cohesiveElementsSelector(bulk.bucket(element1))) && 
+                               cohesiveElementsSelector(bulk.bucket(element2));
+
+    if (requiresEdgeOrient1 || requiresEdgeOrient2) {
+      edgeWeight *= cohesiveEdgeWeight;
+    }
+  }
+
+  if (balanceSettings.shouldFixSpiders() && balanceSettings.shouldGroupSpiderLegs()) {
+    const double spiderEdgeWeight = 10.0;
+
+    if (spiderLegSelector(bulk.bucket(element1)) || spiderLegSelector(bulk.bucket(element2))) {
+      edgeWeight *= spiderEdgeWeight;
+    }
+  }
+
   int vertex2ParallelOwner = 0;
 
   return stk::balance::GraphEdge(element1, element2Id, vertex2ParallelOwner, edgeWeight);
 }
 
-stk::balance::GraphEdge create_graph_edge(const stk::mesh::BulkData &bulk,
-                                          const stk::balance::BalanceSettings &balanceSettings,
-                                          const stk::mesh::Entity & element1,
-                                          const stk::mesh::Entity & element2)
+stk::balance::GraphEdge create_graph_edge(const stk::mesh::BulkData& bulk,
+                                          const stk::balance::BalanceSettings& balanceSettings,
+                                          const stk::mesh::Entity& element1,
+                                          const stk::mesh::Entity& element2,
+                                          const stk::mesh::Selector& cohesiveElementsSelector,
+                                          const stk::mesh::Selector& spiderLegSelector)
 {
   const stk::topology element1Topology = bulk.bucket(element1).topology();
   const stk::topology element2Topology = bulk.bucket(element2).topology();
   const stk::mesh::EntityId element2Id = bulk.identifier(element2);
   double edgeWeight = balanceSettings.getGraphEdgeWeight(element1Topology, element2Topology) *
                       balanceSettings.getGraphEdgeWeightMultiplier();
+  
+  if (balanceSettings.hasCohesiveElements()) {
+    const double cohesiveEdgeWeight = 10.5;
+
+    bool requiresEdgeOrient1 = cohesiveElementsSelector(bulk.bucket(element1)) && 
+                               !(cohesiveElementsSelector(bulk.bucket(element2)));
+    bool requiresEdgeOrient2 = !(cohesiveElementsSelector(bulk.bucket(element1))) && 
+                               cohesiveElementsSelector(bulk.bucket(element2));
+
+    if (requiresEdgeOrient1 || requiresEdgeOrient2) {
+      edgeWeight *= cohesiveEdgeWeight;
+    }
+  }
+
+  if (balanceSettings.shouldFixSpiders() && balanceSettings.shouldGroupSpiderLegs()) {
+    const double spiderEdgeWeight = 10.0;
+
+    if (spiderLegSelector(bulk.bucket(element1)) || spiderLegSelector(bulk.bucket(element2))) {
+      edgeWeight *= spiderEdgeWeight;
+    }
+  }
+
   int vertex2ParallelOwner = bulk.parallel_owner_rank(element2);
 
   return stk::balance::GraphEdge(element1, element2Id, vertex2ParallelOwner, edgeWeight);
@@ -201,6 +249,21 @@ public:
       m_balanceSettings(balanceSettings), m_localIds(localIds),
       m_allElementsPossiblyConnected()
   {
+    if (m_balanceSettings.hasCohesiveElements()) {
+      //see if cohesive is a thing, create cohesive selector from BalanceSettings here if so
+      stk::mesh::PartVector cohesiveElementsParts;
+      for (const auto & block : m_balanceSettings.getCohesiveElements()) { 
+        cohesiveElementsParts.emplace_back(m_bulk.mesh_meta_data().get_part(block));
+      }
+      m_cohesiveElementsSelector = selectUnion(cohesiveElementsParts);
+    }
+
+    if (m_balanceSettings.shouldFixSpiders() && m_balanceSettings.shouldGroupSpiderLegs()) {
+      stk::mesh::MetaData& meta = bulk.mesh_meta_data();
+      const stk::mesh::Part& spiderPart = *balanceSettings.getSpiderPart(bulk);
+      m_spiderLegSelector = spiderPart &
+                            meta.get_topology_root_part(stk::topology::BEAM_2);
+    }
   }
 
   void create_graph_edges_for_element(stk::mesh::Entity elementOfConcern,
@@ -219,7 +282,9 @@ public:
                                                    m_selector(m_bulk.bucket(possiblyConnectedElement)));
           if (considerOnlySelectedOwnedElement) {
             if (is_valid_graph_connectivity(m_bulk, m_selector, m_balanceSettings, elementOfConcern, possiblyConnectedElement)) {
-              graphEdges.push_back(create_graph_edge(m_bulk, m_balanceSettings, m_localIds, elementOfConcern, possiblyConnectedElement));
+              graphEdges.push_back(create_graph_edge(m_bulk, m_balanceSettings, m_localIds, elementOfConcern,
+                                                     possiblyConnectedElement, m_cohesiveElementsSelector,
+                                                     m_spiderLegSelector));
             }
           }
         }
@@ -233,14 +298,20 @@ public:
             const stk::mesh::EntityId possiblyConnectedElementId = m_bulk.identifier(possiblyConnectedElement);
             if (elementOfConcernId < possiblyConnectedElementId) {
               if (is_valid_graph_connectivity(m_bulk, m_selector, m_balanceSettings, elementOfConcern, possiblyConnectedElement)) {
-                graphEdges.emplace_back(create_graph_edge(m_bulk, m_balanceSettings, elementOfConcern, possiblyConnectedElement));
-                graphEdges.emplace_back(create_graph_edge(m_bulk, m_balanceSettings, possiblyConnectedElement, elementOfConcern));
+                graphEdges.emplace_back(create_graph_edge(m_bulk, m_balanceSettings, elementOfConcern,
+                                                          possiblyConnectedElement, m_cohesiveElementsSelector,
+                                                          m_spiderLegSelector));
+                graphEdges.emplace_back(create_graph_edge(m_bulk, m_balanceSettings, possiblyConnectedElement,
+                                                          elementOfConcern, m_cohesiveElementsSelector,
+                                                          m_spiderLegSelector));
               }
             }
           }
           else {
             if (is_valid_graph_connectivity(m_bulk, m_selector, m_balanceSettings, elementOfConcern, possiblyConnectedElement)) {
-              graphEdges.emplace_back(create_graph_edge(m_bulk, m_balanceSettings, elementOfConcern, possiblyConnectedElement));
+              graphEdges.emplace_back(create_graph_edge(m_bulk, m_balanceSettings, elementOfConcern,
+                                                        possiblyConnectedElement, m_cohesiveElementsSelector,
+                                                        m_spiderLegSelector));
             }
           }
         }
@@ -268,6 +339,8 @@ private:
   const stk::balance::BalanceSettings& m_balanceSettings;
   const stk::mesh::impl::LocalIdMapper& m_localIds;
   std::vector<stk::mesh::Entity> m_allElementsPossiblyConnected;
+  stk::mesh::Selector m_cohesiveElementsSelector;
+  stk::mesh::Selector m_spiderLegSelector;
 };
 
 void Zoltan2ParallelGraph::createGraphEdgesUsingNodeConnectivity(stk::mesh::BulkData &stkMeshBulkData,
@@ -306,7 +379,8 @@ void Zoltan2ParallelGraph::createGraphEdgesUsingNodeConnectivity(stk::mesh::Bulk
         }
         else if (balanceSettings.getVertexWeightMethod() == stk::balance::VertexWeightMethod::CONNECTIVITY) {
           const stk::mesh::Field<double> & connectivityWeights = *balanceSettings.getVertexConnectivityWeightField(stkMeshBulkData);
-          mVertexWeights[local_id] = *stk::mesh::field_data(connectivityWeights, elementOfConcern);
+          auto connectivityWeightsData = connectivityWeights.data();
+          mVertexWeights[local_id] = connectivityWeightsData.entity_values(elementOfConcern)();
         }
         else if (balanceSettings.getVertexWeightMethod() == stk::balance::VertexWeightMethod::FIELD) {
           mVertexWeights[local_id] = 0; //real field weights set in adjust_vertex_weights

@@ -1,48 +1,17 @@
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //           Panzer: A partial differential equation assembly
 //       engine for strongly coupled complex multiphysics systems
-//                 Copyright (2011) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Roger P. Pawlowski (rppawlo@sandia.gov) and
-// Eric C. Cyr (eccyr@sandia.gov)
-// ***********************************************************************
+// Copyright 2011 NTESS and the Panzer contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #ifndef __Panzer_ResponseEvaluatorFactory_Functional_impl_hpp__
 #define __Panzer_ResponseEvaluatorFactory_Functional_impl_hpp__
 
+#include <Panzer_GlobalIndexer_Utilities.hpp>
 #include <string>
 
 #include "PanzerDiscFE_config.hpp"
@@ -107,14 +76,11 @@ buildAndRegisterEvaluators(const std::string & responseName,
         auto ugi = Teuchos::rcp_dynamic_cast<const GlobalIndexer>(linearObjFactory_->getDomainGlobalIndexer());
         auto bugi = Teuchos::rcp_dynamic_cast<const BlockedDOFManager>(linearObjFactory_->getDomainGlobalIndexer());
 
-        if(ugi!=Teuchos::null) {
-          std::vector<Teuchos::RCP<const GlobalIndexer> > ugis; 
-          ugis.push_back(ugi);
-
-          scatterObj = Teuchos::rcp(new FunctionalScatter<LO,GO>(ugis));
-        }
-        else if(bugi!=Teuchos::null) {
+        if(bugi!=Teuchos::null) {
           scatterObj = Teuchos::rcp(new FunctionalScatter<LO,GO>(nc2c_vector(bugi->getFieldDOFManagers())));
+        }
+        else if(ugi!=Teuchos::null) { // this needs to be second since a BlockedDOFManager is a child of GlobalIndexer
+          scatterObj = Teuchos::rcp(new FunctionalScatter<LO,GO>(ugi));
         }
         else {
           TEUCHOS_ASSERT(false); // no real global indexer to use
@@ -138,6 +104,10 @@ template <typename EvalT,typename LO,typename GO>
 bool ResponseEvaluatorFactory_Functional<EvalT,LO,GO>::
 typeSupported() const
 {
+  // A Tangent response accumulates Fad-valued scalars and needs no linear
+  // object factory, so it must not be gated on one: responses registered
+  // through the plain addResponse() path never get a factory, and gating it
+  // there silently drops DgDp instead of failing.
   if(   PHX::print<EvalT>()==PHX::print<panzer::Traits::Residual>() ||
         PHX::print<EvalT>()==PHX::print<panzer::Traits::Tangent>()
     )

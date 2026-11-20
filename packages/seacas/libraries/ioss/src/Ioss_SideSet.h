@@ -1,4 +1,4 @@
-// Copyright(C) 1999-2020, 2022, 2023, 2024 National Technology & Engineering Solutions
+// Copyright(C) 1999-2020, 2022, 2023, 2024, 2025 National Technology & Engineering Solutions
 // of Sandia, LLC (NTESS).  Under the terms of Contract DE-NA0003525 with
 // NTESS, the U.S. Government retains certain rights in this software.
 //
@@ -25,7 +25,7 @@ namespace Ioss {
 
   /** \brief A collection of element sides.
    */
-  class IOSS_EXPORT SideSet : public GroupingEntity
+  class IOSS_EXPORT SideSet final : public GroupingEntity
   {
   public:
     SideSet(DatabaseIO *io_database, const std::string &my_name);
@@ -45,7 +45,7 @@ namespace Ioss {
     IOSS_NODISCARD size_t     block_count() const { return sideBlocks.size(); }
     IOSS_NODISCARD SideBlock *get_block(size_t which) const;
 
-    void block_membership(std::vector<std::string> &block_members) override;
+    void block_membership(Ioss::NameList &block_members) override;
 
     // Handle implicit properties -- These are calculated from data stored
     // in the grouping entity instead of having an explicit value assigned.
@@ -70,8 +70,8 @@ namespace Ioss {
     bool equal_(const SideSet &rhs, bool quiet) const;
 
   private:
-    SideBlockContainer       sideBlocks;
-    std::vector<std::string> blockMembership; // What element blocks do the
-                                              // elements in this sideset belong to.
+    SideBlockContainer sideBlocks;
+    Ioss::NameList     blockMembership; // What element blocks do the
+                                        // elements in this sideset belong to.
   };
 } // namespace Ioss

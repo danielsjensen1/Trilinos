@@ -1,43 +1,11 @@
-//@HEADER
-// ************************************************************************
-//
+// @HEADER
+// *****************************************************************************
 //                 Belos: Block Linear Solvers Package
-//                  Copyright 2004 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
-//
-// ************************************************************************
-//@HEADER
+// Copyright 2004-2016 NTESS and the Belos contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
 //
 
 #ifndef BELOS_STATUS_TEST_GENERAL_OUTPUT_HPP
@@ -68,8 +36,8 @@ namespace Belos {
     The frequency and occasion of the printing can be dictated according to some parameters passed to 
     StatusTestGeneralOutput::StatusTestGeneralOutput().
   */
-template <class ScalarType, class MV, class OP>
-class StatusTestGeneralOutput : public StatusTestOutput<ScalarType,MV,OP> {
+template <class ScalarType, class MV, class OP, class DM = DefaultDenseMatrix<int,ScalarType>>
+class StatusTestGeneralOutput : public StatusTestOutput<ScalarType,MV,OP,DM> {
 
  public:
   //! @name Constructors/destructors
@@ -90,7 +58,7 @@ class StatusTestGeneralOutput : public StatusTestOutput<ScalarType,MV,OP> {
    *
    */
   StatusTestGeneralOutput(const Teuchos::RCP<OutputManager<ScalarType> > &printer, 
-			  Teuchos::RCP<StatusTest<ScalarType,MV,OP> > test,
+			  Teuchos::RCP<StatusTest<ScalarType,MV,OP,DM> > test,
 			  int mod = 1,
 			  int printStates = Passed)
     : printer_(printer), 
@@ -124,7 +92,7 @@ class StatusTestGeneralOutput : public StatusTestOutput<ScalarType,MV,OP> {
     
     \return ::StatusType indicating whether the underlying test passed or failed.
   */
-  StatusType checkStatus( Iteration<ScalarType,MV,OP>* solver ) {
+  StatusType checkStatus( Iteration<ScalarType,MV,OP,DM>* solver ) {
     TEUCHOS_TEST_FOR_EXCEPTION(test_ == Teuchos::null,StatusTestError,"StatusTestGeneralOutput::checkStatus(): child pointer is null.");
     state_ = test_->checkStatus(solver);
 
@@ -164,13 +132,13 @@ class StatusTestGeneralOutput : public StatusTestOutput<ScalarType,MV,OP> {
    *
    *  \note This also resets the test status to ::Undefined.
    */
-  void setChild(Teuchos::RCP<StatusTest<ScalarType,MV,OP> > test) {
+  void setChild(Teuchos::RCP<StatusTest<ScalarType,MV,OP,DM> > test) {
     test_ = test;
     state_ = Undefined;
   }
 
   //! \brief Get child test.
-  Teuchos::RCP<StatusTest<ScalarType,MV,OP> > getChild() const {
+  Teuchos::RCP<StatusTest<ScalarType,MV,OP,DM> > getChild() const {
     return test_;
   }
 
@@ -239,7 +207,7 @@ class StatusTestGeneralOutput : public StatusTestOutput<ScalarType,MV,OP> {
 
   private:
     Teuchos::RCP<OutputManager<ScalarType> > printer_;
-    Teuchos::RCP<StatusTest<ScalarType,MV,OP> > test_;
+    Teuchos::RCP<StatusTest<ScalarType,MV,OP,DM> > test_;
     std::string solverDesc_;
     std::string precondDesc_;
     StatusType state_;

@@ -1,48 +1,12 @@
 // @HEADER
-//
-// ***********************************************************************
-//
+// *****************************************************************************
 //        MueLu: A package for multigrid based preconditioning
-//                  Copyright 2012 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact
-//                    Jonathan Hu       (jhu@sandia.gov)
-//                    Andrey Prokopenko (aprokop@sandia.gov)
-//                    Ray Tuminaro      (rstumin@sandia.gov)
-//
-// ***********************************************************************
-//
+// Copyright 2012 NTESS and the MueLu contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
+
 #include <iostream>
 #include <complex>
 
@@ -78,7 +42,7 @@ int main(int argc, char *argv[]) {
 
   Teuchos::GlobalMPISession mpiSession(&argc, &argv, NULL);
 
-  bool success = false;
+  bool success = true;
   bool verbose = true;
   try {
     RCP<const Teuchos::Comm<int> > comm = Teuchos::DefaultComm<int>::getComm();
@@ -91,6 +55,9 @@ int main(int argc, char *argv[]) {
     GO nx, ny, nz;
     GO mx, my, mz;
     double stretchx, stretchy, stretchz, h, delta;
+    double Kxx = 1.0, Kxy = 0., Kyy = 1.0;
+    double dt            = 1.0;
+    std::string meshType = "tri";
     int PMLXL, PMLXR, PMLYL, PMLYR, PMLZL, PMLZR;
     double omega, shift;
     int model;
@@ -126,6 +93,7 @@ int main(int argc, char *argv[]) {
       std::cout << "velocity model: " << model << std::endl;
 
     Galeri::Xpetra::Parameters<GO> matrixParameters_aux(clp, nx, ny, nz, "Helmholtz2D", 0, stretchx, stretchy, stretchz,
+                                                        Kxx, Kxy, Kyy, dt, meshType,
                                                         h, delta, PMLXL, PMLXR, PMLYL, PMLYR, PMLZL, PMLZR, omega, 0.0, mx, my, mz, model);
     Xpetra::Parameters xpetraParameters(clp);
 
@@ -174,8 +142,10 @@ int main(int argc, char *argv[]) {
     // loop over frequencies
     for (size_t i = 0; i < omegas.size(); i++) {
       Galeri::Xpetra::Parameters<GO> matrixParameters_helmholtz(clp, nx, ny, nz, "Helmholtz2D", 0, stretchx, stretchy, stretchz,
+                                                                Kxx, Kxy, Kyy, dt, meshType,
                                                                 h, delta, PMLXL, PMLXR, PMLYL, PMLYR, PMLZL, PMLZR, omegas[i], 0.0, mx, my, mz, model);
       Galeri::Xpetra::Parameters<GO> matrixParameters_shifted(clp, nx, ny, nz, "Helmholtz2D", 0, stretchx, stretchy, stretchz,
+                                                              Kxx, Kxy, Kyy, dt, meshType,
                                                               h, delta, PMLXL, PMLXR, PMLYL, PMLYR, PMLZL, PMLZR, omegas[i], shift, mx, my, mz, model);
 
       Teuchos::ParameterList matrixParams_helmholtz = matrixParameters_helmholtz.GetParameterList();
@@ -216,7 +186,12 @@ int main(int argc, char *argv[]) {
       if (map->isNodeGlobalElement(pointsourceid) == true) {
         B->replaceGlobalValue(pointsourceid, 0, (SC)1.0);
       }
-      SLSolver->solve(B, X);
+      const Belos::ReturnType ret = SLSolver->solve(B, X);
+
+      TEUCHOS_TEST_FOR_EXCEPTION(
+          ret != Belos::Converged,
+          std::runtime_error,
+          "Error: Belos solver did not converge for frequency " << omegas[i] << ".\n");
 
       // sum up number of iterations
       total_iters += SLSolver->GetIterations();
@@ -224,14 +199,14 @@ int main(int argc, char *argv[]) {
 #ifdef HAVE_MUELU_DEBUG
       SLSolver->Manager_->ResetDebugData();
 #endif
+
+      success &= (ret == Belos::Converged);
     }
 
-    if (total_iters <= 110)
-      success = true;
-    else
-      success = false;
+    // Get the number of iterations for all solves.
+    if (comm->getRank() == 0)
+      std::cout << "Number of iterations performed for all solves: " << total_iters << std::endl;
   }
-
   TEUCHOS_STANDARD_CATCH_STATEMENTS(verbose, std::cerr, success);
 
   return (success ? EXIT_SUCCESS : EXIT_FAILURE);

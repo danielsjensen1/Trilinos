@@ -41,6 +41,12 @@
 //@HEADER
 */
 
+// IWYU pragma: private
+
+#ifndef STK_INCLUDE_ONLY_STK_SIMD_HEADER
+static_assert(false, "Do not include simd impl files directly. Only include stk_simd/Simd.hpp");
+#endif
+
 #pragma once
 
 #include "simd_common.hpp"
@@ -291,7 +297,7 @@ class simd<double, simd_abi::avx> {
     return *this;
   }
   template <class Flags>
-  SIMD_ALWAYS_INLINE inline simd(double const* ptr, Flags flags)
+  SIMD_ALWAYS_INLINE inline simd(double const* ptr, Flags /*flags*/)
     :m_value(_mm256_loadu_pd(ptr))
   {}
   SIMD_ALWAYS_INLINE inline simd(double const* ptr, int stride)

@@ -1,43 +1,11 @@
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //           Panzer: A partial differential equation assembly
 //       engine for strongly coupled complex multiphysics systems
-//                 Copyright (2011) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Roger P. Pawlowski (rppawlo@sandia.gov) and
-// Eric C. Cyr (eccyr@sandia.gov)
-// ***********************************************************************
+// Copyright 2011 NTESS and the Panzer contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #ifndef PANZER_EVALUATOR_SCATTER_RESIDUAL_BLOCKEDTPETRA_DECL_HPP
@@ -46,6 +14,7 @@
 #include "Phalanx_config.hpp"
 #include "Phalanx_Evaluator_Macros.hpp"
 #include "Phalanx_MDField.hpp"
+#include "Phalanx_KokkosViewOfViews.hpp"
 
 #include "Teuchos_ParameterList.hpp"
 
@@ -54,6 +23,7 @@
 #include "Panzer_Traits.hpp"
 #include "Panzer_CloneableEvaluator.hpp"
 #include "Panzer_BlockedTpetraLinearObjContainer.hpp"
+#include "KokkosSparse_CrsMatrix.hpp"
 
 #include "Panzer_Evaluator_WithBaseImpl.hpp"
 
@@ -109,10 +79,21 @@ class ScatterResidual_BlockedTpetra<panzer::Traits::Residual,TRAITS,LO,GO,NodeT>
 public:
   ScatterResidual_BlockedTpetra(const Teuchos::RCP<const BlockedDOFManager> & indexer)
      : globalIndexer_(indexer) {}
-  
+
+  //! This specialization scatters into vectors, so the column indexers of a
+  //! non-square operator are accepted and ignored.
+  ScatterResidual_BlockedTpetra(const Teuchos::RCP<const BlockedDOFManager> & indexer,
+                                const std::vector<Teuchos::RCP<const panzer::GlobalIndexer> > & /* colIndexers */)
+     : globalIndexer_(indexer) {}
+
   ScatterResidual_BlockedTpetra(const Teuchos::RCP<const BlockedDOFManager> & indexer,
                                 const Teuchos::ParameterList& p);
-  
+
+  ScatterResidual_BlockedTpetra(const Teuchos::RCP<const BlockedDOFManager> & indexer,
+                                const std::vector<Teuchos::RCP<const panzer::GlobalIndexer> > & /* colIndexers */,
+                                const Teuchos::ParameterList& p)
+     : ScatterResidual_BlockedTpetra(indexer,p) {}
+
   void postRegistrationSetup(typename TRAITS::SetupData d,
 			     PHX::FieldManager<TRAITS>& vm);
 
@@ -206,10 +187,21 @@ public:
   */
   ScatterResidual_BlockedTpetra(const Teuchos::RCP<const BlockedDOFManager> & indexer)
      : globalIndexer_(indexer) {}
-  
+
+  /** \brief Ctor for a non-square operator, whose columns are indexed
+    * separately from its rows (a distributed parameter, for instance).
+    */
+  ScatterResidual_BlockedTpetra(const Teuchos::RCP<const BlockedDOFManager> & indexer,
+                                const std::vector<Teuchos::RCP<const panzer::GlobalIndexer> > & colIndexers)
+     : globalIndexer_(indexer), colGlobalIndexers_(colIndexers), hasColIndexers_(true) {}
+
   ScatterResidual_BlockedTpetra(const Teuchos::RCP<const BlockedDOFManager> & indexer,
                                 const Teuchos::ParameterList& p);
-  
+
+  ScatterResidual_BlockedTpetra(const Teuchos::RCP<const BlockedDOFManager> & indexer,
+                                const std::vector<Teuchos::RCP<const panzer::GlobalIndexer> > & colIndexers,
+                                const Teuchos::ParameterList& p);
+
   void postRegistrationSetup(typename TRAITS::SetupData d,
 			     PHX::FieldManager<TRAITS>& vm);
 
@@ -218,7 +210,7 @@ public:
   void evaluateFields(typename TRAITS::EvalData workset);
   
   virtual Teuchos::RCP<CloneableEvaluator> clone(const Teuchos::ParameterList & pl) const
-  { return Teuchos::rcp(new ScatterResidual_BlockedTpetra<panzer::Traits::Jacobian,TRAITS,LO,GO,NodeT>(globalIndexer_,pl)); }
+  { return Teuchos::rcp(new ScatterResidual_BlockedTpetra<panzer::Traits::Jacobian,TRAITS,LO,GO,NodeT>(globalIndexer_,colGlobalIndexers_,pl)); }
 
 private:
   typedef typename panzer::Traits::Jacobian::ScalarT ScalarT;
@@ -267,6 +259,130 @@ private:
 
   //! The offset values of the blocked DOFs per element. Size of number of blocks in the product vector + 1. The plus one is a sentinel.
   PHX::View<LO*> blockOffsets_;
+
+  /** The indexers naming the columns. Always populated: the constructor fills
+    * it from the row manager when no separate column indexers were supplied.
+    */
+  std::vector<Teuchos::RCP<const panzer::GlobalIndexer> > colGlobalIndexers_;
+
+  //! True only when the columns are indexed separately from the rows.
+  bool hasColIndexers_ = false;
+
+  //! Column LIDs and derivative offsets. Aliases of the row members when square.
+  Kokkos::View<LO**, Kokkos::LayoutRight, PHX::Device> colWorksetLIDs_;
+  PHX::View<LO*> colBlockOffsets_;
+
+  //! Sub-block matrix type handed to the scatter kernel.
+  using LocalMatrixType = KokkosSparse::CrsMatrix<double,LO,PHX::Device,Kokkos::MemoryTraits<Kokkos::Unmanaged>,size_t>;
+
+  /** Scratch reused across evaluateFields() calls. Their extents are fixed by
+    * the block structure, so they are sized once in postRegistrationSetup();
+    * only the contents change per call. Allocating these per call is costly,
+    * particularly on device.
+    */
+  PHX::View<LocalMatrixType**> jacTpetraBlocks_;
+  typename PHX::View<LocalMatrixType**>::host_mirror_type hostJacTpetraBlocks_;
+  PHX::View<int**> blockExistsInJac_;
+  typename PHX::View<int**>::host_mirror_type hostBlockExistsInJac_;
+
+  //! Host copies of the offsets, filled once since the offsets never change.
+  typename PHX::View<LO*>::host_mirror_type blockOffsets_h_;
+  typename PHX::View<LO*>::host_mirror_type colBlockOffsets_h_;
+
+  ScatterResidual_BlockedTpetra();
+};
+
+// **************************************************************
+// Tangent 
+// **************************************************************
+template <typename TRAITS,typename LO,typename GO,typename NodeT>
+class ScatterResidual_BlockedTpetra<panzer::Traits::Tangent,TRAITS,LO,GO,NodeT>
+  : public panzer::EvaluatorWithBaseImpl<TRAITS>,
+    public PHX::EvaluatorDerived<panzer::Traits::Residual, TRAITS>,
+    public panzer::CloneableEvaluator {
+  
+public:
+  ScatterResidual_BlockedTpetra(const Teuchos::RCP<const BlockedDOFManager> & indexer)
+     : globalIndexer_(indexer) {}
+
+  //! This specialization scatters into vectors, so the column indexers of a
+  //! non-square operator are accepted and ignored.
+  ScatterResidual_BlockedTpetra(const Teuchos::RCP<const BlockedDOFManager> & indexer,
+                                const std::vector<Teuchos::RCP<const panzer::GlobalIndexer> > & /* colIndexers */)
+     : globalIndexer_(indexer) {}
+
+  ScatterResidual_BlockedTpetra(const Teuchos::RCP<const BlockedDOFManager> & indexer,
+                                const Teuchos::ParameterList& p);
+
+  ScatterResidual_BlockedTpetra(const Teuchos::RCP<const BlockedDOFManager> & indexer,
+                                const std::vector<Teuchos::RCP<const panzer::GlobalIndexer> > & /* colIndexers */,
+                                const Teuchos::ParameterList& p)
+     : ScatterResidual_BlockedTpetra(indexer,p) {}
+
+  void postRegistrationSetup(typename TRAITS::SetupData d,
+			     PHX::FieldManager<TRAITS>& vm);
+
+  void preEvaluate(typename TRAITS::PreEvalData d);
+  
+  void evaluateFields(typename TRAITS::EvalData workset);
+  
+  virtual Teuchos::RCP<CloneableEvaluator> clone(const Teuchos::ParameterList & pl) const
+  { return Teuchos::rcp(new ScatterResidual_BlockedTpetra<panzer::Traits::Tangent,TRAITS,LO,GO,NodeT>(globalIndexer_,pl)); }
+
+private:
+  typedef typename panzer::Traits::Tangent::ScalarT ScalarT;
+  typedef typename TRAITS::RealType RealType;
+
+  typedef BlockedTpetraLinearObjContainer<RealType,LO,GO,NodeT> ContainerType;
+  typedef Tpetra::Vector<RealType,LO,GO,NodeT> VectorType;
+  typedef Tpetra::CrsMatrix<RealType,LO,GO,NodeT> CrsMatrixType;
+  typedef Tpetra::CrsGraph<LO,GO,NodeT> CrsGraphType;
+  typedef Tpetra::Map<LO,GO,NodeT> MapType;
+  typedef Tpetra::Import<LO,GO,NodeT> ImportType;
+  typedef Tpetra::Export<LO,GO,NodeT> ExportType;
+
+  //! Dummy evalauted field so that the evaluator will have something to do
+  Teuchos::RCP<PHX::FieldTag> scatterHolder_;
+
+  //! Fields that need to be scattered will be put in this vector
+  std::vector< PHX::MDField<const ScalarT,Cell,NODE> > scatterFields_;
+
+  //! Maps the local (field,element,basis) triplet to a global ID for scattering
+  Teuchos::RCP<const BlockedDOFManager> globalIndexer_;
+
+  //! Vector of global indexers, one for each scattered field respectively
+  std::vector<Teuchos::RCP<const panzer::GlobalIndexer>> fieldGlobalIndexers_;
+
+  //! Field IDs in the local product vector block (not global field id)
+  std::vector<int> fieldIds_;
+
+  //! Returns the index into the Thyra ProductVector sub-block. Size
+  //! of number of fields to scatter
+  std::vector<int> productVectorBlockIndex_;
+
+  // This maps the scattered field names to the DOF manager field
+  // For instance a Navier-Stokes map might look like
+  //    fieldMap_["RESIDUAL_Velocity"] --> "Velocity"
+  //    fieldMap_["RESIDUAL_Pressure"] --> "Pressure"
+  Teuchos::RCP<const std::map<std::string,std::string> > fieldMap_;
+
+  std::string globalDataKey_; // what global data does this fill?
+  Teuchos::RCP<const BlockedTpetraLinearObjContainer<RealType,LO,GO,NodeT> > blockedContainer_;
+
+  /// Storage for the tangent data
+  PHX::ViewOfViews<2,Kokkos::View<RealType**,Kokkos::LayoutLeft,PHX::Device>> dfdpFieldsVoV_;
+
+  /// The df/dp sub-block vectors dfdpFieldsVoV_ is filled from, indexed
+  /// [parameter][block]. The device views are acquired and released within
+  /// evaluateFields() so that they never outlive the kernel launches, which
+  /// would block host access to the same vectors.
+  std::vector<std::vector<Teuchos::RCP<VectorType> > > dfdpVectors_;
+
+  //! Local indices for unknowns
+  PHX::View<LO**> worksetLIDs_;
+
+  //! Offset into the cell lids for each field
+  std::vector<PHX::View<int*>> fieldOffsets_;
 
   ScatterResidual_BlockedTpetra();
 };

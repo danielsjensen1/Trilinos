@@ -2,162 +2,12 @@
 
 TRIBITS_INCLUDE_DIRECTORIES(REQUIRED_DURING_INSTALLATION_TESTING ${PACKAGE_SOURCE_DIR}/../thyra/core/example/operator_solve)
 
-ASSERT_DEFINED(${PACKAGE_NAME}_ENABLE_ThyraEpetraAdapters)
-ASSERT_DEFINED(${PACKAGE_NAME}_ENABLE_Amesos)
-IF (${PACKAGE_NAME}_ENABLE_Belos AND ${PACKAGE_NAME}_ENABLE_ThyraEpetraAdapters)
-   TRIBITS_ADD_EXECUTABLE_AND_TEST(
-     Belos_epetra_GCRODR_strattest
-     SOURCES
-       test_belos_epetra_gcrodr.cpp
-       ${TEUCHOS_STD_UNIT_TEST_MAIN}
-     ARGS " --show-timer-summary"
-     COMM serial mpi
-     NUM_MPI_PROCS 4
-     )
-ENDIF()
-
 TRIBITS_COPY_FILES_TO_BINARY_DIR(CopyTestXMLFiles
   DEST_FILES
   FourByFour.xml
-  FourByFour.amesos.xml
-  FourByFour.aztecoo.np.xml
-  FourByFour.aztecoo.ifpack.xml
-  FourByFour.aztecoo.ifpack.adjoint.xml
-  FourByFour.aztecoo.ml.xml
   FourByFour.belos.np.xml
-  FourByFour.belos.ifpack.xml
-  FourByFour.belos.ml.xml
-  BelosGCRODRTest.xml
   SOURCE_PREFIX "_"
 )
-
-TRIBITS_COPY_FILES_TO_BINARY_DIR(CopyTestFourByFourMtx
-  DEST_FILES FourByFour.mtx
-  SOURCE_DIR ${PACKAGE_SOURCE_DIR}/../amesos/test/Test_Basic
-  SOURCE_PREFIX "In_"
-)
-
-ASSERT_DEFINED(${PACKAGE_NAME}_ENABLE_EpetraExt)
-IF (${PACKAGE_NAME}_ENABLE_EpetraExt)
-
-IF (${PACKAGE_NAME}_ENABLE_ThyraEpetraAdapters)
-  TRIBITS_ADD_EXECUTABLE(
-    test_epetra_stratimikos_solver_driver
-    SOURCES
-    test_epetra_stratimikos_solver_driver.cpp
-    test_epetra_stratimikos_solver.hpp
-    test_epetra_stratimikos_solver.cpp
-    COMM serial mpi
-  )
-ENDIF()
-
-
-ASSERT_DEFINED(${PACKAGE_NAME}_ENABLE_Amesos)
-IF (${PACKAGE_NAME}_ENABLE_ThyraEpetraAdapters AND ${PACKAGE_NAME}_ENABLE_Amesos)
-  TRIBITS_ADD_TEST(
-    test_epetra_stratimikos_solver_driver
-    NAME test_epetra_stratimikos_solver_driver_amesos
-    ARGS
-      "--input-file=FourByFour.xml --show-timer-summary"
-      "--input-file=FourByFour.amesos.xml --show-timer-summary"
-    COMM serial mpi
-    NUM_MPI_PROCS 1
-    )
-ENDIF()
-
-ASSERT_DEFINED(${PACKAGE_NAME}_ENABLE_AztecOO)
-IF (${PACKAGE_NAME}_ENABLE_ThyraEpetraAdapters AND ${PACKAGE_NAME}_ENABLE_AztecOO)
-
-
-  TRIBITS_ADD_TEST(
-    test_epetra_stratimikos_solver_driver
-    NAME test_epetra_stratimikos_solver_driver_aztecoo_np
-    ARGS "--input-file=FourByFour.aztecoo.np.xml --show-timer-summary"
-    COMM serial mpi
-    NUM_MPI_PROCS 1
-    )
-
-
-  ASSERT_DEFINED(${PACKAGE_NAME}_ENABLE_Ifpack)
-  IF (${PACKAGE_NAME}_ENABLE_Ifpack)
-
-    TRIBITS_ADD_TEST(
-      test_epetra_stratimikos_solver_driver
-      NAME test_epetra_stratimikos_solver_driver_aztecoo_ifpack
-      ARGS
-        "--input-file=FourByFour.aztecoo.ifpack.xml --show-timer-summary"
-        "--input-file=FourByFour.aztecoo.ifpack.adjoint.xml --show-timer-summary"
-      COMM serial mpi
-      NUM_MPI_PROCS 1
-      )
-
-  ENDIF()
-
-
-  ASSERT_DEFINED(${PACKAGE_NAME}_ENABLE_ML)
-  IF (${PACKAGE_NAME}_ENABLE_ML)
-
-    TRIBITS_ADD_TEST(
-      test_epetra_stratimikos_solver_driver
-      NAME test_epetra_stratimikos_solver_driver_aztecoo_ml
-      ARGS
-        "--input-file=FourByFour.aztecoo.ml.xml --show-timer-summary"
-      COMM serial mpi
-      NUM_MPI_PROCS 1
-      )
-
-  ENDIF()
-
-
-ENDIF()
-
-
-ASSERT_DEFINED(${PACKAGE_NAME}_ENABLE_Belos)
-IF (${PACKAGE_NAME}_ENABLE_ThyraEpetraAdapters AND ${PACKAGE_NAME}_ENABLE_Belos)
-
-
-  TRIBITS_ADD_TEST(
-    test_epetra_stratimikos_solver_driver
-    NAME test_epetra_stratimikos_solver_driver_belos_np
-    ARGS "--input-file=FourByFour.belos.np.xml --show-timer-summary"
-    COMM serial mpi
-    NUM_MPI_PROCS 1
-    )
-
-
-  ASSERT_DEFINED(${PACKAGE_NAME}_ENABLE_Ifpack)
-  IF (${PACKAGE_NAME}_ENABLE_Ifpack)
-
-    TRIBITS_ADD_TEST(
-      test_epetra_stratimikos_solver_driver
-      NAME test_epetra_stratimikos_solver_driver_belos_ifpack
-      ARGS
-        "--input-file=FourByFour.belos.ifpack.xml --show-timer-summary"
-      COMM serial mpi
-      NUM_MPI_PROCS 1
-      )
-
-  ENDIF()
-
-
-  ASSERT_DEFINED(${PACKAGE_NAME}_ENABLE_ML)
-  IF (${PACKAGE_NAME}_ENABLE_ML)
-
-    TRIBITS_ADD_TEST(
-      test_epetra_stratimikos_solver_driver
-      NAME test_epetra_stratimikos_solver_driver_belos_ml
-      ARGS
-        "--input-file=FourByFour.belos.ml.xml --show-timer-summary"
-      COMM serial mpi
-      NUM_MPI_PROCS 1
-      )
-
-  ENDIF()
-
-
-ENDIF()
-
-ENDIF()
 
 # Stratimikos now has optional test dependencies on Ifpack2 (and thus
 # indirectly, Tpetra) and ThyraTpetraAdapters.
@@ -182,14 +32,16 @@ IF (${PROJECT_NAME}_ENABLE_Tpetra AND ${PACKAGE_NAME}_ENABLE_ThyraTpetraAdapters
     COMM serial mpi
     )
 
-  TRIBITS_ADD_TEST(
-    test_tpetra_stratimikos_solver_driver
-    NAME test_tpetra_stratimikos_solver_driver
-    ARGS
-      "--input-file=FourByFour.belos.np.xml --show-timer-summary"
-    COMM serial mpi
-    NUM_MPI_PROCS 1
-    )
+  IF (${PACKAGE_NAME}_ENABLE_Amesos)
+    TRIBITS_ADD_TEST(
+      test_tpetra_stratimikos_solver_driver
+      NAME test_tpetra_stratimikos_solver_driver
+      ARGS
+        "--input-file=FourByFour.belos.np.xml --show-timer-summary"
+      COMM serial mpi
+      NUM_MPI_PROCS 1
+      )
+  ENDIF()
 
   TRIBITS_ADD_EXECUTABLE(
     test_tpetra_belos
@@ -224,6 +76,20 @@ IF (${PROJECT_NAME}_ENABLE_Tpetra AND ${PACKAGE_NAME}_ENABLE_ThyraTpetraAdapters
     NUM_MPI_PROCS 4
     )
 
+
+  ASSERT_DEFINED(
+    Tpetra_INST_DOUBLE
+    Tpetra_INST_FLOAT
+    Tpetra_INST_COMPLEX_DOUBLE
+    Tpetra_INST_COMPLEX_FLOAT
+  )
+  IF(((NOT Tpetra_INST_DOUBLE) OR (Tpetra_INST_DOUBLE AND Tpetra_INST_FLOAT)) AND
+    ((NOT Tpetra_INST_COMPLEX_DOUBLE) OR (Tpetra_INST_COMPLEX_DOUBLE AND Tpetra_INST_COMPLEX_FLOAT)))
+    SET(enable_stratimikos_mixed_precision ON)
+  ELSE()
+    SET(enable_stratimikos_mixed_precision OFF)
+  ENDIF()
+
   TRIBITS_ADD_TEST(
     test_tpetra_belos
     NAME test_tpetra_belos_half_prec
@@ -231,7 +97,7 @@ IF (${PROJECT_NAME}_ENABLE_Tpetra AND ${PACKAGE_NAME}_ENABLE_ThyraTpetraAdapters
       "--input-file=stratimikos_HalfBelosPrec_ParameterList.xml --show-timer-summary"
     COMM serial mpi
     NUM_MPI_PROCS 4
-    EXCLUDE_IF_NOT_TRUE ${PROJECT_NAME}_ENABLE_FLOAT
+    EXCLUDE_IF_NOT_TRUE enable_stratimikos_mixed_precision
     )
 
   TRIBITS_ADD_TEST(
@@ -241,13 +107,15 @@ IF (${PROJECT_NAME}_ENABLE_Tpetra AND ${PACKAGE_NAME}_ENABLE_ThyraTpetraAdapters
       "--input-file=stratimikos_GMRES_IR_ParameterList.xml --show-timer-summary"
     COMM serial mpi
     NUM_MPI_PROCS 4
-    EXCLUDE_IF_NOT_TRUE ${PROJECT_NAME}_ENABLE_FLOAT
+    EXCLUDE_IF_NOT_TRUE enable_stratimikos_mixed_precision
     )
 
+  ASSERT_DEFINED(Belos_SOURCE_DIR)
+
   TRIBITS_COPY_FILES_TO_BINARY_DIR(CopyTpetraTestMtxFiles
-  SOURCE_DIR ${PACKAGE_SOURCE_DIR}/../belos/kokkos/example
-  SOURCE_FILES bcsstk12.mtx
-  EXEDEPS test_tpetra_belos
+    SOURCE_DIR ${Belos_SOURCE_DIR}/testmatrices
+    SOURCE_FILES bcsstk12.mtx
+    EXEDEPS test_tpetra_belos
   )
 
   TRIBITS_COPY_FILES_TO_BINARY_DIR(CopyTpetraTestXMLFiles

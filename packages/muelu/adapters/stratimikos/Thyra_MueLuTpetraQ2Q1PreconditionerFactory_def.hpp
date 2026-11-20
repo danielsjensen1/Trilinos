@@ -1,48 +1,12 @@
 // @HEADER
-//
-// ***********************************************************************
-//
+// *****************************************************************************
 //        MueLu: A package for multigrid based preconditioning
-//                  Copyright 2012 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact
-//                    Jonathan Hu       (jhu@sandia.gov)
-//                    Andrey Prokopenko (aprokop@sandia.gov)
-//                    Ray Tuminaro      (rstumin@sandia.gov)
-//
-// ***********************************************************************
-//
+// Copyright 2012 NTESS and the MueLu contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
+
 #ifndef THYRA_MUELU_TPETRA_Q2Q1PRECONDITIONER_FACTORY_DEF_HPP
 #define THYRA_MUELU_TPETRA_Q2Q1PRECONDITIONER_FACTORY_DEF_HPP
 
@@ -72,8 +36,8 @@
 
 #include "MueLu.hpp"
 
-#include "../../research/q2q1/MueLu_Q2Q1PFactory.hpp"
-#include "../../research/q2q1/MueLu_Q2Q1uPFactory.hpp"
+#include "MueLu_Q2Q1PFactory.hpp"
+#include "MueLu_Q2Q1uPFactory.hpp"
 
 #include "MueLu_AmalgamationFactory.hpp"
 #include "MueLu_BaseClass.hpp"
@@ -142,7 +106,7 @@ MueLuTpetraQ2Q1PreconditionerFactory<Scalar, LocalOrdinal, GlobalOrdinal, Node>:
 
 template <class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
 void MueLuTpetraQ2Q1PreconditionerFactory<Scalar, LocalOrdinal, GlobalOrdinal, Node>::
-    initializePrec(const RCP<const LinearOpSourceBase<Scalar> >& fwdOpSrc, PreconditionerBase<Scalar>* prec, const ESupportSolveUse supportSolveUse) const {
+    initializePrec(const RCP<const LinearOpSourceBase<Scalar> >& fwdOpSrc, PreconditionerBase<Scalar>* prec, const ESupportSolveUse /*supportSolveUse*/) const {
   // Check precondition
   TEUCHOS_ASSERT(Teuchos::nonnull(fwdOpSrc));
   TEUCHOS_ASSERT(this->isCompatible(*fwdOpSrc));
@@ -329,10 +293,10 @@ MueLuTpetraQ2Q1PreconditionerFactory<Scalar, LocalOrdinal, GlobalOrdinal, Node>:
   RCP<TP_Crs> TpetCrsA12     = rcp_dynamic_cast<TP_Crs>(TpetA12);
   RCP<TP_Crs> TpetCrsA11_9Pt = rcp_dynamic_cast<TP_Crs>(TpetA11_9Pt);
 
-  RCP<Matrix> A_11     = MueLu::TpetraCrs_To_XpetraMatrix(TpetCrsA11);
-  RCP<Matrix> tmp_A_21 = MueLu::TpetraCrs_To_XpetraMatrix(TpetCrsA21);  // needs map modification
-  RCP<Matrix> tmp_A_12 = MueLu::TpetraCrs_To_XpetraMatrix(TpetCrsA12);  // needs map modification
-  RCP<Matrix> A_11_9Pt = MueLu::TpetraCrs_To_XpetraMatrix(TpetCrsA11_9Pt);
+  RCP<Matrix> A_11     = Xpetra::toXpetra(TpetCrsA11);
+  RCP<Matrix> tmp_A_21 = Xpetra::toXpetra(TpetCrsA21);  // needs map modification
+  RCP<Matrix> tmp_A_12 = Xpetra::toXpetra(TpetCrsA12);  // needs map modification
+  RCP<Matrix> A_11_9Pt = Xpetra::toXpetra(TpetCrsA11_9Pt);
 
   Xpetra::global_size_t numVel  = A_11->getRowMap()->getLocalNumElements();
   Xpetra::global_size_t numPres = tmp_A_21->getRowMap()->getLocalNumElements();
@@ -884,7 +848,7 @@ MueLuTpetraQ2Q1PreconditionerFactory<Scalar, LocalOrdinal, GlobalOrdinal, Node>:
   for (int i = 0; i < valA.size(); i++) valB[i] = Teuchos::ScalarTraits<SC>::magnitude(valA[i]);
 
   RCP<Matrix> B       = rcp(new CrsMatrixWrap(A.getRowMap(), A.getColMap(), 0));
-  RCP<CrsMatrix> Bcrs = rcp_dynamic_cast<CrsMatrixWrap>(B)->getCrsMatrix();
+  RCP<CrsMatrix> Bcrs = toCrsMatrix(B);
   Bcrs->setAllValues(iaB, jaB, valB);
   Bcrs->expertStaticFillComplete(A.getDomainMap(), A.getRangeMap());
 

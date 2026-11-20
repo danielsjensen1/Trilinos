@@ -1,10 +1,11 @@
-// @HEADER
-// ****************************************************************************
-//                Tempus: Copyright (2017) Sandia Corporation
+//@HEADER
+// *****************************************************************************
+//          Tempus: Time Integration and Sensitivity Analysis Package
 //
-// Distributed under BSD 3-clause license (See accompanying file Copyright.txt)
-// ****************************************************************************
-// @HEADER
+// Copyright 2017 NTESS and the Tempus contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+//@HEADER
 
 #ifndef Tempus_StepperStaggeredForwardSensitivity_impl_hpp
 #define Tempus_StepperStaggeredForwardSensitivity_impl_hpp
@@ -15,6 +16,7 @@
 #include "Thyra_DefaultMultiVectorProductVector.hpp"
 
 #include "Tempus_StepperFactory.hpp"
+#include "Tempus_StepperImplicit_decl.hpp"
 #include "Tempus_WrapStaggeredFSAModelEvaluator.hpp"
 #include "Tempus_WrapCombinedFSAModelEvaluator.hpp"
 
@@ -80,8 +82,15 @@ void StepperStaggeredForwardSensitivity<Scalar>::setModel(
   else
     stateStepper_->setModel(appModel);
 
-  if (sensitivityStepper_ == Teuchos::null)
-    sensitivityStepper_ = sf->createStepper(stepperPL_, fsa_model_);
+  if (sensitivityStepper_ == Teuchos::null) {
+    // The sensitivity stepper uses a copy of the parameters, without the
+    // objects of the forward problem that the nonlinear solver of the state
+    // stepper stores in them (e.g., for NOX row sum scaling), which do not
+    // apply to the sensitivity problem (see removeStepperSolverObjects).
+    auto sensStepperPL = Teuchos::rcp(new Teuchos::ParameterList(*stepperPL_));
+    removeStepperSolverObjects(*sensStepperPL);
+    sensitivityStepper_ = sf->createStepper(sensStepperPL, fsa_model_);
+  }
   else
     sensitivityStepper_->setModel(fsa_model_);
 

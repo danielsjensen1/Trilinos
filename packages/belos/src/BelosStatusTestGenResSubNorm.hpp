@@ -1,43 +1,11 @@
-//@HEADER
-// ************************************************************************
-//
+// @HEADER
+// *****************************************************************************
 //                 Belos: Block Linear Solvers Package
-//                  Copyright 2004 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
-//
-// ************************************************************************
-//@HEADER
+// Copyright 2004-2016 NTESS and the Belos contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
 
 #ifndef BELOS_STATUS_TEST_GEN_RESSUBNORM_H
 #define BELOS_STATUS_TEST_GEN_RESSUBNORM_H
@@ -68,14 +36,14 @@
 
 namespace Belos {
 
-template <class ScalarType, class MV, class OP>
-class StatusTestGenResSubNorm: public StatusTestResNorm<ScalarType,MV,OP> {
+template <class ScalarType, class MV, class OP, class DM = DefaultDenseMatrix<int,ScalarType>>
+class StatusTestGenResSubNorm: public StatusTestResNorm<ScalarType,MV,OP,DM> {
 
  public:
   // Convenience typedefs
   typedef Teuchos::ScalarTraits<ScalarType> SCT;
   typedef typename SCT::magnitudeType MagnitudeType;
-  typedef MultiVecTraits<ScalarType,MV>  MVT;
+  typedef MultiVecTraits<ScalarType,MV, DM>  MVT;
 
   //! @name Constructors/destructors.
   //@{
@@ -118,7 +86,7 @@ class StatusTestGenResSubNorm: public StatusTestResNorm<ScalarType,MV,OP> {
     TEUCHOS_UNREACHABLE_RETURN(0);
   }
 
-  //! Define form of the scaling, its norm, its optional weighting std::vector, or, alternatively, define an explicit value.
+  //! Define form of the scaling, its norm, its optional weighting vector, or, alternatively, define an explicit value.
   /*! This method defines the form of how the residual is scaled (if at all).  It operates in two modes:
     <ol>
     <li> User-provided scaling value:
@@ -132,9 +100,9 @@ class StatusTestGenResSubNorm: public StatusTestResNorm<ScalarType,MV,OP> {
 
     <li> Use a supported Scaling Form:
     <ul>
-    <li> Define TypeOfScaling to be the norm of the right hand side, the initial residual std::vector,
+    <li> Define TypeOfScaling to be the norm of the right hand side, the initial residual vector,
     or to none.
-    <li> Define norm to be used on the scaling std::vector (this may be different than the norm used
+    <li> Define norm to be used on the scaling vector (this may be different than the norm used
     in DefineResForm()).
     </ul>
     </ol>
@@ -174,7 +142,7 @@ class StatusTestGenResSubNorm: public StatusTestResNorm<ScalarType,MV,OP> {
 
     \return StatusType: Passed, Failed, or Undefined.
   */
-  StatusType checkStatus(Iteration<ScalarType,MV,OP>* /* iSolver */) { return Undefined; }
+  StatusType checkStatus(Iteration<ScalarType,MV,OP,DM>* /* iSolver */) { return Undefined; }
 
   //! Return the result of the most recent CheckStatus call.
   StatusType getStatus() const {return Undefined;}
@@ -241,12 +209,12 @@ class StatusTestGenResSubNorm: public StatusTestResNorm<ScalarType,MV,OP> {
   /** @name Misc. */
   //@{
 
-  /** \brief Call to setup initial scaling std::vector.
+  /** \brief Call to setup initial scaling vector.
    *
    * After this function is called <tt>getScaledNormValue()</tt> can be called
-   * to get the scaling std::vector.
+   * to get the scaling vector.
    */
-  StatusType firstCallCheckStatusSetup(Iteration<ScalarType,MV,OP>* iSolver) {
+  StatusType firstCallCheckStatusSetup(Iteration<ScalarType,MV,OP,DM>* iSolver) {
     return Undefined;
   }
   //@}
@@ -264,17 +232,18 @@ class StatusTestGenResSubNorm: public StatusTestResNorm<ScalarType,MV,OP> {
 
 // specialization for Thyra
 template <class ScalarType>
-class StatusTestGenResSubNorm<ScalarType,Thyra::MultiVectorBase<ScalarType>,Thyra::LinearOpBase<ScalarType> >
-   : public StatusTestResNorm<ScalarType,Thyra::MultiVectorBase<ScalarType>,Thyra::LinearOpBase<ScalarType> > {
+class StatusTestGenResSubNorm<ScalarType,Thyra::MultiVectorBase<ScalarType>,Thyra::LinearOpBase<ScalarType>,DefaultDenseMatrix<int,ScalarType> >
+   : public StatusTestResNorm<ScalarType,Thyra::MultiVectorBase<ScalarType>,Thyra::LinearOpBase<ScalarType>,DefaultDenseMatrix<int,ScalarType> > {
 
  public:
   // Convenience typedefs
   typedef Thyra::MultiVectorBase<ScalarType> MV;
   typedef Thyra::LinearOpBase<ScalarType>    OP;
+  typedef DefaultDenseMatrix<int,ScalarType> DM;
 
   typedef Teuchos::ScalarTraits<ScalarType> SCT;
   typedef typename SCT::magnitudeType MagnitudeType;
-  typedef MultiVecTraits<ScalarType,MV>  MVT;
+  typedef MultiVecTraits<ScalarType,MV,DM>  MVT;
   typedef OperatorTraits<ScalarType,MV,OP>  OT;
 
   //! @name Constructors/destructors.
@@ -286,7 +255,7 @@ class StatusTestGenResSubNorm<ScalarType,Thyra::MultiVectorBase<ScalarType>,Thyr
     \f$\|r^{(0)}\|\f$ is the corresponding norm of the initial residual.
     The used norm can be specified by defineResForm and defineScaleForm.
 
-    @param Tolerance: Specifies tolerance \f$\tau\f
+    @param Tolerance: Specifies tolerance \f$\tau\f$
     @param subIdx: index of block row in the n x n block system we want to check the residual of
     @param quorum: Number of residual (sub-)vectors which are needed to be within the tolerance before check is considered to be passed
     @param showMaxResNormOnly: for output only
@@ -317,7 +286,7 @@ class StatusTestGenResSubNorm<ScalarType,Thyra::MultiVectorBase<ScalarType>,Thyr
   //! @name Form and parameter definition methods.
   //@{
 
-  //! Define form of the residual, its norm and optional weighting std::vector.
+  //! Define form of the residual, its norm and optional weighting vector.
   /*! This method defines the form of \f$\|r\|\f$.  We specify:
     <ul>
     <li> The norm to be used on the residual (this may be different than the norm used in
@@ -334,7 +303,7 @@ class StatusTestGenResSubNorm<ScalarType,Thyra::MultiVectorBase<ScalarType>,Thyr
     return(0);
   }
 
-  //! Define form of the scaling, its norm, its optional weighting std::vector, or, alternatively, define an explicit value.
+  //! Define form of the scaling, its norm, its optional weighting vector, or, alternatively, define an explicit value.
   /*! This method defines the form of how the residual is scaled (if at all).  It operates in two modes:
     <ol>
     <li> User-provided scaling value:
@@ -348,9 +317,9 @@ class StatusTestGenResSubNorm<ScalarType,Thyra::MultiVectorBase<ScalarType>,Thyr
 
     <li> Use a supported Scaling Form:
     <ul>
-    <li> Define TypeOfScaling to be the norm of the right hand side, the initial residual std::vector,
+    <li> Define TypeOfScaling to be the norm of the right hand side, the initial residual vector,
     or to none.
-    <li> Define norm to be used on the scaling std::vector (this may be different than the norm used
+    <li> Define norm to be used on the scaling vector (this may be different than the norm used
     in DefineResForm()).
     </ul>
     </ol>
@@ -396,9 +365,9 @@ class StatusTestGenResSubNorm<ScalarType,Thyra::MultiVectorBase<ScalarType>,Thyr
 
     \return StatusType: Passed, Failed, or Undefined.
   */
-  StatusType checkStatus(Iteration<ScalarType,MV,OP>* iSolver) {
+  StatusType checkStatus(Iteration<ScalarType,MV,OP,DM>* iSolver) {
     MagnitudeType zero = Teuchos::ScalarTraits<MagnitudeType>::zero();
-    const LinearProblem<ScalarType,MV,OP>& lp = iSolver->getProblem();
+    const LinearProblem<ScalarType,MV,OP,DM>& lp = iSolver->getProblem();
     // Compute scaling term (done once for each block that's being solved)
     if (firstcallCheckStatus_) {
       StatusType status = firstCallCheckStatusSetup(iSolver);
@@ -409,7 +378,7 @@ class StatusTestGenResSubNorm<ScalarType,Thyra::MultiVectorBase<ScalarType>,Thyr
     }
 
     //
-    // This section computes the norm of the residual std::vector
+    // This section computes the norm of the residual vector
     //
     if ( curLSNum_ != lp.getLSNumber() ) {
       //
@@ -621,16 +590,16 @@ class StatusTestGenResSubNorm<ScalarType,Thyra::MultiVectorBase<ScalarType>,Thyr
   /** @name Misc. */
   //@{
 
-  /** \brief Call to setup initial scaling std::vector.
+  /** \brief Call to setup initial scaling vector.
    *
    * After this function is called <tt>getScaledNormValue()</tt> can be called
-   * to get the scaling std::vector.
+   * to get the scaling vector.
    */
-  StatusType firstCallCheckStatusSetup(Iteration<ScalarType,MV,OP>* iSolver) {
+  StatusType firstCallCheckStatusSetup(Iteration<ScalarType,MV,OP,DM>* iSolver) {
     int i;
     MagnitudeType zero = Teuchos::ScalarTraits<MagnitudeType>::zero();
     MagnitudeType one = Teuchos::ScalarTraits<MagnitudeType>::one();
-    const LinearProblem<ScalarType,MV,OP>& lp = iSolver->getProblem();
+    const LinearProblem<ScalarType,MV,OP,DM>& lp = iSolver->getProblem();
     // Compute scaling term (done once for each block that's being solved)
     if (firstcallCheckStatus_) {
       //

@@ -12,17 +12,14 @@
 #include "Ioss_CodeTypes.h"       // for IntVector
 #include "Ioss_ElementTopology.h" // for ElementTopology
 
-// STL Includes
-
 namespace Ioss {
-  class IOSS_EXPORT Unknown : public Ioss::ElementTopology
+  class IOSS_EXPORT Unknown final : public Ioss::ElementTopology
   {
 
   public:
     static const char *name;
 
     static void factory();
-    Unknown(const Unknown &) = delete;
 
     IOSS_NODISCARD ElementShape shape() const override { return ElementShape::UNKNOWN; }
     IOSS_NODISCARD int          spatial_dimension() const override;

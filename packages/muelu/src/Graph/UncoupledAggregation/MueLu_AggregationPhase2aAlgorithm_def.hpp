@@ -1,48 +1,12 @@
 // @HEADER
-//
-// ***********************************************************************
-//
+// *****************************************************************************
 //        MueLu: A package for multigrid based preconditioning
-//                  Copyright 2012 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact
-//                    Jonathan Hu       (jhu@sandia.gov)
-//                    Andrey Prokopenko (aprokop@sandia.gov)
-//                    Ray Tuminaro      (rstumin@sandia.gov)
-//
-// ***********************************************************************
-//
+// Copyright 2012 NTESS and the MueLu contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
+
 #ifndef MUELU_AGGREGATIONPHASE2AALGORITHM_DEF_HPP_
 #define MUELU_AGGREGATIONPHASE2AALGORITHM_DEF_HPP_
 
@@ -61,6 +25,20 @@
 #include "Kokkos_Sort.hpp"
 
 namespace MueLu {
+
+template <class LocalOrdinal, class GlobalOrdinal, class Node>
+void AggregationPhase2aAlgorithm<LocalOrdinal, GlobalOrdinal, Node>::SetupPhase(const ParameterList& params, Teuchos::RCP<const Teuchos::Comm<int>>& comm, LO& numLocalNodes, LO& numNonAggregatedNodes) {
+  bool matchMLbehavior = params.get<bool>("aggregation: match ML phase2a");
+  if (matchMLbehavior) {
+    // Note: ML uses global counts to set the factor
+    // Passing  # of nonaggregated nodes and # of nodes via aggStat
+    GO in_data[2] = {(GO)numNonAggregatedNodes, (GO)numLocalNodes};
+    GO out_data[2];
+    Teuchos::reduceAll(*comm, Teuchos::REDUCE_SUM, 2, in_data, out_data);
+    GO phase_one_aggregated = out_data[1] - out_data[0];
+    factorMLOverride_       = as<double>(phase_one_aggregated) / (out_data[1] + 1);
+  }
+}
 
 template <class LocalOrdinal, class GlobalOrdinal, class Node>
 void AggregationPhase2aAlgorithm<LocalOrdinal, GlobalOrdinal, Node>::BuildAggregatesNonKokkos(const ParameterList& params, const LWGraph& graph, Aggregates& aggregates, typename AggregationAlgorithmBase<LocalOrdinal, GlobalOrdinal, Node>::AggStatHostType& aggStat, LO& numNonAggregatedNodes) const {
@@ -85,13 +63,9 @@ void AggregationPhase2aAlgorithm<LocalOrdinal, GlobalOrdinal, Node>::BuildAggreg
   double factor;
 
   if (matchMLbehavior) {
-    // Note: ML uses global counts to set the factor
-    // Passing  # of nonaggregated nodes and # of nodes via aggStat
-    GO in_data[2] = {(GO)numNonAggregatedNodes, (GO)aggStat.size()};
-    GO out_data[2];
-    Teuchos::reduceAll(*graph.GetComm(), Teuchos::REDUCE_SUM, 2, in_data, out_data);
-    GO phase_one_aggregated = out_data[1] - out_data[0];
-    factor                  = as<double>(phase_one_aggregated) / (out_data[1] + 1);
+    // Computed in SetupPhase.
+    // This needs to be precomputed in case some ranks are done after phase1.
+    factor = factorMLOverride_;
 
     LO agg_stat_unaggregated = 0;
     LO agg_stat_aggregated   = 0;
@@ -112,6 +86,7 @@ void AggregationPhase2aAlgorithm<LocalOrdinal, GlobalOrdinal, Node>::BuildAggreg
     // MueLu defaults to using local counts to set the factor
     factor = as<double>(numLocalAggregated) / (numLocalNodes + 1);
   }
+  TEUCHOS_TEST_FOR_EXCEPTION(!std::isfinite(Teuchos::ScalarTraits<double>::magnitude(factor)), Exceptions::RuntimeError, "Phase2a factor needs to be finite.");
 
   // Now apply aggFactor
   factor = pow(factor, aggFactor);
@@ -223,8 +198,8 @@ void AggregationPhase2aAlgorithm<LO, GO, Node>::
   const LO numRows = graph.GetNodeNumVertices();
   const int myRank = graph.GetComm()->getRank();
 
-  auto vertex2AggId  = aggregates.GetVertex2AggId()->getDeviceLocalView(Xpetra::Access::ReadWrite);
-  auto procWinner    = aggregates.GetProcWinner()->getDeviceLocalView(Xpetra::Access::ReadWrite);
+  auto vertex2AggId  = aggregates.GetVertex2AggId()->getLocalViewDevice(Tpetra::Access::ReadWrite);
+  auto procWinner    = aggregates.GetProcWinner()->getLocalViewDevice(Tpetra::Access::ReadWrite);
   auto colors        = aggregates.GetGraphColors();
   const LO numColors = aggregates.GetGraphNumColors();
 
@@ -242,7 +217,7 @@ void AggregationPhase2aAlgorithm<LO, GO, Node>::
   // If we can avoid this and use a simple LO that would be
   // simpler for later maintenance.
   Kokkos::View<LO, device_type> numLocalAggregates("numLocalAggregates");
-  typename Kokkos::View<LO, device_type>::HostMirror h_numLocalAggregates =
+  typename Kokkos::View<LO, device_type>::host_mirror_type h_numLocalAggregates =
       Kokkos::create_mirror_view(numLocalAggregates);
   h_numLocalAggregates() = aggregates.GetNumAggregates();
   Kokkos::deep_copy(numLocalAggregates, h_numLocalAggregates);
@@ -343,8 +318,8 @@ void AggregationPhase2aAlgorithm<LO, GO, Node>::
   const LO numRows = graph.GetNodeNumVertices();
   const int myRank = graph.GetComm()->getRank();
 
-  auto vertex2AggId  = aggregates.GetVertex2AggId()->getDeviceLocalView(Xpetra::Access::ReadWrite);
-  auto procWinner    = aggregates.GetProcWinner()->getDeviceLocalView(Xpetra::Access::ReadWrite);
+  auto vertex2AggId  = aggregates.GetVertex2AggId()->getLocalViewDevice(Tpetra::Access::ReadWrite);
+  auto procWinner    = aggregates.GetProcWinner()->getLocalViewDevice(Tpetra::Access::ReadWrite);
   auto colors        = aggregates.GetGraphColors();
   const LO numColors = aggregates.GetGraphNumColors();
 
@@ -358,7 +333,7 @@ void AggregationPhase2aAlgorithm<LO, GO, Node>::
   factor                 = pow(factor, aggFactor);
 
   Kokkos::View<LO, device_type> numLocalAggregates("numLocalAggregates");
-  typename Kokkos::View<LO, device_type>::HostMirror h_numLocalAggregates =
+  typename Kokkos::View<LO, device_type>::host_mirror_type h_numLocalAggregates =
       Kokkos::create_mirror_view(numLocalAggregates);
   h_numLocalAggregates() = aggregates.GetNumAggregates();
   Kokkos::deep_copy(numLocalAggregates, h_numLocalAggregates);

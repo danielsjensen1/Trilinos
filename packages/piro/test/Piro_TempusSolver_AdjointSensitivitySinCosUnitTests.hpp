@@ -1,46 +1,11 @@
-/*
 // @HEADER
-// ************************************************************************
-//
+// *****************************************************************************
 //        Piro: Strategy package for embedded analysis capabilitites
-//                  Copyright (2010) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Andy Salinger (agsalin@sandia.gov), Sandia
-// National Laboratories.
-//
-// ************************************************************************
+// Copyright 2010 NTESS and the Piro contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
-*/
 
 #include "Piro_ConfigDefs.hpp"
 
@@ -108,6 +73,7 @@ void test_sincos_asa(Teuchos::FancyOStream &out, bool &success, bool explicitAdj
   if (sens_method_string == "None") sens_method = Piro::NONE;
   else if (sens_method_string == "Forward") sens_method = Piro::FORWARD;
   else if (sens_method_string == "Adjoint") sens_method = Piro::ADJOINT;
+  else TEUCHOS_ASSERT(false);
 
   for (int n=0; n<nTimeStepSizes; n++) {
 
@@ -190,16 +156,22 @@ void test_sincos_asa(Teuchos::FancyOStream &out, bool &success, bool explicitAdj
          //rcp(new TempusSolver<double>(integrator, stepper, stepSolver, model, tfinal, sens_method_string, 1, 0));
          rcp(new TempusSolver<double>(integrator, stepper, stepSolver, model, tfinal, sens_method_string));
 
-    const Thyra::MEB::InArgs<double> inArgs = tempus_solver->getNominalValues();
-    Thyra::MEB::OutArgs<double> outArgs = tempus_solver->createOutArgs();
-    const int solutionResponseIndex = tempus_solver->Ng() - 1;
+    // Tempus computes the adjoint sensitivities of response 0 (default "Response Function Index"
+    // of the Tempus "Sensitivities" sublist) with respect to parameter 0. The OutArgs supported
+    // by the solver depend on these indices, so the OutArgs are created after setting them.
+    const int responseIndex = 0;
     const int parameterIndex = 0;
     tempus_solver->resetSensitivityParamIndex(parameterIndex);
-    tempus_solver->resetResponseFnIndex(solutionResponseIndex);
-    const Thyra::MEB::Derivative<double> dxdp_deriv =
-        Thyra::create_DgDp_mv(*tempus_solver, solutionResponseIndex, parameterIndex, Thyra::MEB::DERIV_MV_JACOBIAN_FORM);
-    const RCP<Thyra::MultiVectorBase<double> > dxdp = dxdp_deriv.getMultiVector();
-    outArgs.set_DgDp(solutionResponseIndex, parameterIndex, dxdp_deriv);
+    tempus_solver->resetResponseFnIndex(responseIndex);
+    const Thyra::MEB::InArgs<double> inArgs = tempus_solver->getNominalValues();
+    Thyra::MEB::OutArgs<double> outArgs = tempus_solver->createOutArgs();
+    const Thyra::MEB::Derivative<double> dgdp_deriv =
+        Thyra::create_DgDp_mv(*tempus_solver, responseIndex, parameterIndex, Thyra::MEB::DERIV_MV_GRADIENT_FORM);
+    const RCP<Thyra::MultiVectorBase<double> > dgdp = dgdp_deriv.getMultiVector();
+    outArgs.set_DgDp(responseIndex, parameterIndex, dgdp_deriv);
+
+    // Same check as in Thyra debug builds: the OutArgs must be compatible with the solver
+    tempus_solver->createOutArgs().assertSameSupport(outArgs);
 
     //Integrate in time
     tempus_solver->evalModel(inArgs, outArgs);
@@ -215,6 +187,14 @@ void test_sincos_asa(Teuchos::FancyOStream &out, bool &success, bool explicitAdj
     // dg/dp since the integrator returns it in gradient form.
     RCP<const Thyra::VectorBase<double> > x = integrator->getX();
     RCP<const Thyra::MultiVectorBase<double> > DgDp = integrator->getDgDp();
+
+    // The solver returns the adjoint sensitivities computed by Tempus
+    for (int i=0; i<DgDp->domain()->dim(); ++i) {
+      TEST_COMPARE_FLOATING_ARRAYS(
+        arrayFromVector(*dgdp->col(i)),
+        arrayFromVector(*DgDp->col(i)),
+        tol);
+    }
     RCP<Thyra::MultiVectorBase<double> > DxDp =
       Thyra::createMembers(model->get_x_space(), num_param);
     {
@@ -252,10 +232,10 @@ void test_sincos_asa(Teuchos::FancyOStream &out, bool &success, bool explicitAdj
       typedef Thyra::DefaultMultiVectorProductVector<double> DMVPV;
 
       std::ofstream ftmp(soln_outfile_name);
-      RCP<const Tempus::SolutionHistory<double> > solutionHistory =
+      RCP<const Tempus::SolutionHistory<double> > lsolutionHistory =
         integrator->getSolutionHistory();
-      for (int i=0; i<solutionHistory->getNumStates(); i++) {
-        RCP<const Tempus::SolutionState<double> > solutionState = (*solutionHistory)[i];
+      for (int i=0; i<lsolutionHistory->getNumStates(); i++) {
+        RCP<const Tempus::SolutionState<double> > solutionState = (*lsolutionHistory)[i];
         const double time_i = solutionState->getTime();
         RCP<const DPV> x_prod_plot =
           Teuchos::rcp_dynamic_cast<const DPV>(solutionState->getX());

@@ -1,43 +1,11 @@
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //           Panzer: A partial differential equation assembly
 //       engine for strongly coupled complex multiphysics systems
-//                 Copyright (2011) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Roger P. Pawlowski (rppawlo@sandia.gov) and
-// Eric C. Cyr (eccyr@sandia.gov)
-// ***********************************************************************
+// Copyright 2011 NTESS and the Panzer contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #ifndef PANZER_SCATTER_DIRICHLET_RESIDUAL_BLOCEDTPETRA_IMPL_HPP
@@ -47,6 +15,7 @@
 #include "Teuchos_Assert.hpp"
 
 #include "Phalanx_DataLayout.hpp"
+#include "Panzer_NodeType.hpp"
 
 // #include "Epetra_Map.h"
 // #include "Epetra_Vector.h"
@@ -56,6 +25,7 @@
 #include "Panzer_BlockedDOFManager.hpp"
 #include "Panzer_PureBasis.hpp"
 #include "Panzer_BlockedTpetraLinearObjContainer.hpp"
+#include "Panzer_ParameterList_GlobalEvaluationData.hpp"
 #include "Panzer_GlobalEvaluationDataContainer.hpp"
 
 #include "Phalanx_DataLayout_MDALayout.hpp"
@@ -157,7 +127,7 @@ ScatterDirichletResidual_BlockedTpetra(const Teuchos::RCP<const BlockedDOFManage
   if (p.isType<std::string>("Global Data Key"))
      globalDataKey_ = p.get<std::string>("Global Data Key");
 
-  this->setName(scatterName+" Scatter Residual");
+  this->setName(scatterName+" Scatter Dirichlet Residual");
 }
 
 // **********************************************************************
@@ -285,7 +255,7 @@ evaluateFields(typename TRAITS::EvalData workset)
 
      if (!scatterIC_) {
 
-       Kokkos::parallel_for(Kokkos::RangePolicy<PHX::Device>(0,workset.num_cells), KOKKOS_LAMBDA (const int& cell) {
+       Kokkos::parallel_for(Kokkos::RangePolicy<PHX::ExecutionSpace>(0,workset.num_cells), KOKKOS_LAMBDA (const int& cell) {
          for (int basis=0; basis < static_cast<int>(fieldOffsets.size()); ++basis) {
            const int lid = worksetLIDs(cell,fieldOffsets(basis));
            if (lid < 0) // not on this processor!
@@ -304,7 +274,7 @@ evaluateFields(typename TRAITS::EvalData workset)
 
      } else {
 
-       Kokkos::parallel_for(Kokkos::RangePolicy<PHX::Device>(0,workset.num_cells), KOKKOS_LAMBDA (const int& cell) {
+       Kokkos::parallel_for(Kokkos::RangePolicy<PHX::ExecutionSpace>(0,workset.num_cells), KOKKOS_LAMBDA (const int& cell) {
          for (int basis=0; basis < static_cast<int>(fieldOffsets.size()); ++basis) {
            const int lid = worksetLIDs(cell,fieldOffsets(basis));
            if (lid < 0) // not on this processor!
@@ -327,9 +297,26 @@ template <typename TRAITS,typename LO,typename GO,typename NodeT>
 panzer::ScatterDirichletResidual_BlockedTpetra<panzer::Traits::Jacobian, TRAITS,LO,GO,NodeT>::
 ScatterDirichletResidual_BlockedTpetra(const Teuchos::RCP<const BlockedDOFManager> & indexer,
                                 const Teuchos::ParameterList& p)
+   : ScatterDirichletResidual_BlockedTpetra(indexer,std::vector<Teuchos::RCP<const panzer::GlobalIndexer> >(),p)
+{ }
+
+template <typename TRAITS,typename LO,typename GO,typename NodeT>
+panzer::ScatterDirichletResidual_BlockedTpetra<panzer::Traits::Jacobian, TRAITS,LO,GO,NodeT>::
+ScatterDirichletResidual_BlockedTpetra(const Teuchos::RCP<const BlockedDOFManager> & indexer,
+                                       const std::vector<Teuchos::RCP<const panzer::GlobalIndexer> > & colIndexers,
+                                       const Teuchos::ParameterList& p)
    : globalIndexer_(indexer)
    , globalDataKey_("Residual Scatter Container")
+   , colGlobalIndexers_(colIndexers)
+   , hasColIndexers_(!colIndexers.empty())
 {
+  // When the columns are not indexed separately they are the rows, so resolve
+  // that here and let everything below read colGlobalIndexers_ unconditionally.
+  if(!hasColIndexers_) {
+    const auto & rowManagers = globalIndexer_->getFieldDOFManagers();
+    colGlobalIndexers_.assign(rowManagers.begin(),rowManagers.end());
+  }
+
   std::string scatterName = p.get<std::string>("Scatter Name");
   scatterHolder_ =
     Teuchos::rcp(new PHX::Tag<ScalarT>(scatterName,Teuchos::rcp(new PHX::MDALayout<Dummy>(0))));
@@ -371,7 +358,7 @@ ScatterDirichletResidual_BlockedTpetra(const Teuchos::RCP<const BlockedDOFManage
   if (p.isType<std::string>("Global Data Key"))
      globalDataKey_ = p.get<std::string>("Global Data Key");
 
-  this->setName(scatterName+" Scatter Residual (Jacobian)");
+  this->setName(scatterName+" Scatter Dirichlet Residual (Jacobian)");
 }
 
 // **********************************************************************
@@ -438,6 +425,47 @@ postRegistrationSetup(typename TRAITS::SetupData d,
   hostBlockOffsets(numBlocks) = hostBlockOffsets(numBlocks-1) + blockGlobalIndexers[blockGlobalIndexers.size()-1]->getElementBlockGIDCount(blockId);
   Kokkos::deep_copy(blockOffsets_,hostBlockOffsets);
 
+  // The columns carry the derivative components, so when they are indexed
+  // separately from the rows they need their own offsets and LIDs.
+  if (!hasColIndexers_) {
+    colBlockOffsets_ = blockOffsets_;
+    colWorksetLIDs_ = worksetLIDs_;
+  }
+  else {
+    const int numColBlocks = static_cast<int>(colGlobalIndexers_.size());
+    colBlockOffsets_ = PHX::View<LO*>("ScatterDirichletResidual_BlockedTpetra(Jacobian):colBlockOffsets_",
+                                      numColBlocks+1);
+    auto hostColOffsets = Kokkos::create_mirror_view(colBlockOffsets_);
+    hostColOffsets(0) = 0;
+    for (int blk=0;blk<numColBlocks;blk++)
+      hostColOffsets(blk+1) = hostColOffsets(blk) + colGlobalIndexers_[blk]->getElementBlockGIDCount(blockId);
+    Kokkos::deep_copy(colBlockOffsets_,hostColOffsets);
+
+    colWorksetLIDs_ = PHX::View<LO**>("ScatterDirichletResidual_BlockedTpetra(Jacobian):colWorksetLIDs",
+                                      scatterFields_[0].extent(0), hostColOffsets(numColBlocks));
+  }
+
+  // The offsets never change after this point, so copy them to the host once
+  // here rather than rebuilding a mirror on every evaluateFields() call.
+  blockOffsets_h_ = Kokkos::create_mirror_view(blockOffsets_);
+  Kokkos::deep_copy(blockOffsets_h_, blockOffsets_);
+  colBlockOffsets_h_ = Kokkos::create_mirror_view(colBlockOffsets_);
+  Kokkos::deep_copy(colBlockOffsets_h_, colBlockOffsets_);
+
+  // Size the scatter scratch once. The contents are rebuilt per call, but the
+  // extents only depend on the block structure.
+  {
+    // Size with the same expression evaluateFields() indexes with.
+    const int numRowBlocks = globalIndexer_->getNumFieldBlocks();
+    const int numColBlocks = static_cast<int>(colGlobalIndexers_.size());
+    hostJacTpetraBlocks_ = typename PHX::View<LocalMatrixType**>::host_mirror_type(
+      "ScatterDirichletResidual_BlockedTpetra(Jacobian):hostJacTpetraBlocks", numRowBlocks, numColBlocks);
+    jacTpetraBlocks_ = PHX::View<LocalMatrixType**>(
+      "ScatterDirichletResidual_BlockedTpetra(Jacobian):jacTpetraBlocks", numRowBlocks, numColBlocks);
+    blockExistsInJac_ = PHX::View<int**>("ScatterDirichletResidual_BlockedTpetra(Jacobian):blockExistsInJac", numRowBlocks, numColBlocks);
+    hostBlockExistsInJac_ = Kokkos::create_mirror_view(blockExistsInJac_);
+  }
+
   // Make sure the that hard coded derivative dimension in the
   // evaluate call is large enough to hold all derivatives for each
   // sub block load
@@ -483,6 +511,7 @@ evaluateFields(typename TRAITS::EvalData workset)
   const auto& localCellIds = this->wda(workset).cell_local_ids_k;
 
   const int numFieldBlocks = globalIndexer_->getNumFieldBlocks();
+  const int numColFieldBlocks = static_cast<int>(colGlobalIndexers_.size());
   const RCP<const ContainerType> blockedContainer = blockedContainer_;
   const RCP<ProductVectorBase<double>> thyraBlockResidual = rcp_dynamic_cast<ProductVectorBase<double>>(blockedContainer_->get_f());
   const bool haveResidual = Teuchos::nonnull(thyraBlockResidual);
@@ -492,15 +521,15 @@ evaluateFields(typename TRAITS::EvalData workset)
   // on host and then deep_copy to device. The sub-blocks are
   // unmanaged since they are allocated and ref counted separately on
   // host.
-  using LocalMatrixType = KokkosSparse::CrsMatrix<double,LO,PHX::Device,Kokkos::MemoryTraits<Kokkos::Unmanaged>, size_t>;
-  typename PHX::View<LocalMatrixType**>::HostMirror
-    hostJacTpetraBlocks("panzer::ScatterResidual_BlockTpetra<Jacobian>::hostJacTpetraBlocks", numFieldBlocks,numFieldBlocks);
-
-  PHX::View<int**> blockExistsInJac =   PHX::View<int**>("blockExistsInJac_",numFieldBlocks,numFieldBlocks);
-  auto hostBlockExistsInJac = Kokkos::create_mirror_view(blockExistsInJac);
+  // Scratch sized in postRegistrationSetup(); only the contents are rebuilt here.
+  TEUCHOS_ASSERT(static_cast<int>(jacTpetraBlocks_.extent(0))==numFieldBlocks &&
+                 static_cast<int>(jacTpetraBlocks_.extent(1))==numColFieldBlocks);
+  auto& hostJacTpetraBlocks = hostJacTpetraBlocks_;
+  auto& blockExistsInJac = blockExistsInJac_;
+  auto& hostBlockExistsInJac = hostBlockExistsInJac_;
 
   for (int row=0; row < numFieldBlocks; ++row) {
-    for (int col=0; col < numFieldBlocks; ++col) {
+    for (int col=0; col < numColFieldBlocks; ++col) {
       const auto thyraTpetraOperator = rcp_dynamic_cast<Thyra::TpetraLinearOp<double,LO,GO,NodeT>>(Jac->getNonconstBlock(row,col),false);
       if (nonnull(thyraTpetraOperator)) {
 
@@ -541,8 +570,7 @@ evaluateFields(typename TRAITS::EvalData workset)
       }
     }
   }
-  typename PHX::View<LocalMatrixType**>
-    jacTpetraBlocks("panzer::ScatterResidual_BlockedTpetra<Jacobian>::jacTpetraBlocks",numFieldBlocks,numFieldBlocks);
+  auto& jacTpetraBlocks = jacTpetraBlocks_;
   Kokkos::deep_copy(jacTpetraBlocks,hostJacTpetraBlocks);
   Kokkos::deep_copy(blockExistsInJac,hostBlockExistsInJac);
 
@@ -552,18 +580,25 @@ evaluateFields(typename TRAITS::EvalData workset)
   // lids for the sub-block that it is scattering to. The subviews
   // below are to offset the LID blocks correctly.
   const auto& globalIndexers = globalIndexer_->getFieldDOFManagers();
-  auto blockOffsets_h = Kokkos::create_mirror_view(blockOffsets_);
-  Kokkos::deep_copy(blockOffsets_h, blockOffsets_);
+  const auto& blockOffsets_h = blockOffsets_h_;
   for (size_t block=0; block < globalIndexers.size(); ++block) {
     const auto subviewOfBlockLIDs = Kokkos::subview(worksetLIDs_,Kokkos::ALL(), std::make_pair(blockOffsets_h(block),blockOffsets_h(block+1)));
     globalIndexers[block]->getElementLIDs(localCellIds,subviewOfBlockLIDs);
+  }
+
+  const auto& colBlockOffsets_h = colBlockOffsets_h_;
+  if (hasColIndexers_) {
+    for (size_t block=0; block < colGlobalIndexers_.size(); ++block) {
+      const auto subviewOfBlockLIDs = Kokkos::subview(colWorksetLIDs_,Kokkos::ALL(), std::make_pair(colBlockOffsets_h(block),colBlockOffsets_h(block+1)));
+      colGlobalIndexers_[block]->getElementLIDs(localCellIds,subviewOfBlockLIDs);
+    }
   }
 
   // Loop over scattered fields
   for (std::size_t fieldIndex = 0; fieldIndex < scatterFields_.size(); fieldIndex++) {
 
     const int blockRowIndex = productVectorBlockIndex_[fieldIndex];
-    typename Tpetra::Vector<double,LO,GO,PHX::Device>::dual_view_type::t_dev kokkosResidual;
+    typename Tpetra::Vector<double,LO,GO,panzer::TpetraNodeType>::dual_view_type::t_dev kokkosResidual;
     if (haveResidual) {
       auto& tpetraResidual = *((rcp_dynamic_cast<Thyra::TpetraVector<RealType,LO,GO,NodeT>>(thyraBlockResidual->getNonconstVectorBlock(blockRowIndex),true))->getTpetraVector());
       kokkosResidual = tpetraResidual.getLocalViewDevice(Tpetra::Access::ReadWrite);
@@ -579,10 +614,12 @@ evaluateFields(typename TRAITS::EvalData workset)
     const PHX::View<const LO**> worksetLIDs = worksetLIDs_;
     const PHX::View<const ScalarT**> fieldValues = scatterFields_[fieldIndex].get_static_view();
     const PHX::View<const LO*> blockOffsets = blockOffsets_;
+    const PHX::View<const LO*> colBlockOffsets = colBlockOffsets_;
+    const PHX::View<const LO**> colWorksetLIDs = colWorksetLIDs_;
     const auto& applyBC = applyBC_[fieldIndex].get_static_view();
     const bool checkApplyBC = checkApplyBC_;
 
-    Kokkos::parallel_for(Kokkos::RangePolicy<PHX::Device>(0,workset.num_cells), KOKKOS_LAMBDA (const int& cell) {
+    Kokkos::parallel_for(Kokkos::RangePolicy<PHX::ExecutionSpace>(0,workset.num_cells), KOKKOS_LAMBDA (const int& cell) {
       LO cLIDs[maxDerivativeArraySize_];
       typename Sacado::ScalarType<ScalarT>::type vals[maxDerivativeArraySize_];
 
@@ -609,7 +646,7 @@ evaluateFields(typename TRAITS::EvalData workset)
         kokkosDirichletCounter(rowLID,0) = 1.0;
 
         // Zero out entire matrix row
-        for (int blockColIndex=0; blockColIndex < numFieldBlocks; ++blockColIndex) {
+        for (int blockColIndex=0; blockColIndex < numColFieldBlocks; ++blockColIndex) {
           if (blockExistsInJac(blockRowIndex,blockColIndex)) {
             const auto& rowEntries = jacTpetraBlocks(blockRowIndex,blockColIndex).row(rowLID);
             for (int i=0; i < rowEntries.length; ++i)
@@ -618,14 +655,14 @@ evaluateFields(typename TRAITS::EvalData workset)
         }
 
         // Set values
-        for (int blockColIndex=0; blockColIndex < numFieldBlocks; ++blockColIndex) {
+        for (int blockColIndex=0; blockColIndex < numColFieldBlocks; ++blockColIndex) {
           if (blockExistsInJac(blockRowIndex,blockColIndex)) {
-            const int start = blockOffsets(blockColIndex);
-            const int stop = blockOffsets(blockColIndex+1);
+            const int start = colBlockOffsets(blockColIndex);
+            const int stop = colBlockOffsets(blockColIndex+1);
             const int sensSize = stop-start;
             // Views may be padded. Use contiguous arrays here
             for (int i=0; i < sensSize; ++i) {
-              cLIDs[i] = worksetLIDs(cell,start+i);
+              cLIDs[i] = colWorksetLIDs(cell,start+i);
               vals[i] = tmpFieldVal.fastAccessDx(start+i);
             }
             jacTpetraBlocks(blockRowIndex,blockColIndex).replaceValues(rowLID,cLIDs,sensSize,vals,true,true);
@@ -638,7 +675,7 @@ evaluateFields(typename TRAITS::EvalData workset)
 
   // Placement delete on view of matrices
   for (int row=0; row < numFieldBlocks; ++row) {
-    for (int col=0; col < numFieldBlocks; ++col) {
+    for (int col=0; col < numColFieldBlocks; ++col) {
       if (hostBlockExistsInJac(row,col)) {
         hostJacTpetraBlocks(row,col).~CrsMatrix();
       }
@@ -649,4 +686,265 @@ evaluateFields(typename TRAITS::EvalData workset)
 
 // **********************************************************************
 
+// **********************************************************************
+// Specialization: Tangent 
+// **********************************************************************
+
+
+template <typename TRAITS,typename LO,typename GO,typename NodeT>
+panzer::ScatterDirichletResidual_BlockedTpetra<panzer::Traits::Tangent, TRAITS,LO,GO,NodeT>::
+ScatterDirichletResidual_BlockedTpetra(const Teuchos::RCP<const BlockedDOFManager> & indexer,
+                                const Teuchos::ParameterList& p)
+   : globalIndexer_(indexer)
+   , globalDataKey_("Residual Scatter Container")
+{
+  std::string scatterName = p.get<std::string>("Scatter Name");
+  scatterHolder_ =
+    Teuchos::rcp(new PHX::Tag<ScalarT>(scatterName,Teuchos::rcp(new PHX::MDALayout<Dummy>(0))));
+
+  // get names to be evaluated
+  const std::vector<std::string>& names =
+    *(p.get< Teuchos::RCP< std::vector<std::string> > >("Dependent Names"));
+
+  // grab map from evaluated names to field names
+  fieldMap_ = p.get< Teuchos::RCP< std::map<std::string,std::string> > >("Dependent Map");
+
+  // determine if we are scattering an initial condition
+  scatterIC_ = p.isParameter("Scatter Initial Condition") ? p.get<bool>("Scatter Initial Condition") : false;
+
+  Teuchos::RCP<PHX::DataLayout> dl = (!scatterIC_) ?
+    p.get< Teuchos::RCP<panzer::PureBasis> >("Basis")->functional :
+    p.get< Teuchos::RCP<const panzer::PureBasis> >("Basis")->functional;
+  if (!scatterIC_) {
+    side_subcell_dim_ = p.get<int>("Side Subcell Dimension");
+    local_side_id_ = p.get<int>("Local Side ID");
+  }
+
+  // build the vector of fields that this is dependent on
+  scatterFields_.resize(names.size());
+  for (std::size_t eq = 0; eq < names.size(); ++eq) {
+    scatterFields_[eq] = PHX::MDField<const ScalarT,Cell,NODE>(names[eq],dl);
+
+    // tell the field manager that we depend on this field
+    this->addDependentField(scatterFields_[eq]);
+  }
+
+  checkApplyBC_ = p.isParameter("Check Apply BC") ? p.get<bool>("Check Apply BC") : false;
+  applyBC_.resize(names.size()); // must allocate (even if not used) to support lambda capture
+  if (checkApplyBC_) {
+    for (std::size_t eq = 0; eq < names.size(); ++eq) {
+      applyBC_[eq] = PHX::MDField<const bool,Cell,NODE>(std::string("APPLY_BC_")+fieldMap_->find(names[eq])->second,dl);
+      this->addDependentField(applyBC_[eq]);
+    }
+  }
+
+  // this is what this evaluator provides
+  this->addEvaluatedField(*scatterHolder_);
+
+  if (p.isType<std::string>("Global Data Key"))
+     globalDataKey_ = p.get<std::string>("Global Data Key");
+
+  this->setName(scatterName+" Scatter Dirichlet Residual");
+}
+
+// **********************************************************************
+template <typename TRAITS,typename LO,typename GO,typename NodeT>
+void panzer::ScatterDirichletResidual_BlockedTpetra<panzer::Traits::Tangent, TRAITS,LO,GO,NodeT>::
+postRegistrationSetup(typename TRAITS::SetupData d,
+                      PHX::FieldManager<TRAITS>& /* fm */)
+{
+  const Workset & workset_0 = (*d.worksets_)[0];
+  const std::string blockId = this->wda(workset_0).block_id;
+
+  fieldIds_.resize(scatterFields_.size());
+  fieldOffsets_.resize(scatterFields_.size());
+  basisIndexForMDFieldOffsets_.resize(scatterFields_.size());
+  fieldGlobalIndexers_.resize(scatterFields_.size());
+  productVectorBlockIndex_.resize(scatterFields_.size());
+  int maxElementBlockGIDCount = -1;
+  for(std::size_t fd=0;fd<scatterFields_.size();++fd) {
+    // get field ID from DOF manager
+    std::string fieldName = fieldMap_->find(scatterFields_[fd].fieldTag().name())->second;
+
+    const int globalFieldNum = globalIndexer_->getFieldNum(fieldName); // Field number in the aggregate BlockDOFManager
+    productVectorBlockIndex_[fd] = globalIndexer_->getFieldBlock(globalFieldNum);
+    fieldGlobalIndexers_[fd] = globalIndexer_->getFieldDOFManagers()[productVectorBlockIndex_[fd]];
+    fieldIds_[fd] = fieldGlobalIndexers_[fd]->getFieldNum(fieldName); // Field number in the sub-global-indexer
+
+    // Offsets and basisIndex depend on whether scattering IC or Dirichlet BC
+    if (!scatterIC_) {
+      const auto& offsetPair = fieldGlobalIndexers_[fd]->getGIDFieldOffsets_closure(blockId,fieldIds_[fd],side_subcell_dim_,local_side_id_);
+      {
+        const auto& offsets =  offsetPair.first;
+        fieldOffsets_[fd] = PHX::View<int*>("ScatterDirichletResidual_BlockedTpetra(Tangent):fieldOffsets",offsets.size());
+        auto hostOffsets = Kokkos::create_mirror_view(fieldOffsets_[fd]);
+        for (std::size_t i=0; i < offsets.size(); ++i)
+          hostOffsets(i) = offsets[i];
+        Kokkos::deep_copy(fieldOffsets_[fd], hostOffsets);
+      }
+      {
+        const auto& basisIndex =  offsetPair.second;
+        basisIndexForMDFieldOffsets_[fd] = PHX::View<int*>("ScatterDirichletResidual_BlockedTpetra(Tangent):basisIndexForMDFieldOffsets",basisIndex.size());
+        auto hostBasisIndex = Kokkos::create_mirror_view(basisIndexForMDFieldOffsets_[fd]);
+        for (std::size_t i=0; i < basisIndex.size(); ++i)
+          hostBasisIndex(i) = basisIndex[i];
+        Kokkos::deep_copy(basisIndexForMDFieldOffsets_[fd], hostBasisIndex);
+      }
+    }
+    else {
+      // For ICs, only need offsets, not basisIndex
+      const std::vector<int>& offsets = fieldGlobalIndexers_[fd]->getGIDFieldOffsets(blockId,fieldIds_[fd]);
+      fieldOffsets_[fd] = PHX::View<int*>("ScatterDirichletResidual_BlockedTpetra(Tangent):fieldOffsets",offsets.size());
+      auto hostOffsets = Kokkos::create_mirror_view(fieldOffsets_[fd]);
+      for (std::size_t i=0; i < offsets.size(); ++i)
+        hostOffsets(i) = offsets[i];
+      Kokkos::deep_copy(fieldOffsets_[fd], hostOffsets);
+    }
+
+    maxElementBlockGIDCount = std::max(fieldGlobalIndexers_[fd]->getElementBlockGIDCount(blockId),maxElementBlockGIDCount);
+  }
+
+  // We will use one workset lid view for all fields, but has to be
+  // sized big enough to hold the largest elementBlockGIDCount in the
+  // ProductVector.
+  worksetLIDs_ = PHX::View<LO**>("ScatterResidual_BlockedTpetra(Tangent):worksetLIDs",
+                                                scatterFields_[0].extent(0),
+                                                maxElementBlockGIDCount);
+}
+
+// **********************************************************************
+template <typename TRAITS,typename LO,typename GO,typename NodeT>
+void panzer::ScatterDirichletResidual_BlockedTpetra<panzer::Traits::Tangent, TRAITS,LO,GO,NodeT>::
+preEvaluate(typename TRAITS::PreEvalData d)
+{
+
+  // this is the list of parameters and their names that this scatter has to account for
+  std::vector<std::string> activeParameters =
+    Teuchos::rcp_dynamic_cast<ParameterList_GlobalEvaluationData>(d.gedc->getDataObject("PARAMETER_NAMES"))->getActiveParameters();
+
+  const int numBlocks = static_cast<int>(globalIndexer_->getFieldDOFManagers().size());
+
+  // Only the outer view is allocated here. The device views of the df/dp
+  // sub-blocks are acquired and released in evaluateFields().
+  dfdpFieldsVoV_.initialize("ScatterResidual_Tpetra<Tangent>::dfdpFieldsVoV_",activeParameters.size(),numBlocks);
+
+  dfdpVectors_.resize(activeParameters.size());
+  for(std::size_t i=0;i<activeParameters.size();i++) {
+    Teuchos::RCP<ContainerType> paramBlockedContainer = Teuchos::rcp_dynamic_cast<ContainerType>(d.gedc->getDataObject(activeParameters[i]),true);
+    Teuchos::RCP<Thyra::ProductVectorBase<double>> productVector =
+      Teuchos::rcp_dynamic_cast<Thyra::ProductVectorBase<double>>(paramBlockedContainer->get_f(),true);
+    dfdpVectors_[i].resize(numBlocks);
+    for(int j=0;j<numBlocks;j++)
+      dfdpVectors_[i][j] = Teuchos::rcp_dynamic_cast<Thyra::TpetraVector<RealType,LO,GO,NodeT>>(productVector->getNonconstVectorBlock(j),true)->getTpetraVector();
+  }
+
+  // extract dirichlet counter from container
+  Teuchos::RCP<const ContainerType> blockContainer
+        = Teuchos::rcp_dynamic_cast<ContainerType>(d.gedc->getDataObject("Dirichlet Counter"),true);
+
+  dirichletCounter_ = Teuchos::rcp_dynamic_cast<Thyra::ProductVectorBase<double> >(blockContainer->get_f(),true);
+  TEUCHOS_ASSERT(!Teuchos::is_null(dirichletCounter_));
+
+  // extract linear object container
+  blockedContainer_ = Teuchos::rcp_dynamic_cast<const ContainerType>(d.gedc->getDataObject(globalDataKey_),true);
+  TEUCHOS_ASSERT(!Teuchos::is_null(blockedContainer_));
+}
+
+// **********************************************************************
+template <typename TRAITS,typename LO,typename GO,typename NodeT>
+void panzer::ScatterDirichletResidual_BlockedTpetra<panzer::Traits::Tangent, TRAITS,LO,GO,NodeT>::
+evaluateFields(typename TRAITS::EvalData workset)
+{
+   using Teuchos::RCP;
+   using Teuchos::rcp_dynamic_cast;
+   using Thyra::VectorBase;
+   using Thyra::ProductVectorBase;
+
+   const auto& localCellIds = this->wda(workset).cell_local_ids_k;
+
+   RCP<ProductVectorBase<double> > thyraScatterTarget = (!scatterIC_) ?
+     rcp_dynamic_cast<ProductVectorBase<double> >(blockedContainer_->get_f(),true) :
+     rcp_dynamic_cast<ProductVectorBase<double> >(blockedContainer_->get_x(),true);
+
+   // Acquire the df/dp device views for the duration of this method only. See
+   // the release loop at the end of this method.
+   for(std::size_t i=0;i<dfdpVectors_.size();i++)
+     for(std::size_t j=0;j<dfdpVectors_[i].size();j++)
+       dfdpFieldsVoV_.addView(dfdpVectors_[i][j]->getLocalViewDevice(Tpetra::Access::ReadWrite),i,j);
+   dfdpFieldsVoV_.syncHostToDevice();
+
+   // Loop over scattered fields
+   int currentWorksetLIDSubBlock = -1;
+   for (std::size_t fieldIndex = 0; fieldIndex < scatterFields_.size(); fieldIndex++) {
+     // workset LIDs only change for different sub blocks
+     if (productVectorBlockIndex_[fieldIndex] != currentWorksetLIDSubBlock) {
+       fieldGlobalIndexers_[fieldIndex]->getElementLIDs(localCellIds,worksetLIDs_);
+       currentWorksetLIDSubBlock = productVectorBlockIndex_[fieldIndex];
+     }
+
+     // Get Scatter target block
+     auto& tpetraScatterTarget = *((rcp_dynamic_cast<Thyra::TpetraVector<RealType,LO,GO,NodeT>>(thyraScatterTarget->getNonconstVectorBlock(productVectorBlockIndex_[fieldIndex]),true))->getTpetraVector());
+     const auto& kokkosScatterTarget = tpetraScatterTarget.getLocalViewDevice(Tpetra::Access::ReadWrite);
+
+     // Get dirichlet counter block
+     auto& tpetraDirichletCounter = *((rcp_dynamic_cast<Thyra::TpetraVector<RealType,LO,GO,NodeT>>(dirichletCounter_->getNonconstVectorBlock(productVectorBlockIndex_[fieldIndex]),true))->getTpetraVector());
+     const auto& kokkosDirichletCounter = tpetraDirichletCounter.getLocalViewDevice(Tpetra::Access::ReadWrite);
+
+     // Class data fields for lambda capture
+     const auto fieldOffsets = fieldOffsets_[fieldIndex];
+     const auto basisIndices = basisIndexForMDFieldOffsets_[fieldIndex];
+     const auto worksetLIDs = worksetLIDs_;
+     const auto fieldValues = scatterFields_[fieldIndex].get_static_view();
+     const auto applyBC = applyBC_[fieldIndex].get_static_view();
+     const bool checkApplyBC = checkApplyBC_;
+     const auto& tangentFieldsDevice = dfdpFieldsVoV_.getViewDevice();
+     const auto& kokkosTangents = Kokkos::subview(tangentFieldsDevice,Kokkos::ALL(),productVectorBlockIndex_[fieldIndex]);
+     const std::size_t num_params = Sacado::dimension_scalar(fieldValues)-1;
+
+     if (!scatterIC_) {
+
+       Kokkos::parallel_for(Kokkos::RangePolicy<PHX::ExecutionSpace>(0,workset.num_cells), KOKKOS_LAMBDA (const int& cell) {
+         for (int basis=0; basis < static_cast<int>(fieldOffsets.size()); ++basis) {
+           const int lid = worksetLIDs(cell,fieldOffsets(basis));
+           if (lid < 0) // not on this processor!
+             continue;
+           const int basisIndex = basisIndices(basis);
+
+           // Possible warp divergence for hierarchic
+           if (checkApplyBC)
+             if (!applyBC(cell,basisIndex))
+               continue;
+
+           kokkosScatterTarget(lid,0) = fieldValues(cell,basisIndex).val();
+           for(std::size_t i_param=0; i_param<num_params; i_param++)
+             kokkosTangents(i_param)(lid,0) = fieldValues(cell,basisIndex).fastAccessDx(i_param);
+
+           kokkosDirichletCounter(lid,0) = 1.0;
+         }
+       });
+
+     } else {
+
+       Kokkos::parallel_for(Kokkos::RangePolicy<PHX::ExecutionSpace>(0,workset.num_cells), KOKKOS_LAMBDA (const int& cell) {
+         for (int basis=0; basis < static_cast<int>(fieldOffsets.size()); ++basis) {
+           const int lid = worksetLIDs(cell,fieldOffsets(basis));
+           if (lid < 0) // not on this processor!
+             continue;
+           kokkosScatterTarget(lid,0) = fieldValues(cell,basis).val();
+           for(std::size_t i_param=0; i_param<num_params; i_param++)
+             kokkosTangents(i_param)(lid,0) = fieldValues(cell,basis).fastAccessDx(i_param);
+           kokkosDirichletCounter(lid,0) = 1.0;
+         }
+       });
+
+     }
+   }
+
+   // Release the df/dp device views. Holding a device view past the return of
+   // this method makes any subsequent host access to the same vector throw, e.g.
+   // AssemblyEngine::evaluateDirichletBCs() -> adjustForDirichletConditions().
+   for(std::size_t i=0;i<dfdpVectors_.size();i++)
+     for(std::size_t j=0;j<dfdpVectors_[i].size();j++)
+       dfdpFieldsVoV_.addView(Kokkos::View<RealType**,Kokkos::LayoutLeft,PHX::Device>(),i,j);
+}
 #endif

@@ -1,4 +1,10 @@
 // @HEADER
+// *****************************************************************************
+//            LOCA: Library of Continuation Algorithms Package
+//
+// Copyright 2001-2005 NTESS and the LOCA contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #ifndef LOCA_TPETRA_LOW_RANK_UPDATE_ROW_MATRIX_HPP
@@ -7,7 +13,7 @@
 #include "Tpetra_RowMatrix.hpp" // base class
 #include "Tpetra_Operator.hpp" // base class
 #include "NOX_TpetraTypedefs.hpp"
-#include "Kokkos_ArithTraits.hpp"
+#include "KokkosKernels_ArithTraits.hpp"
 
 namespace LOCA {
   class GlobalData;
@@ -45,7 +51,7 @@ namespace LOCA {
       using local_ordinal_type = NOX::LocalOrdinal;
       using global_ordinal_type = NOX::GlobalOrdinal;
       using node_type = NOX::NodeType;
-      using mag_type = typename Kokkos::ArithTraits<NOX::Scalar>::mag_type;
+      using mag_type = typename KokkosKernels::ArithTraits<NOX::Scalar>::mag_type;
 
       //! Constructor
       /*!

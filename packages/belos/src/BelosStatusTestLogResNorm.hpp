@@ -1,43 +1,11 @@
-//@HEADER
-// ************************************************************************
-//
+// @HEADER
+// *****************************************************************************
 //                 Belos: Block Linear Solvers Package
-//                  Copyright 2004 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
-//
-// ************************************************************************
-//@HEADER
+// Copyright 2004-2016 NTESS and the Belos contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
 //
    
 #ifndef BELOS_STATUS_TEST_LOGRESNORM_HPP
@@ -63,8 +31,8 @@
 
 namespace Belos {
 
-template <class ScalarType, class MV, class OP>
-class StatusTestLogResNorm: public StatusTest<ScalarType,MV,OP> {
+template <class ScalarType, class MV, class OP, class DM = DefaultDenseMatrix<int,ScalarType>>
+class StatusTestLogResNorm: public StatusTest<ScalarType,MV,OP,DM> {
 
 public:
   //! The type of the magnitude (absolute value) of a ScalarType.
@@ -73,7 +41,7 @@ public:
 private:
   //! @name Abbreviations for method implementations
   //@{
-  typedef MultiVecTraits<ScalarType,MV> MVT;
+  typedef MultiVecTraits<ScalarType,MV,DM> MVT;
   //@}
 
  public:
@@ -95,7 +63,7 @@ private:
   /*! This method checks to see if the convergence criteria are met using the current information from the 
     iterative solver.
   */
-  StatusType checkStatus(Iteration<ScalarType,MV,OP> *iSolver );
+  StatusType checkStatus(Iteration<ScalarType,MV,OP,DM> *iSolver );
 
   //! Return the result of the most recent CheckStatus call.
   StatusType getStatus() const {return(Undefined);}
@@ -168,8 +136,8 @@ private:
 
 };
 
-  template <class ScalarType, class MV, class OP> 
-  StatusTestLogResNorm<ScalarType,MV,OP>::StatusTestLogResNorm(int maxIters)
+  template <class ScalarType, class MV, class OP, class DM> 
+  StatusTestLogResNorm<ScalarType,MV,OP,DM>::StatusTestLogResNorm(int maxIters)
   {
     if (maxIters < 1)
       maxIters_ = 1;
@@ -181,11 +149,11 @@ private:
     nIters_ = 0;
   }
   
-  template <class ScalarType, class MV, class OP>
-  StatusType StatusTestLogResNorm<ScalarType,MV,OP>::checkStatus(Iteration<ScalarType,MV,OP> *iSolver )
+  template <class ScalarType, class MV, class OP, class DM>
+  StatusType StatusTestLogResNorm<ScalarType,MV,OP,DM>::checkStatus(Iteration<ScalarType,MV,OP,DM> *iSolver )
   {
     // Check that this solve is a single-vector, single-block.
-    const LinearProblem<ScalarType,MV,OP>& lp = iSolver->getProblem ();
+    const LinearProblem<ScalarType,MV,OP,DM>& lp = iSolver->getProblem ();
     int blkSize = lp.getLSIndex().size();
     int numRHS = MVT::GetNumberVecs( *(lp.getRHS()) );
 
@@ -208,16 +176,16 @@ private:
     return Undefined;
   }
   
-  template <class ScalarType, class MV, class OP>
-  void StatusTestLogResNorm<ScalarType,MV,OP>::reset()
+  template <class ScalarType, class MV, class OP, class DM>
+  void StatusTestLogResNorm<ScalarType,MV,OP,DM>::reset()
   {
     nIters_ = 0;
     logResNorm_.clear();
     logResNorm_.reserve( maxIters_ );
   }    
     
-  template <class ScalarType, class MV, class OP>
-  void StatusTestLogResNorm<ScalarType,MV,OP>::print(std::ostream& os, int indent) const
+  template <class ScalarType, class MV, class OP, class DM>
+  void StatusTestLogResNorm<ScalarType,MV,OP,DM>::print(std::ostream& os, int indent) const
   {
     for (int j = 0; j < indent; j ++)
       os << ' ';
@@ -225,8 +193,8 @@ private:
     os << "Logging Absolute Residual 2-Norm" << std::endl;
   }
  
-  template <class ScalarType, class MV, class OP>
-  void StatusTestLogResNorm<ScalarType,MV,OP>::printStatus(std::ostream& os, StatusType type) const 
+  template <class ScalarType, class MV, class OP, class DM>
+  void StatusTestLogResNorm<ScalarType,MV,OP,DM>::printStatus(std::ostream& os, StatusType type) const 
   {
     os << std::left << std::setw(13) << std::setfill('.');
     os << "**";

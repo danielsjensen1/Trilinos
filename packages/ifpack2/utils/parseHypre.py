@@ -1,5 +1,14 @@
 #!/bin/env python
 
+# @HEADER
+# *****************************************************************************
+#       Ifpack2: Templated Object-Oriented Algebraic Preconditioner Package
+#
+# Copyright 2009 NTESS and the Ifpack2 contributors.
+# SPDX-License-Identifier: BSD-3-Clause
+# *****************************************************************************
+# @HEADER
+
 # Script to parse the Hypre headers:
 # Usage:
 #  From SOURCE_TREE/packages/ifpack2/src call
@@ -7,6 +16,7 @@
 
 
 import re
+import os
 from sys import argv
 
 assert len(argv) == 3
@@ -28,7 +38,7 @@ functionCharStar = re.compile(r'\s*HYPRE_Int\s+(HYPRE_[a-zA-Z]+Set[a-zA-Z]+)\s*\
 
 files = ["HYPRE_IJ_mv.h",
          "HYPRE_parcsr_ls.h",
-         "krylov.h",
+         "krylov.h" if os.path.exists(os.path.join(hypreInclude, "krylov.h")) else "_hypre_krylov.h",
          "_hypre_parcsr_mv.h",
          "_hypre_IJ_mv.h",
          "HYPRE_parcsr_mv.h",

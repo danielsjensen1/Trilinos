@@ -46,153 +46,59 @@
 
 #include <stk_util/parallel/ParallelComm.hpp>
 #include <stk_util/parallel/CommSparse.hpp>
+#include <stk_util/parallel/DeviceAwareMPI.hpp>
 
 #include <stk_unit_test_utils/getOption.h>
 
 #include <iomanip>
 
-typedef stk::search::IdentProc<int,int> Ident;
 typedef stk::search::Point<double> Point;
 typedef stk::search::Sphere<double> Sphere;
-typedef stk::search::Box<double> StkBox;
-typedef std::pair<StkBox,Ident> StkBoxWithId;
-typedef std::vector< StkBoxWithId > StkBoxVector;
-
 typedef stk::search::Box<float> FloatBox;
-typedef std::vector<std::pair<Ident,Ident> > SearchResults;
-typedef std::pair<FloatBox, Ident> FloatBoxWithId;
-typedef std::vector<FloatBoxWithId> FloatBoxVector;
+typedef stk::search::Box<double> StkBox;
+
+typedef int Ident;
+typedef stk::search::IdentProc<int,int> IdentProc;
+
+typedef std::pair<FloatBox, Ident> FloatBoxIdentPair;
+typedef std::pair<StkBox,Ident> StkBoxIdentPair;
+typedef std::pair<Sphere,Ident> SphereIdentPair;
+typedef std::pair<FloatBox, IdentProc> FloatBoxIdentProcPair;
+typedef std::pair<StkBox,IdentProc> StkBoxIdentProcPair;
+
+typedef std::vector<FloatBoxIdentProcPair> FloatBoxIdentProcVector;
+typedef std::vector<StkBoxIdentProcPair> StkBoxIdentProcVector;
+typedef std::vector<FloatBoxIdentPair> FloatBoxIdentVector;
+typedef std::vector<StkBoxIdentPair> StkBoxIdentVector;
+
+typedef stk::search::BoxIdent<FloatBox, Ident> FloatBoxIdent;
+typedef stk::search::BoxIdent<StkBox, Ident> StkBoxIdent;
+typedef stk::search::BoxIdent<Sphere, Ident> SphereIdent;
+typedef stk::search::BoxIdentProc<FloatBox, IdentProc> FloatBoxIdentProc;
+typedef stk::search::BoxIdentProc<StkBox, IdentProc> StkBoxIdentProc;
+typedef stk::search::BoxIdentProc<Sphere, IdentProc> SphereIdentProc;
+
+typedef stk::search::IdentProcIntersection<IdentProc, IdentProc> IdentProcIntersection;
+typedef stk::search::IdentIntersection<Ident, Ident> IdentIntersection;
+typedef std::vector<std::pair<IdentProc,IdentProc>> SearchResults;
+typedef std::vector<std::pair<Ident,Ident>> LocalSearchResults;
 
 namespace stk {
 namespace unit_test_util {
 
-template<class VolumeType>
-VolumeType generateBoundingVolume(double x, double y, double z, double radius);
-
-template<>
 inline
-Point generateBoundingVolume<Point>(double x, double y, double z, double /*radius*/)
+bool can_run_device_tests(MPI_Comm comm)
 {
-  return Point(x,y,z);
+  const int numProcs = stk::parallel_machine_size(comm);
+  if (numProcs == 1) {
+    return true;
+  }
+#ifdef STK_ENABLE_GPU
+  return stk::have_device_aware_mpi();
+#else
+  return true;
+#endif
 }
-
-template<>
-inline
-Sphere generateBoundingVolume<Sphere>(double x, double y, double z, double radius)
-{
-  return Sphere(Point(x,y,z),radius);
-}
-
-//       ------------
-//      |            |
-//      |      radius|
-//      |      ------|
-//      |            |
-//      |            |
-//       ------------
-// width = 2*radius
-template<>
-inline
-StkBox generateBoundingVolume< StkBox >(double x, double y, double z, double radius)
-{
-  Point min_corner(x-radius,y-radius,z-radius);
-  Point max_corner(x+radius,y+radius,z+radius);
-  return StkBox(min_corner,max_corner);
-}
-
-template <typename VolumeType>
-std::pair<VolumeType, Ident> generateBoundingVolume(double x, double y, double z, double radius, int id, int proc)
-{
-  return std::make_pair(generateBoundingVolume<VolumeType>(x,y,z,radius), Ident(id,proc));
-}
-
-//======================
-
-inline size_t getGoldValueForTest()
-{
-    std::string goldValue = stk::unit_test_util::get_option("-gold");
-    if ( goldValue == "skip" ) return 0u;
-    std::istringstream ss(goldValue);
-    size_t goldValueNumber=0;
-    ss >> goldValueNumber;
-    return goldValueNumber;
-}
-
-inline void gatherResultstoProcZero(MPI_Comm comm, SearchResults& boxIdPairResults)
-{
-    int procId=-1;
-    MPI_Comm_rank(comm, &procId);
-
-    int numProc=-1;
-    MPI_Comm_size(comm, &numProc);
-
-    int procIdDestination = 0;
-    stk::CommSparse commSparse(comm);
-    for (int phase=0; phase<2; ++phase)
-    {
-        if ( procId != procIdDestination )
-        {
-            for (size_t j=0;j<boxIdPairResults.size();++j)
-            {
-                commSparse.send_buffer(procIdDestination).pack< std::pair<Ident, Ident> >(boxIdPairResults[j]);
-            }
-        }
-
-        if (phase == 0) { //allocation phase
-          commSparse.allocate_buffers();
-        }
-        else { // communication phase
-          commSparse.communicate();
-        }
-    }
-
-    if ( procId == procIdDestination )
-    {
-        for ( int p = 0 ; p < numProc ; ++p )
-        {
-            stk::CommBuffer &buf = commSparse.recv_buffer( p );
-            while ( buf.remaining() )
-            {
-                std::pair<Ident, Ident> temp;
-                buf.unpack< std::pair<Ident, Ident> >( temp );
-                boxIdPairResults.push_back(temp);
-            }
-        }
-    }
-}
-
-inline void printPeformanceStats(double elapsedTime, MPI_Comm comm)
-{
-    size_t maxHwm = 0, minHwm = 0, avgHwm = 0;
-    stk::get_memory_high_water_mark_across_processors(comm, maxHwm, minHwm, avgHwm);
-
-    int proc=-1;
-    MPI_Comm_rank(comm, &proc);
-
-    int numProcs=0;
-    MPI_Comm_size(comm, &numProcs);
-
-    double minTime = 0, maxTime = 0, avgTime = 0;
-    MPI_Allreduce(&elapsedTime, &maxTime, 1, MPI_DOUBLE, MPI_MAX, comm);
-    MPI_Allreduce(&elapsedTime, &minTime, 1, MPI_DOUBLE, MPI_MIN, comm);
-    double elapsedTimeDivided = elapsedTime/numProcs;
-    MPI_Allreduce(&elapsedTimeDivided, &avgTime, 1, MPI_DOUBLE, MPI_SUM, comm);
-
-    if (proc == 0)
-    {
-      const double bytesInMegabyte = 1024.0*1024.0;
-      std::cout << "Max time: "  << maxTime << ", Min time: " << minTime << ", Avg time: " << avgTime << std::endl;
-      std::cout << std::setw(6) << std::fixed << std::setprecision(1) << "Max HWM: "<<maxHwm/bytesInMegabyte
-        <<", Min HWM: "<<minHwm/bytesInMegabyte<<", Avg HWM: "<<avgHwm/bytesInMegabyte<<std::endl;
-      std::cout<<"### Total Number of Steps Taken ###: 1"<<std::endl;
-      std::cout<<"### Total Wall Clock Run Time Used ###: "<< maxTime <<std::endl;
-
-      std::cout << "\nSTKPERF peak memory sum: " << maxHwm << std::endl;
-
-    }
-}
-
-namespace simple_fields {
 
 template<class VolumeType>
 VolumeType generateBoundingVolume(double x, double y, double z, double radius);
@@ -229,11 +135,10 @@ StkBox generateBoundingVolume< StkBox >(double x, double y, double z, double rad
 }
 
 template <typename VolumeType>
-std::pair<VolumeType, Ident> generateBoundingVolume(double x, double y, double z, double radius, int id, int proc)
+std::pair<VolumeType, IdentProc> generateBoundingVolume(double x, double y, double z, double radius, int id, int proc)
 {
-  return std::make_pair(generateBoundingVolume<VolumeType>(x,y,z,radius), Ident(id,proc));
+  return std::make_pair(generateBoundingVolume<VolumeType>(x,y,z,radius), IdentProc(id,proc));
 }
-
 
 template<class BoxType>
 KOKKOS_FUNCTION
@@ -288,20 +193,87 @@ auto box_ident_to_pair(BoxIdent const& ident) {
 
 inline size_t getGoldValueForTest()
 {
-  return stk::unit_test_util::getGoldValueForTest();
+    std::string goldValue = stk::unit_test_util::get_option("-gold");
+    if ( goldValue == "skip" ) return 0u;
+    std::istringstream ss(goldValue);
+    size_t goldValueNumber=0;
+    ss >> goldValueNumber;
+    return goldValueNumber;
 }
 
 inline void gatherResultstoProcZero(MPI_Comm comm, SearchResults& boxIdPairResults)
 {
-  stk::unit_test_util::gatherResultstoProcZero(comm, boxIdPairResults);
+    int procId=-1;
+    MPI_Comm_rank(comm, &procId);
+
+    int numProc=-1;
+    MPI_Comm_size(comm, &numProc);
+
+    int procIdDestination = 0;
+    stk::CommSparse commSparse(comm);
+    for (int phase=0; phase<2; ++phase)
+    {
+        if ( procId != procIdDestination )
+        {
+            for (size_t j=0;j<boxIdPairResults.size();++j)
+            {
+                commSparse.send_buffer(procIdDestination).pack< std::pair<IdentProc, IdentProc> >(boxIdPairResults[j]);
+            }
+        }
+
+        if (phase == 0) { //allocation phase
+          commSparse.allocate_buffers();
+        }
+        else { // communication phase
+          commSparse.communicate();
+        }
+    }
+
+    if ( procId == procIdDestination )
+    {
+        for ( int p = 0 ; p < numProc ; ++p )
+        {
+            stk::CommBuffer &buf = commSparse.recv_buffer( p );
+            while ( buf.remaining() )
+            {
+                std::pair<IdentProc, IdentProc> temp;
+                buf.unpack< std::pair<IdentProc, IdentProc> >( temp );
+                boxIdPairResults.push_back(temp);
+            }
+        }
+    }
 }
 
 inline void printPeformanceStats(double elapsedTime, MPI_Comm comm)
 {
-  stk::unit_test_util::printPeformanceStats(elapsedTime, comm);
-}
+    size_t maxHwm = 0, minHwm = 0, avgHwm = 0;
+    stk::get_memory_high_water_mark_across_processors(comm, maxHwm, minHwm, avgHwm);
 
-} // namespace simple_fields
+    int proc=-1;
+    MPI_Comm_rank(comm, &proc);
+
+    int numProcs=0;
+    MPI_Comm_size(comm, &numProcs);
+
+    double minTime = 0, maxTime = 0, avgTime = 0;
+    MPI_Allreduce(&elapsedTime, &maxTime, 1, MPI_DOUBLE, MPI_MAX, comm);
+    MPI_Allreduce(&elapsedTime, &minTime, 1, MPI_DOUBLE, MPI_MIN, comm);
+    double elapsedTimeDivided = elapsedTime/numProcs;
+    MPI_Allreduce(&elapsedTimeDivided, &avgTime, 1, MPI_DOUBLE, MPI_SUM, comm);
+
+    if (proc == 0)
+    {
+      const double bytesInMegabyte = 1024.0*1024.0;
+      std::cout << "Max time: "  << maxTime << ", Min time: " << minTime << ", Avg time: " << avgTime << std::endl;
+      std::cout << std::setw(6) << std::fixed << std::setprecision(1) << "Max HWM: "<<maxHwm/bytesInMegabyte
+        <<", Min HWM: "<<minHwm/bytesInMegabyte<<", Avg HWM: "<<avgHwm/bytesInMegabyte<<std::endl;
+      std::cout<<"### Total Number of Steps Taken ###: 1"<<std::endl;
+      std::cout<<"### Total Wall Clock Run Time Used ###: "<< maxTime <<std::endl;
+
+      std::cout << "\nSTKPERF peak memory sum: " << maxHwm << std::endl;
+
+    }
+}
 
 } // namespace unit_test_util
 } // namespace stk

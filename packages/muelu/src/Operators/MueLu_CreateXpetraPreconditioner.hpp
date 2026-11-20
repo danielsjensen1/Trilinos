@@ -1,47 +1,10 @@
 // @HEADER
-//
-// ***********************************************************************
-//
+// *****************************************************************************
 //        MueLu: A package for multigrid based preconditioning
-//                  Copyright 2012 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact
-//                    Jonathan Hu       (jhu@sandia.gov)
-//                    Andrey Prokopenko (aprokop@sandia.gov)
-//                    Ray Tuminaro      (rstumin@sandia.gov)
-//
-// ***********************************************************************
-//
+// Copyright 2012 NTESS and the MueLu contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #ifndef PACKAGES_MUELU_ADAPTERS_XPETRA_MUELU_CREATEXPETRAPRECONDITIONER_HPP_
@@ -64,6 +27,8 @@
 #include <MueLu_HierarchyUtils.hpp>
 #include <MueLu_ML2MueLuParameterTranslator.hpp>
 #include <stdlib.h>
+
+#include <MueLu_KokkosTuningInterface.hpp>
 
 namespace MueLu {
 
@@ -100,24 +65,66 @@ CreateXpetraPreconditioner(Teuchos::RCP<Xpetra::Matrix<Scalar, LocalOrdinal, Glo
   std::string label;
   if (hasParamList && paramList.isParameter("hierarchy label")) {
     label = paramList.get<std::string>("hierarchy label");
-    paramList.remove("hierarchy label");
   } else
     label = op->getObjectLabel();
 
+  RCP<Teuchos::Time> tm;
   std::string timerName;
+
+  // Do Kokkos tuning, if requested
+  if (paramList.isSublist("kokkos tuning: muelu parameter mapping") &&
+      paramList.sublist("kokkos tuning: muelu parameter mapping").isParameter("kokkos context id")) {
+    // Time tuning separately
+    if (label != "")
+      timerName = "MueLu tuning time (" + label + ")";
+    else
+      timerName = "MueLu tuning time";
+    tm = Teuchos::TimeMonitor::getNewTimer(timerName);
+    tm->start();
+
+    MueLu::KokkosTuningInterface KokkosTuner(op->getMap()->getComm());
+    KokkosTuner.SetParameterList(paramList);
+    KokkosTuner.SetMueLuParameters(paramList);
+    tm->stop();
+    tm->incrementNumCalls();
+    tm = Teuchos::null;
+  }
+
+  // Setup Timer
   if (label != "")
     timerName = "MueLu setup time (" + label + ")";
   else
     timerName = "MueLu setup time";
-  RCP<Teuchos::Time> tm = Teuchos::TimeMonitor::getNewTimer(timerName);
+
+  tm = Teuchos::TimeMonitor::getNewTimer(timerName);
   tm->start();
 
   std::string syntaxStr = "parameterlist: syntax";
   if (hasParamList && paramList.isParameter(syntaxStr) && paramList.get<std::string>(syntaxStr) == "ml") {
     paramList.remove(syntaxStr);
-    std::string paramXML = MueLu::ML2MueLuParameterTranslator::translate(paramList, "");
-    paramList            = *Teuchos::getParametersFromXmlString(paramXML);
+    paramList = *MueLu::ML2MueLuParameterTranslator::translate(paramList, "");
   }
+  //  Need to check if Muelu option is inconsistent with user data provided
+  bool Minv_Supplied = false, M_Supplied = false, MinvA_Supplied = false;
+  if (inParamList.isSublist("user data")) {
+    const Teuchos::ParameterList& userList = inParamList.sublist("user data");
+    if (userList.isParameter("M")) M_Supplied = true;
+    if (userList.isParameter("Minv")) Minv_Supplied = true;
+    if (userList.isParameter("MinvA")) MinvA_Supplied = true;
+  }
+  if (inParamList.isParameter("aggregation: strength-of-connection: matrix") && (inParamList.get<std::string>("aggregation: strength-of-connection: matrix") == "MinvA")) {
+    if (inParamList.isSublist("project auxiliary matrices")) {
+      auto projectList = inParamList.sublist("project auxiliary matrices");
+      TEUCHOS_TEST_FOR_EXCEPTION(projectList.isParameter("M") && !M_Supplied, Exceptions::Incompatible, "MueLu_CreateXpetraPreconditioner: Must supply M as it is listed in the project auxiliary matrices sublist");
+      TEUCHOS_TEST_FOR_EXCEPTION(projectList.isParameter("Minv") && (projectList.get("Minv", "") == "NoFactory") && !Minv_Supplied, Exceptions::Incompatible,
+                                 "MueLu_CreateXpetraPreconditioner: Must supply Minv  as NoFactory is listed as supplier of Minv  in the project auxiliary matrices sublist");
+      TEUCHOS_TEST_FOR_EXCEPTION(projectList.isParameter("MinvA") && (projectList.get("MinvA", "") == "NoFactory") && !MinvA_Supplied, Exceptions::Incompatible,
+                                 "MueLu_CreateXpetraPreconditioner: Must supply MinvA as NoFactory is listed as supplier of MinvA in the project auxiliary matrices sublist");
+    } else {  // default behavior if sublist("project auxiliary matrices") not user-supplied requires "M" to be user-supplied.
+      TEUCHOS_TEST_FOR_EXCEPTION(!M_Supplied && !Minv_Supplied, Exceptions::Incompatible, "MueLu_CreateXpetraPreconditioner: Must supply M or Minv when 'aggregation: strength-of-connection: matrix'= MinvA and sublist('project auxiliary matrices') not supplied.");
+    }
+  }
+
   mueLuFactory = rcp(new ParameterListInterpreter(paramList, op->getDomainMap()->getComm()));
 
   // Create Hierarchy

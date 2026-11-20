@@ -87,10 +87,7 @@ namespace Iogs {
 
     void setGeneratedMesh(Iogs::GeneratedMesh *generatedMesh) { m_generatedMesh = generatedMesh; }
 
-    IOSS_NODISCARD const std::vector<std::string> &get_sideset_names() const
-    {
-      return m_sideset_names;
-    }
+    IOSS_NODISCARD const Ioss::NameList &get_sideset_names() const { return m_sideset_names; }
 
   private:
     void read_meta_data_nl() override;
@@ -100,7 +97,9 @@ namespace Iogs {
 
     bool begin_state_nl(int state, double time) override;
 
-    void get_step_times_nl() override;
+    void                get_step_times_nl() override;
+    std::vector<double> get_db_step_times_nl() override;
+
     void get_nodeblocks();
     void get_structured_blocks();
     void get_nodesets();
@@ -151,8 +150,8 @@ namespace Iogs {
 
     void add_transient_fields(Ioss::GroupingEntity *entity);
 
-    GeneratedMesh           *m_generatedMesh{nullptr};
-    std::vector<std::string> m_sideset_names{};
+    GeneratedMesh *m_generatedMesh{nullptr};
+    Ioss::NameList m_sideset_names{};
 
     double currentTime{0.0};
     int    spatialDimension{3};

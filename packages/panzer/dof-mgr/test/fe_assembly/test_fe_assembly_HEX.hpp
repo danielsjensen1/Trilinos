@@ -1,43 +1,15 @@
 // @HEADER
-// ************************************************************************
+// *****************************************************************************
+//           Panzer: A partial differential equation assembly
+//       engine for strongly coupled complex multiphysics systems
+//
+// Copyright 2011 NTESS and the Panzer contributors.
 //
 //                           Intrepid2 Package
-//                 Copyright (2007) Sandia Corporation
 //
-// Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
-// license for use of this work by or on behalf of the U.S. Government.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Kyungjoo Kim  (kyukim@sandia.gov), or
-//                    Mauro Perego  (mperego@sandia.gov)
-//
-// ************************************************************************
+// Copyright 2007 NTESS and the Intrepid2 contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 
@@ -191,9 +163,9 @@ int feAssemblyHex(int argc, char *argv[]) {
                        Kokkos::HIPManagedSpace>::value
 #elif defined(KOKKOS_ENABLE_SYCL)
           || std::is_same<mem_space,
-                          Kokkos::Experimental::SYCLSharedUSMSpace>::value ||
+                          Kokkos::SYCLSharedUSMSpace>::value ||
           std::is_same<mem_space,
-                       Kokkos::Experimental::SYCLHostUSMSpace>::value
+                       Kokkos::SYCLHostUSMSpace>::value
 #endif
       ,
       mem_space, Kokkos::HostSpace>;
@@ -204,7 +176,7 @@ int feAssemblyHex(int argc, char *argv[]) {
 #elif defined(KOKKOS_ENABLE_HIP)
       std::is_same<exec_space, Kokkos::HIP>::value ||
 #elif defined(KOKKOS_ENABLE_SYCL)
-      std::is_same<exec_space, Kokkos::Experimental::SYCL>::value ||
+      std::is_same<exec_space, Kokkos::SYCL>::value ||
 #elif defined(KOKKOS_ENABLE_OPENMPTARGET)
       std::is_same<exec_space,
                    Kokkos::Experimental::OpenMPTarget>::value ||
@@ -294,7 +266,7 @@ int feAssemblyHex(int argc, char *argv[]) {
       getFancyOStream(Teuchos::rcpFromRef (std::cout)) :
       getFancyOStream(Teuchos::rcp (new Teuchos::oblackholestream ()));
 
-    *outStream << "DeviceSpace::  "; DeviceSpaceType().print_configuration(*outStream, false);
+    *outStream << "DeviceSpace::  "; exec_space().print_configuration(*outStream, false);
     *outStream << "HostSpace::    ";   HostSpaceType().print_configuration(*outStream, false);
     *outStream << "\n";
 
@@ -589,7 +561,7 @@ int feAssemblyHex(int argc, char *argv[]) {
 
     Kokkos::parallel_for
       ("Assemble FE matrix and right-hand side",
-       Kokkos::RangePolicy<DeviceSpaceType, int> (0, numOwnedElems),
+       Kokkos::RangePolicy<exec_space, int> (0, numOwnedElems),
        KOKKOS_LAMBDA (const size_t elemId) {
         // Get subviews
         auto elemRHS    = Kokkos::subview(elemsRHS,elemId, Kokkos::ALL());

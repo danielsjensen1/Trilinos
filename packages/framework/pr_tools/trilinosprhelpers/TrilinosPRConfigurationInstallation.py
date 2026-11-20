@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- mode: python; py-indent-offset: 4; py-continuation-offset: 4 -*-
 """
 Custom PR Executor for Installation testing
@@ -44,7 +44,7 @@ class TrilinosPRConfigurationInstallation(TrilinosPRConfigurationBase):
                              "--force",
                              "--cmake-fragment",
                              os.path.join(self.arg_workspace_dir, self.config_script),
-                             self.arg_pr_genconfig_job_name
+                             self.arg_genconfig_build_name
                              ]
         genconfig_inifile = Path(self.arg_pr_gen_config_file)
 

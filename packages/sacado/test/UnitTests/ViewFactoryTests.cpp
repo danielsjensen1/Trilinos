@@ -1,48 +1,29 @@
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //                           Sacado Package
-//                 Copyright (2006) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// This library is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as
-// published by the Free Software Foundation; either version 2.1 of the
-// License, or (at your option) any later version.
-//
-// This library is distributed in the hope that it will be useful, but
-// WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-// Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public
-// License along with this library; if not, write to the Free Software
-// Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301
-// USA
-// Questions? Contact David M. Gay (dmgay@sandia.gov) or Eric T. Phipps
-// (etphipp@sandia.gov).
-//
-// ***********************************************************************
+// Copyright 2006 NTESS and the Sacado contributors.
+// SPDX-License-Identifier: LGPL-2.1-or-later
+// *****************************************************************************
 // @HEADER
+
 #include "Teuchos_UnitTestHarness.hpp"
 #include "Teuchos_UnitTestRepository.hpp"
 #include "Teuchos_GlobalMPISession.hpp"
 
 #include "Sacado.hpp"
 
-#include "Kokkos_ViewFactory.hpp"
+#include "Sacado_Fad_Kokkos_ViewFactory.hpp"
 
 TEUCHOS_UNIT_TEST(view_factory, dyn_rank_views)
 {
   using FadType = Sacado::Fad::DFad<double>;
   using Kokkos::View;
   using Kokkos::DynRankView;
-  using Kokkos::createDynRankView;
-  using Kokkos::createDynRankViewWithType;
-  using Kokkos::createViewWithType;
-  using Kokkos::dimension_scalar;
+  using Sacado::createDynRankView;
+  using Sacado::createDynRankViewWithType;
+  using Sacado::createViewWithType;
+  using Sacado::dimension_scalar;
   using Kokkos::view_alloc;
   using Kokkos::WithoutInitializing;
   const unsigned derivative_dim_plus_one = 7;
@@ -58,10 +39,12 @@ TEUCHOS_UNIT_TEST(view_factory, dyn_rank_views)
 		view_type v2("v2", 10, 4);
 
 		// Get common type of the Views
-		using CommonValueType = typename decltype( Kokkos::common_view_alloc_prop( v1, v2 ) )::value_type;
-		using ScalarArrayType = typename decltype( Kokkos::common_view_alloc_prop( v1, v2 ) )::scalar_array_type;
+                // FIXME I have not seen any use of the return object of common_view_alloc_prop downstream that relies
+                // on its member types
+                using CommonValueType = double;
+                using ScalarArrayType = double;
 		// Create an instance of this returned type to pass to ViewCtorProp via view_alloc function
-		auto cvt_for_ctorprop = Kokkos::common_view_alloc_prop(v1, v2);
+		auto cvt_for_ctorprop = Sacado::common_view_alloc_prop(v1, v2);
 
 		// Create a view with the common type and the max fad_dim of the views passed to deduce_value_type
 		typedef View< CommonValueType** > ViewCommonType;
@@ -69,8 +52,7 @@ TEUCHOS_UNIT_TEST(view_factory, dyn_rank_views)
 
 		TEST_EQUALITY(vct1.extent(0), v1.extent(0));
 		TEST_EQUALITY(vct1.extent(1), v1.extent(1));
-		TEST_EQUALITY(vct1.extent(2), v1.extent(2));
-		TEST_EQUALITY( Kokkos::dimension_scalar(vct1), 0);
+		TEST_EQUALITY( Sacado::dimension_scalar(vct1), 1);
     bool check_eq_kokkos_type = std::is_same < CommonValueType, ScalarArrayType >::value;
     bool check_eq_scalar_double = std::is_same < double, ScalarArrayType >::value;
     TEST_EQUALITY(check_eq_kokkos_type, true);
@@ -86,19 +68,20 @@ TEUCHOS_UNIT_TEST(view_factory, dyn_rank_views)
 		view_type v2("v2", 10, 4, derivative_dim_plus_one );
 
 		// Get common type of the Views
-		using CommonValueType = typename decltype( Kokkos::common_view_alloc_prop( v1, v2 ) )::value_type;
-		using ScalarArrayType = typename decltype( Kokkos::common_view_alloc_prop( v1, v2 ) )::scalar_array_type;
+                // FIXME I have not seen any use of the return object of common_view_alloc_prop downstream that relies
+                // on its member types
+                using CommonValueType = typename Sacado::Promote<decltype(v1)::value_type, decltype(v2)::value_type>::type;
+                using ScalarArrayType = typename Sacado::ValueType<CommonValueType>::type;
 		// Create an instance of this returned type to pass to ViewCtorProp via view_alloc function
-		auto cvt_for_ctorprop = Kokkos::common_view_alloc_prop(v1, v2);
+		auto cvt_for_ctorprop = Sacado::common_view_alloc_prop(v1, v2);
 
 		// Create a view with the common type and the max fad_dim of the views passed to deduce_value_type
 		typedef View< CommonValueType** > ViewCommonType;
 		ViewCommonType vct1( Kokkos::view_alloc("vct1", cvt_for_ctorprop), 10, 4 ); // fad_dim deduced and comes from the cvt_for_ctorprop
 
-		TEST_EQUALITY(dimension_scalar(vct1), derivative_dim_plus_one);
+		TEST_EQUALITY(Sacado::dimension_scalar(vct1), derivative_dim_plus_one);
 		TEST_EQUALITY(vct1.extent(0), v1.extent(0));
 		TEST_EQUALITY(vct1.extent(1), v1.extent(1));
-		TEST_EQUALITY(vct1.extent(2), v1.extent(2));
     bool check_neq_kokkos_type = std::is_same < CommonValueType, ScalarArrayType >::value;
     bool check_eq_fad_type = std::is_same < CommonValueType, FadType >::value;
     bool check_eq_scalar_double = std::is_same < double, ScalarArrayType >::value;
@@ -117,19 +100,17 @@ TEUCHOS_UNIT_TEST(view_factory, dyn_rank_views)
 		view_of_pod_type v2("v2", 10, 4);
 
 		// Get common type of the Views
-		using CommonValueType = typename decltype( Kokkos::common_view_alloc_prop( v1, v2 ) )::value_type;
-		using ScalarArrayType = typename decltype( Kokkos::common_view_alloc_prop( v1, v2 ) )::scalar_array_type;
+                using CommonValueType = typename Sacado::Promote<decltype(v1)::value_type, decltype(v2)::value_type>::type;
+                using ScalarArrayType = typename Sacado::ValueType<CommonValueType>::type;
 		// Create an instance of this returned type to pass to ViewCtorProp via view_alloc function
-		auto cvt_for_ctorprop = Kokkos::common_view_alloc_prop(v1, v2);
-
+		auto cvt_for_ctorprop = Sacado::common_view_alloc_prop(v1, v2);
 		// Create a view with the common type and the max fad_dim of the views passed to deduce_value_type
 		typedef View< CommonValueType** > ViewCommonType;
 		ViewCommonType vct1( Kokkos::view_alloc("vct1", cvt_for_ctorprop), 10, 4 ); // fad_dim deduced and comes from the cvt_for_ctorprop
 
-		TEST_EQUALITY(dimension_scalar(vct1), derivative_dim_plus_one);
+		TEST_EQUALITY(Sacado::dimension_scalar(vct1), derivative_dim_plus_one);
 		TEST_EQUALITY(vct1.extent(0), v1.extent(0));
 		TEST_EQUALITY(vct1.extent(1), v1.extent(1));
-		TEST_EQUALITY(vct1.extent(2), v1.extent(2));
     bool check_neq_kokkos_type = std::is_same < CommonValueType, ScalarArrayType >::value;
     bool check_eq_fad_type = std::is_same < CommonValueType, FadType >::value;
     bool check_eq_scalar_double = std::is_same < double, ScalarArrayType >::value;
@@ -147,19 +128,18 @@ TEUCHOS_UNIT_TEST(view_factory, dyn_rank_views)
 		view_type v2("v2", 10, 4, derivative_dim_plus_one );
 
 		// Get common type of the Views
-		using CommonValueType = typename decltype( Kokkos::common_view_alloc_prop( v1, v2 ) )::value_type;
-		using ScalarArrayType = typename decltype( Kokkos::common_view_alloc_prop( v1, v2 ) )::scalar_array_type;
+                using CommonValueType = typename Sacado::Promote<decltype(v1)::value_type, decltype(v2)::value_type>::type;
+                using ScalarArrayType = typename Sacado::ValueType<CommonValueType>::type;
 		// Create an instance of this returned type to pass to ViewCtorProp via view_alloc function
-		auto cvt_for_ctorprop = Kokkos::common_view_alloc_prop(v1, v2);
+		auto cvt_for_ctorprop = Sacado::common_view_alloc_prop(v1, v2);
 
 		// Create a view with the common type and the max fad_dim of the views passed to deduce_value_type
 		typedef DynRankView< CommonValueType > ViewCommonType;
 		ViewCommonType vct1( Kokkos::view_alloc("vct1", cvt_for_ctorprop), 10, 4 ); // fad_dim deduced and comes from the cvt_for_ctorprop
 
-		TEST_EQUALITY(dimension_scalar(vct1), derivative_dim_plus_one);
+		TEST_EQUALITY(Sacado::dimension_scalar(vct1), derivative_dim_plus_one);
 		TEST_EQUALITY(vct1.extent(0), v1.extent(0));
 		TEST_EQUALITY(vct1.extent(1), v1.extent(1));
-		TEST_EQUALITY(vct1.extent(2), v1.extent(2));
 		TEST_EQUALITY(Kokkos::rank(vct1), 2);
     bool check_neq_kokkos_type = std::is_same < CommonValueType, ScalarArrayType >::value;
     bool check_eq_fad_type = std::is_same < CommonValueType, FadType >::value;
@@ -179,16 +159,16 @@ TEUCHOS_UNIT_TEST(view_factory, dyn_rank_views)
 		view_of_pod_type v2("v2", 10, 4);
 
 		// Get common type of the Views
-		using CommonValueType = typename decltype( Kokkos::common_view_alloc_prop( v1, v2 ) )::value_type;
-		using ScalarArrayType = typename decltype( Kokkos::common_view_alloc_prop( v1, v2 ) )::scalar_array_type;
+                using CommonValueType = typename Sacado::Promote<decltype(v1)::value_type, decltype(v2)::value_type>::type;
+                using ScalarArrayType = typename Sacado::ValueType<CommonValueType>::type;
 		// Create an instance of this returned type to pass to ViewCtorProp via view_alloc function
-		auto cvt_for_ctorprop = Kokkos::common_view_alloc_prop(v1, v2);
+		auto cvt_for_ctorprop = Sacado::common_view_alloc_prop(v1, v2);
 
 		// Create a view with the common type and the max fad_dim of the views passed to deduce_value_type
 		typedef DynRankView< CommonValueType > ViewCommonType;
 		ViewCommonType vct1( Kokkos::view_alloc("vct1", cvt_for_ctorprop), 10, 4 ); // fad_dim deduced and comes from the cvt_for_ctorprop
 
-		TEST_EQUALITY(dimension_scalar(vct1), derivative_dim_plus_one);
+		TEST_EQUALITY(Sacado::dimension_scalar(vct1), derivative_dim_plus_one);
 		TEST_EQUALITY(vct1.extent(0), v1.extent(0));
 		TEST_EQUALITY(vct1.extent(1), v1.extent(1));
 		TEST_EQUALITY(vct1.extent(2), v1.extent(2));
@@ -207,119 +187,119 @@ TEUCHOS_UNIT_TEST(view_factory, dyn_rank_views)
   // Test a DynRankView from a DynRankView
   {
     DynRankView<FadType> a("a",10,4,13,derivative_dim_plus_one);
-    TEST_EQUALITY(dimension_scalar(a),derivative_dim_plus_one);
+    TEST_EQUALITY(Sacado::dimension_scalar(a),derivative_dim_plus_one);
     TEST_EQUALITY(a.rank(),3);
 
-    auto b = createDynRankView(a,"b",5,3,8);
-    TEST_EQUALITY(dimension_scalar(b),derivative_dim_plus_one);
+    auto b = Sacado::createDynRankView(a,"b",5,3,8);
+    TEST_EQUALITY(Sacado::dimension_scalar(b),derivative_dim_plus_one);
     TEST_EQUALITY(b.rank(),3);
 
-    auto c = createDynRankView(a,view_alloc("c",WithoutInitializing),5,3,8);
-    TEST_EQUALITY(dimension_scalar(c),derivative_dim_plus_one);
+    auto c = Sacado::createDynRankView(a,view_alloc("c",WithoutInitializing),5,3,8);
+    TEST_EQUALITY(Sacado::dimension_scalar(c),derivative_dim_plus_one);
     TEST_EQUALITY(c.rank(),3);
 
     using d_type = Kokkos::DynRankView<FadType,Kokkos::LayoutRight>;
-    d_type d = createDynRankViewWithType<d_type>(a,"d",5,3,8);
-    TEST_EQUALITY(dimension_scalar(d),derivative_dim_plus_one);
+    d_type d = Sacado::createDynRankViewWithType<d_type>(a,"d",5,3,8);
+    TEST_EQUALITY(Sacado::dimension_scalar(d),derivative_dim_plus_one);
     TEST_EQUALITY(d.rank(),3);
   }
 
   // Test a DynRankView from a View
   {
     View<FadType*> a("a",8,derivative_dim_plus_one);
-    TEST_EQUALITY(dimension_scalar(a),derivative_dim_plus_one);
+    TEST_EQUALITY(Sacado::dimension_scalar(a),derivative_dim_plus_one);
 
-    auto b = createDynRankView(a,"b",5,3,8);
-    TEST_EQUALITY(dimension_scalar(b),derivative_dim_plus_one);
+    auto b = Sacado::createDynRankView(a,"b",5,3,8);
+    TEST_EQUALITY(Sacado::dimension_scalar(b),derivative_dim_plus_one);
     TEST_EQUALITY(b.rank(),3);
 
-    auto c = createDynRankView(a,view_alloc("c",WithoutInitializing),5,3,8);
-    TEST_EQUALITY(dimension_scalar(c),derivative_dim_plus_one);
+    auto c = Sacado::createDynRankView(a,view_alloc("c",WithoutInitializing),5,3,8);
+    TEST_EQUALITY(Sacado::dimension_scalar(c),derivative_dim_plus_one);
     TEST_EQUALITY(c.rank(),3);
 
     using d_type = Kokkos::DynRankView<FadType,Kokkos::LayoutRight>;
-    d_type d = createDynRankViewWithType<d_type>(a,"d",5,3,8);
-    TEST_EQUALITY(dimension_scalar(d),derivative_dim_plus_one);
+    d_type d = Sacado::createDynRankViewWithType<d_type>(a,"d",5,3,8);
+    TEST_EQUALITY(Sacado::dimension_scalar(d),derivative_dim_plus_one);
     TEST_EQUALITY(d.rank(),3);
   }
 
   // Test a View from a View
   {
     View<FadType*> a("a",8,derivative_dim_plus_one);
-    TEST_EQUALITY(dimension_scalar(a),derivative_dim_plus_one);
+    TEST_EQUALITY(Sacado::dimension_scalar(a),derivative_dim_plus_one);
 
     using b_type = Kokkos::View<FadType***>;
-    b_type b = createViewWithType<b_type>(a,"b",5,3,8);
-    TEST_EQUALITY(dimension_scalar(b),derivative_dim_plus_one);
+    b_type b = Sacado::createViewWithType<b_type>(a,"b",5,3,8);
+    TEST_EQUALITY(Sacado::dimension_scalar(b),derivative_dim_plus_one);
 
-    b_type c = createViewWithType<b_type>(a,view_alloc("c",WithoutInitializing),5,3,8);
-    TEST_EQUALITY(dimension_scalar(c),derivative_dim_plus_one);
+    b_type c = Sacado::createViewWithType<b_type>(a,view_alloc("c",WithoutInitializing),5,3,8);
+    TEST_EQUALITY(Sacado::dimension_scalar(c),derivative_dim_plus_one);
 
     using d_type = Kokkos::View<FadType***,Kokkos::LayoutRight>;
-    d_type d = createViewWithType<d_type>(a,"d",5,3,8);
-    TEST_EQUALITY(dimension_scalar(d),derivative_dim_plus_one);
+    d_type d = Sacado::createViewWithType<d_type>(a,"d",5,3,8);
+    TEST_EQUALITY(Sacado::dimension_scalar(d),derivative_dim_plus_one);
   }
 
   // Test a View from a DynRankView
   {
     DynRankView<FadType> a("a",10,4,13,derivative_dim_plus_one);
-    TEST_EQUALITY(dimension_scalar(a),derivative_dim_plus_one);
+    TEST_EQUALITY(Sacado::dimension_scalar(a),derivative_dim_plus_one);
     TEST_EQUALITY(a.rank(),3);
 
     using b_type = Kokkos::View<FadType***>;
-    b_type b = createViewWithType<b_type>(a,"b",5,3,8);
-    TEST_EQUALITY(dimension_scalar(b),derivative_dim_plus_one);
+    b_type b = Sacado::createViewWithType<b_type>(a,"b",5,3,8);
+    TEST_EQUALITY(Sacado::dimension_scalar(b),derivative_dim_plus_one);
 
-    b_type c = createViewWithType<b_type>(a,view_alloc("c",WithoutInitializing),5,3,8);
-    TEST_EQUALITY(dimension_scalar(c),derivative_dim_plus_one);
+    b_type c = Sacado::createViewWithType<b_type>(a,view_alloc("c",WithoutInitializing),5,3,8);
+    TEST_EQUALITY(Sacado::dimension_scalar(c),derivative_dim_plus_one);
 
     using d_type = Kokkos::View<FadType***,Kokkos::LayoutRight>;
-    d_type d = createViewWithType<d_type>(a,"d",5,3,8);
-    TEST_EQUALITY(dimension_scalar(d),derivative_dim_plus_one);
+    d_type d = Sacado::createViewWithType<d_type>(a,"d",5,3,8);
+    TEST_EQUALITY(Sacado::dimension_scalar(d),derivative_dim_plus_one);
   }
 
   // Test creation of a Fad DynRankView from a double DynRankView
   {
     DynRankView<double> a("a",10,4,13);
-    TEST_EQUALITY(dimension_scalar(a),0);
+    TEST_EQUALITY(Sacado::dimension_scalar(a),1);
     TEST_EQUALITY(a.rank(),3);
 
     using b_type = Kokkos::DynRankView<FadType,Kokkos::LayoutRight>;
-    b_type b = createDynRankViewWithType<b_type>(a,"b",5,3,8);
-    TEST_EQUALITY(dimension_scalar(b),1);
+    b_type b = Sacado::createDynRankViewWithType<b_type>(a,"b",5,3,8);
+    TEST_EQUALITY(Sacado::dimension_scalar(b),1);
     TEST_EQUALITY(b.rank(),3);
   }
 
   // Test a double DynRankView from a double DynRankView
   {
     DynRankView<double> a("a",10,4,13);
-    TEST_EQUALITY(dimension_scalar(a),0);
+    TEST_EQUALITY(Sacado::dimension_scalar(a),1);
     TEST_EQUALITY(a.rank(),3);
 
-    auto b = createDynRankView(a,"b",5,3,8);
-    TEST_EQUALITY(dimension_scalar(b),0);
+    auto b = Sacado::createDynRankView(a,"b",5,3,8);
+    TEST_EQUALITY(Sacado::dimension_scalar(b),1);
     TEST_EQUALITY(b.rank(),3);
   }
 
   // Test double rank 0
   {
     DynRankView<double> a("a",10,4,13);
-    TEST_EQUALITY(dimension_scalar(a),0);
+    TEST_EQUALITY(Sacado::dimension_scalar(a),1);
     TEST_EQUALITY(a.rank(),3);
 
-    auto b = createDynRankView(a,"b");
-    TEST_EQUALITY(dimension_scalar(b),0);
+    auto b = Sacado::createDynRankView(a,"b");
+    TEST_EQUALITY(Sacado::dimension_scalar(b),1);
     TEST_EQUALITY(b.rank(),0);
   }
 
   // Test Fad rank 0
   {
     DynRankView<FadType> a("a",10,4,13,derivative_dim_plus_one);
-    TEST_EQUALITY(dimension_scalar(a),derivative_dim_plus_one);
+    TEST_EQUALITY(Sacado::dimension_scalar(a),derivative_dim_plus_one);
     TEST_EQUALITY(a.rank(),3);
 
-    auto b = createDynRankView(a,"b");
-    TEST_EQUALITY(dimension_scalar(b),derivative_dim_plus_one);
+    auto b = Sacado::createDynRankView(a,"b");
+    TEST_EQUALITY(Sacado::dimension_scalar(b),derivative_dim_plus_one);
     TEST_EQUALITY(b.rank(),0);
   }
 
@@ -327,27 +307,27 @@ TEUCHOS_UNIT_TEST(view_factory, dyn_rank_views)
   {
     Kokkos::View<double*> a("a",5*3);
     using b_type = Kokkos::View<double**,Kokkos::MemoryUnmanaged>;
-    b_type b = createViewWithType<b_type>(a,a.data(),5,3);
+    b_type b = Sacado::createViewWithType<b_type>(a,a.data(),5,3);
     TEST_EQUALITY(b.extent(0),5);
     TEST_EQUALITY(b.extent(1),3);
-    TEST_EQUALITY(dimension_scalar(b),0);
+    TEST_EQUALITY(Sacado::dimension_scalar(b),1);
   }
 
   // Test unmanaged view of Fad
   {
     Kokkos::View<FadType*> a("a",5*3,derivative_dim_plus_one);
     using b_type = Kokkos::View<FadType**,Kokkos::MemoryUnmanaged>;
-    b_type b = createViewWithType<b_type>(a,a.data(),5,3);
+    b_type b = Sacado::createViewWithType<b_type>(a,a.data(),5,3);
     TEST_EQUALITY(b.extent(0),5);
     TEST_EQUALITY(b.extent(1),3);
-    TEST_EQUALITY(dimension_scalar(b),derivative_dim_plus_one);
+    TEST_EQUALITY(Sacado::dimension_scalar(b),derivative_dim_plus_one);
   }
 
   // Test LayoutStride view of double
   {
     Kokkos::DynRankView<double> a("a",10,13);
     auto b = Kokkos::subview(a, std::make_pair(4,8), std::make_pair(5,11));
-    auto c = createDynRankView(b,"c",5,3);
+    auto c = Sacado::createDynRankView(b,"c",5,3);
     using b_type = decltype(b);
     using c_type = decltype(c);
     using b_layout = typename b_type::array_layout;
@@ -362,14 +342,14 @@ TEUCHOS_UNIT_TEST(view_factory, dyn_rank_views)
     TEST_EQUALITY(c.rank(),2);
     TEST_EQUALITY(c.extent(0),5);
     TEST_EQUALITY(c.extent(1),3);
-    TEST_EQUALITY(dimension_scalar(b),0);
+    TEST_EQUALITY(Sacado::dimension_scalar(b),1);
   }
 
   // Test LayoutStride view of Fad
   {
     Kokkos::DynRankView<FadType> a("a",10,13,derivative_dim_plus_one);
     auto b = Kokkos::subview(a, std::make_pair(4,8), std::make_pair(5,11));
-    auto c = createDynRankView(b,"c",5,3);
+    auto c = Sacado::createDynRankView(b,"c",5,3);
     using b_type = decltype(b);
     using c_type = decltype(c);
     using b_layout = typename b_type::array_layout;
@@ -384,7 +364,7 @@ TEUCHOS_UNIT_TEST(view_factory, dyn_rank_views)
     TEST_EQUALITY(c.rank(),2);
     TEST_EQUALITY(c.extent(0),5);
     TEST_EQUALITY(c.extent(1),3);
-    TEST_EQUALITY(dimension_scalar(b),derivative_dim_plus_one);
+    TEST_EQUALITY(Sacado::dimension_scalar(b),derivative_dim_plus_one);
   }
 
 }

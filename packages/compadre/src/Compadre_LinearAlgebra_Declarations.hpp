@@ -1,3 +1,11 @@
+// @HEADER
+// *****************************************************************************
+//     Compadre: COMpatible PArticle Discretization and REmap Toolkit
+//
+// Copyright 2018 NTESS and the Compadre contributors.
+// SPDX-License-Identifier: BSD-2-Clause
+// *****************************************************************************
+// @HEADER
 #ifndef _COMPADRE_LINEAR_ALGEBRA_DECLARATIONS_HPP_
 #define _COMPADRE_LINEAR_ALGEBRA_DECLARATIONS_HPP_
 
@@ -16,7 +24,7 @@ namespace GMLS_LinearAlgebra {
         \param dimensions    [in] - dimension of PtP
     */
     KOKKOS_INLINE_FUNCTION
-    void largestTwoEigenvectorsThreeByThreeSymmetric(const member_type& teamMember, scratch_matrix_right_type V, scratch_matrix_right_type PtP, const int dimensions, pool_type& random_number_pool);
+    void largestTwoEigenvectorsThreeByThreeSymmetric(const member_type& teamMember, device_unmanaged_matrix_right_type V, scratch_matrix_right_type PtP, const int dimensions, pool_type& random_number_pool);
 
     /*! \brief Solves a batch of problems with QR+Pivoting
  

@@ -1,45 +1,16 @@
 // @HEADER
-// ************************************************************************
+// *****************************************************************************
+//           Panzer: A partial differential equation assembly
+//       engine for strongly coupled complex multiphysics systems
+//
+// Copyright 2011 NTESS and the Panzer contributors.
 //
 //                           Intrepid2 Package
-//                 Copyright (2007) Sandia Corporation
 //
-// Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
-// license for use of this work by or on behalf of the U.S. Government.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Kyungjoo Kim  (kyukim@sandia.gov), or
-//                    Mauro Perego  (mperego@sandia.gov)
-//
-// ************************************************************************
+// Copyright 2007 NTESS and the Intrepid2 contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
-
 
 /** \file
   \brief local L2 projection of a function onto continuous finite element space
@@ -152,10 +123,10 @@ enum ElemShape {HEX, TET, QUAD, TRI};
 template<typename ValueType, typename DeviceSpaceType>
 int feProjection(int argc, char *argv[]) {
 
-  using HostSpaceType = typename
-      Kokkos::Impl::HostMirror<DeviceSpaceType>::Space::execution_space;
+  using HostSpaceType = Kokkos::DefaultHostExecutionSpace;
+  using HostDeviceType = typename HostSpaceType::device_type;
   using DynRankView = Kokkos::DynRankView<ValueType,DeviceSpaceType>;
-  using DynRankViewHost = Kokkos::DynRankView<ValueType,HostSpaceType>;
+  using DynRankViewHost = Kokkos::DynRankView<ValueType,HostDeviceType>;
 
   using map_t = Tpetra::Map<panzer::LocalOrdinal, panzer::GlobalOrdinal>;
 
@@ -229,32 +200,32 @@ int feProjection(int argc, char *argv[]) {
     Teuchos::RCP<CellTopology> cellTopoPtr = Teuchos::rcp(new CellTopology);
 
     //brickBasis: used to compute the coordinates of the mesh vertices
-    Teuchos::RCP< Intrepid2::Basis<HostSpaceType, scalar_t,scalar_t> > brickBasis;
+    Teuchos::RCP< Intrepid2::Basis<HostDeviceType, scalar_t,scalar_t> > brickBasis;
 
     //linearBasis: used to compute the coordinates of the quadrature points for computing the L2 error
     Teuchos::RCP< Intrepid2::Basis<DeviceSpaceType, scalar_t,scalar_t> > linearBasis;
 
     if(shape == "Hexahedron") {
       cellTopoPtr = Teuchos::rcp(new CellTopology(shards::getCellTopologyData<shards::Hexahedron<8> >()));
-      brickBasis = Teuchos::rcp(new Intrepid2::Basis_HGRAD_HEX_C1_FEM<HostSpaceType,scalar_t,scalar_t>);
+      brickBasis = Teuchos::rcp(new Intrepid2::Basis_HGRAD_HEX_C1_FEM<HostDeviceType,scalar_t,scalar_t>);
       linearBasis = Teuchos::rcp(new Intrepid2::Basis_HGRAD_HEX_C1_FEM<DeviceSpaceType,scalar_t,scalar_t>);
       eShape = HEX;
       dim = 3;
     } else if (shape == "Tetrahedron") {
       cellTopoPtr = Teuchos::rcp(new CellTopology(shards::getCellTopologyData<shards::Tetrahedron<4> >()));
-      brickBasis = Teuchos::rcp(new Intrepid2::Basis_HGRAD_HEX_C1_FEM<HostSpaceType,scalar_t,scalar_t>);
+      brickBasis = Teuchos::rcp(new Intrepid2::Basis_HGRAD_HEX_C1_FEM<HostDeviceType,scalar_t,scalar_t>);
       linearBasis = Teuchos::rcp(new Intrepid2::Basis_HGRAD_TET_C1_FEM<DeviceSpaceType,scalar_t,scalar_t>);
       eShape = TET;
       dim = 3;
     } else if (shape == "Quadrilateral") {
       cellTopoPtr = Teuchos::rcp(new CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >()));
-      brickBasis = Teuchos::rcp(new Intrepid2::Basis_HGRAD_QUAD_C1_FEM<HostSpaceType,scalar_t,scalar_t>);
+      brickBasis = Teuchos::rcp(new Intrepid2::Basis_HGRAD_QUAD_C1_FEM<HostDeviceType,scalar_t,scalar_t>);
       linearBasis = Teuchos::rcp(new Intrepid2::Basis_HGRAD_QUAD_C1_FEM<DeviceSpaceType,scalar_t,scalar_t>);
       eShape = QUAD;
       dim = 2;
     } else if (shape == "Triangle") {
       cellTopoPtr = Teuchos::rcp(new CellTopology(shards::getCellTopologyData<shards::Triangle<3> >()));
-      brickBasis = Teuchos::rcp(new Intrepid2::Basis_HGRAD_QUAD_C1_FEM<HostSpaceType,scalar_t,scalar_t>);
+      brickBasis = Teuchos::rcp(new Intrepid2::Basis_HGRAD_QUAD_C1_FEM<HostDeviceType,scalar_t,scalar_t>);
       linearBasis = Teuchos::rcp(new Intrepid2::Basis_HGRAD_TRI_C1_FEM<DeviceSpaceType,scalar_t,scalar_t>);
       eShape = TRI;
       dim = 2;
@@ -356,7 +327,8 @@ int feProjection(int argc, char *argv[]) {
         getFancyOStream(Teuchos::rcpFromRef (std::cout)) :
         getFancyOStream(Teuchos::rcp (new Teuchos::oblackholestream ()));
 
-    *outStream << "DeviceSpace::  "; DeviceSpaceType().print_configuration(*outStream, false);
+    *outStream << "DeviceSpace::  ";
+    typename DeviceSpaceType::execution_space().print_configuration(*outStream, false);
     *outStream << "HostSpace::    ";   HostSpaceType().print_configuration(*outStream, false);
     *outStream << "\n";
 
@@ -441,7 +413,7 @@ int feProjection(int argc, char *argv[]) {
     {
       auto physVertexesHost = Kokkos::create_mirror_view(physVertexes);
 
-      //Intrepid2::Basis_HGRAD_QUAD_C1_FEM<HostSpaceType,scalar_t,scalar_t> brickBasis;
+      //Intrepid2::Basis_HGRAD_QUAD_C1_FEM<HostDeviceType,scalar_t,scalar_t> brickBasis;
       int numNodesPerBrick = brickBasis->getCardinality();
       DynRankViewHost refVerticesHexa("refVerticesHexa", numNodesPerBrick, dim);
       DynRankViewHost physVerticesHexa("physVerticesHexa", numNodesPerBrick, dim);
@@ -590,7 +562,7 @@ int feProjection(int argc, char *argv[]) {
     {
       std::map<global_ordinal_t,scalar_t> mapL2Proj;
       std::map<global_ordinal_t,int> mapCell;
-      std::map<global_ordinal_t, typename Intrepid2::Basis<HostSpaceType, scalar_t,scalar_t>::OrdinalTypeArrayStride1DHost> mapDofTag;
+      std::map<global_ordinal_t, typename Intrepid2::Basis<HostDeviceType, scalar_t,scalar_t>::OrdinalTypeArrayStride1DHost> mapDofTag;
       std::vector<global_ordinal_t> elementGIDs(basisCardinality);
       Teuchos::TimeMonitor vTimer1 =  *Teuchos::TimeMonitor::getNewTimer("Verification, assemble solution");
       auto basisCoeffsL2ProjHost = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), basisCoeffsL2Proj);

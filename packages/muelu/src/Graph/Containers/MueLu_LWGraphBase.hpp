@@ -1,55 +1,19 @@
 // @HEADER
-//
-// ***********************************************************************
-//
+// *****************************************************************************
 //        MueLu: A package for multigrid based preconditioning
-//                  Copyright 2012 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact
-//                    Jonathan Hu       (jhu@sandia.gov)
-//                    Andrey Prokopenko (aprokop@sandia.gov)
-//                    Ray Tuminaro      (rstumin@sandia.gov)
-//
-// ***********************************************************************
-//
+// Copyright 2012 NTESS and the MueLu contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
+
 #ifndef MUELU_LWGRAPHBASE_DECL_HPP
 #define MUELU_LWGRAPHBASE_DECL_HPP
 
 #include "Kokkos_Bitset.hpp"
 #include "MueLu_ConfigDefs.hpp"
 
-#include <Kokkos_StaticCrsGraph.hpp>
+#include <KokkosSparse_StaticCrsGraph.hpp>
 #include <Tpetra_KokkosCompat_ClassicNodeAPI_Wrapper.hpp>
 #include <KokkosCompat_View.hpp>
 
@@ -119,15 +83,15 @@ class LWGraphBase {
   using execution_space = typename device_type::execution_space;
   using memory_space    = typename device_type::memory_space;
 
-  using local_graph_device_type = Kokkos::StaticCrsGraph<LocalOrdinal,
-                                                         Kokkos::LayoutLeft,
-                                                         typename Node::device_type,
-                                                         void, size_t>;
-  using local_graph_type        = typename std::conditional<OnHost, typename local_graph_device_type::HostMirror, local_graph_device_type>::type;
+  using local_graph_device_type = KokkosSparse::StaticCrsGraph<LocalOrdinal,
+                                                               Kokkos::LayoutLeft,
+                                                               typename Node::device_type,
+                                                               void, size_t>;
+  using local_graph_type        = typename std::conditional<OnHost, typename local_graph_device_type::host_mirror_type, local_graph_device_type>::type;
   using boundary_nodes_type     = Kokkos::View<bool*, memory_space>;
   using row_type                = typename local_graph_type::row_map_type;
   using entries_type            = typename local_graph_type::entries_type;
-  using neighbor_vertices_type  = Kokkos::GraphRowViewConst<local_graph_type>;
+  using neighbor_vertices_type  = KokkosSparse::GraphRowViewConst<local_graph_type>;
 
 #undef MUELU_LWGRAPHBASE_SHORT
 #include "MueLu_UseShortNamesOrdinal.hpp"
@@ -173,7 +137,7 @@ class LWGraphBase {
     if constexpr (OnHost) {
       // We want the graph data to live on host
       if constexpr (std::is_same<local_graph_type,
-                                 typename crs_graph_type::local_graph_type>::value)
+                                 typename crs_graph_type::local_graph_device_type>::value)
         // The CrsGraph's data already lives on host.
         setup(graph->getLocalGraphHost(), graph->getRowMap(), graph->getColMap(), objectLabel);
       else {
@@ -321,17 +285,21 @@ class LWGraphBase {
   RCP<crs_graph_type> GetCrsGraph() const {
     RCP<crs_graph_type> graph;
     if constexpr (std::is_same<local_graph_type,
-                               typename crs_graph_type::local_graph_type>::value)
+                               typename crs_graph_type::local_graph_device_type>::value)
       graph = Xpetra::CrsGraphFactory<LocalOrdinal, GlobalOrdinal, Node>::Build(GetDomainMap(), GetImportMap(), graph_, Teuchos::null);
     else {
-      auto rows    = typename crs_graph_type::local_graph_type::row_map_type::non_const_type("rows", graph_.numRows() + 1);
-      auto columns = typename crs_graph_type::local_graph_type::entries_type::non_const_type("columns", graph_.entries.extent(0));
+      auto rows    = typename crs_graph_type::local_graph_device_type::row_map_type::non_const_type("rows", graph_.numRows() + 1);
+      auto columns = typename crs_graph_type::local_graph_device_type::entries_type::non_const_type("columns", graph_.entries.extent(0));
       Kokkos::deep_copy(rows, graph_.row_map);
       Kokkos::deep_copy(columns, graph_.entries);
-      typename crs_graph_type::local_graph_type lclGraph(columns, rows);
+      typename crs_graph_type::local_graph_device_type lclGraph(columns, rows);
       graph = Xpetra::CrsGraphFactory<LocalOrdinal, GlobalOrdinal, Node>::Build(GetDomainMap(), GetImportMap(), lclGraph, Teuchos::null);
     }
     return graph;
+  }
+
+  const std::string& getObjectLabel() const {
+    return objectLabel_;
   }
 
  private:

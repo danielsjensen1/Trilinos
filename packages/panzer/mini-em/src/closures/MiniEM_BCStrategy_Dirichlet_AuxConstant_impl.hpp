@@ -1,3 +1,13 @@
+// @HEADER
+// *****************************************************************************
+//           Panzer: A partial differential equation assembly
+//       engine for strongly coupled complex multiphysics systems
+//
+// Copyright 2011 NTESS and the Panzer contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
+
 #ifndef MiniEM_BC_STRATEGY_DIRICHLET_AuxCONSTANT_IMPL_HPP
 #define MiniEM_BC_STRATEGY_DIRICHLET_AuxCONSTANT_IMPL_HPP
 
@@ -187,7 +197,7 @@ buildAndRegisterScatterEvaluators(PHX::FieldManager<panzer::Traits>& fm,
   // get the unique global indexer for just this field
   Teuchos::RCP<panzer::GlobalIndexer> ugi = blockedDOFMngr->getFieldDOFManagers()[blockIndex];
    
-  // build a new epetra linear object factory 
+  // build a new tpetra linear object factory
   Teuchos::RCP<panzer::LinearObjFactory<panzer::Traits> > elof
      = Teuchos::rcp(new panzer::TpetraLinearObjFactory<panzer::Traits,double,int,panzer::GlobalOrdinal>(Teuchos::rcp(new Teuchos::MpiComm<int>(blof.getComm())).getConst(),ugi));
 

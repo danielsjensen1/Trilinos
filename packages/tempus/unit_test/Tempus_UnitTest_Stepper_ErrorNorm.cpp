@@ -1,10 +1,11 @@
-// @HEADER
-// ****************************************************************************
-//                Tempus: Copyright (2017) Sandia Corporation
+//@HEADER
+// *****************************************************************************
+//          Tempus: Time Integration and Sensitivity Analysis Package
 //
-// Distributed under BSD 3-clause license (See accompanying file Copyright.txt)
-// ****************************************************************************
-// @HEADER
+// Copyright 2017 NTESS and the Tempus contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+//@HEADER
 
 #include "Tempus_UnitTest_Utils.hpp"
 
@@ -41,7 +42,7 @@ TEUCHOS_UNIT_TEST(Stepper_ErrorNorm, computeWRMSNorm)
   Thyra::assign(xNext.ptr(), 1.0 + tol);
   Thyra::assign(eVec.ptr(), tol);
   rmsNorm = eNorm->computeWRMSNorm(x, xNext, eVec);
-  TEST_FLOATING_EQUALITY(rmsNorm, 1.0 / std::sqrt(N), 1.0e-12);
+  TEST_FLOATING_EQUALITY(rmsNorm, 1.0, 1.0e-12);
 }
 
 // ************************************************************

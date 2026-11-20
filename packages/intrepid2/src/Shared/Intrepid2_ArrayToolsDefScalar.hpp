@@ -1,43 +1,10 @@
 // @HEADER
-// ************************************************************************
+// *****************************************************************************
+//                           Intrepid2 Package
 //
-//                           Intrepid Package
-//                 Copyright (2007) Sandia Corporation
-//
-// Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
-// license for use of this work by or on behalf of the U.S. Government.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Kyungjoo Kim  (kyukim@sandia.gov), or
-//                    Mauro Perego  (mperego@sandia.gov)
-//
-// ************************************************************************
+// Copyright 2007 NTESS and the Intrepid2 contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 /** \file   Intrepid2_ArrayToolsDefScalar.hpp
@@ -53,71 +20,225 @@ namespace Intrepid2 {
 
   namespace FunctorArrayTools {
     /**
-       \brief Functor for scalarMultiply see Intrepid2::ArrayTools for more
+       \brief Functors for scalarMultiply see Intrepid2::ArrayTools for more
     */
-    template<typename OutputViewType,
-             typename inputLeftViewType,
-             typename inputRightViewType,
-             bool equalRank,
-             bool reciprocal>
-    struct F_scalarMultiply {
-            OutputViewType _output;
+    template <typename OutputViewType,
+              typename inputLeftViewType,
+              typename inputRightViewType,
+              bool equalRank,
+              bool reciprocal>
+    struct F_scalarMultiplyScalar
+    {
+      OutputViewType _output;
       const inputLeftViewType _inputLeft;
       const inputRightViewType _inputRight;
 
       KOKKOS_INLINE_FUNCTION
-      F_scalarMultiply(OutputViewType output_,
-                       inputLeftViewType inputLeft_,
-                       inputRightViewType inputRight_)
-        : _output(output_),
-          _inputLeft(inputLeft_),
-          _inputRight(inputRight_) {}
-      
+      F_scalarMultiplyScalar(OutputViewType output_,
+                             inputLeftViewType inputLeft_,
+                             inputRightViewType inputRight_)
+          : _output(output_),
+            _inputLeft(inputLeft_),
+            _inputRight(inputRight_) {}
+
       // DataData
       KOKKOS_INLINE_FUNCTION
-      void operator()(const ordinal_type cl,
-                      const ordinal_type pt) const {
-        const auto val = _inputLeft(cl , pt%_inputLeft.extent(1));
-        
-        //const ordinal_type cp[2] = { cl, pt };
-        //ViewAdapter<2,OutputViewType> out(cp, _output);
-        auto out = Kokkos::subview(_output, cl, pt, Kokkos::ALL(), Kokkos::ALL());
-        if (equalRank) {
-          //const ViewAdapter<2,inputRightViewType> right(cp, _inputRight);
-          const auto right = Kokkos::subview(_inputRight, cl, pt, Kokkos::ALL(), Kokkos::ALL());
-          if (reciprocal) Kernels::inv_scalar_mult_mat(out, val, right);
-          else            Kernels::    scalar_mult_mat(out, val, right);
-        } else {
-          //const ordinal_type p[1] = { pt };
-          //const ViewAdapter<1,inputRightViewType> right(p, _inputRight);
-          const auto right = Kokkos::subview(_inputRight, pt, Kokkos::ALL(), Kokkos::ALL());
-          if (reciprocal) Kernels::inv_scalar_mult_mat(out, val, right);
-          else            Kernels::    scalar_mult_mat(out, val, right);
-        } 
+      void operator()(const ordinal_type cl, const ordinal_type pt) const
+      {
+        const auto val = _inputLeft(cl, pt % _inputLeft.extent(1));
+
+        if constexpr (equalRank) {
+          if constexpr (reciprocal)
+            _output(cl, pt) = _inputRight(cl, pt) / val;
+          else
+            _output(cl, pt) = val * _inputRight(cl, pt);
+        }
+        else {
+          if constexpr (reciprocal)
+            _output(cl, pt) = _inputRight(pt) / val;
+          else
+            _output(cl, pt) = val * _inputRight(pt);
+        }
       }
-      
+
       // DataField
       KOKKOS_INLINE_FUNCTION
-      void operator()(const ordinal_type cl,
-                      const ordinal_type bf,
-                      const ordinal_type pt) const {
-        const auto val = _inputLeft(cl , pt%_inputLeft.extent(1));
+      void operator()(const ordinal_type cl, const ordinal_type bf, const ordinal_type pt) const
+      {
+        const auto val = _inputLeft(cl, pt % _inputLeft.extent(1));
 
-        //const ordinal_type cfp[3] = { cl, bf, pt };
-        //ViewAdapter<3,OutputViewType> out(cfp, _output);
-        auto out = Kokkos::subview(_output, cl, bf, pt, Kokkos::ALL(), Kokkos::ALL());
-        if (equalRank) {
-          //const ViewAdapter<3,inputRightViewType> right(cfp, _inputRight);          
-          auto right = Kokkos::subview(_inputRight, cl, bf, pt, Kokkos::ALL(), Kokkos::ALL());
-          if (reciprocal) Kernels::inv_scalar_mult_mat(out, val, right);
-          else            Kernels::    scalar_mult_mat(out, val, right);          
-        } else {
-          //const ordinal_type fp[2] = { bf, pt };
-          //const ViewAdapter<2,inputRightViewType> right(fp, _inputRight);          
-          auto right = Kokkos::subview(_inputRight, bf, pt, Kokkos::ALL(), Kokkos::ALL());
-          if (reciprocal) Kernels::inv_scalar_mult_mat(out, val, right);
-          else            Kernels::    scalar_mult_mat(out, val, right);
-        } 
+        if constexpr (equalRank) {
+          if constexpr (reciprocal)
+            _output(cl, bf, pt) = _inputRight(cl, bf, pt) / val;
+          else
+            _output(cl, bf, pt) = val * _inputRight(cl, bf, pt);
+        }
+        else {
+          if constexpr (reciprocal)
+            _output(cl, bf, pt) = _inputRight(bf, pt) / val;
+          else
+            _output(cl, bf, pt) = val * _inputRight(bf, pt);
+        }
+      }
+    };
+
+    template <typename OutputViewType,
+              typename inputLeftViewType,
+              typename inputRightViewType,
+              bool equalRank,
+              bool reciprocal>
+    struct F_scalarMultiplyVector
+    {
+      OutputViewType _output;
+      const inputLeftViewType _inputLeft;
+      const inputRightViewType _inputRight;
+
+      KOKKOS_INLINE_FUNCTION
+      F_scalarMultiplyVector(OutputViewType output_,
+                             inputLeftViewType inputLeft_,
+                             inputRightViewType inputRight_)
+          : _output(output_),
+            _inputLeft(inputLeft_),
+            _inputRight(inputRight_) {}
+
+      // DataData
+      KOKKOS_INLINE_FUNCTION
+      void operator()(const ordinal_type cl, const ordinal_type pt) const
+      {
+        const auto val = _inputLeft(cl, pt % _inputLeft.extent(1));
+
+        if constexpr (equalRank) {
+          if constexpr (reciprocal) {
+            for (ordinal_type i = 0; i < _output.extent_int(2); ++i)
+              _output(cl, pt, i) = _inputRight(cl, pt, i) / val;
+          }
+          else {
+            for (ordinal_type i = 0; i < _output.extent_int(2); ++i)
+              _output(cl, pt, i) = val * _inputRight(cl, pt, i);
+          }
+        }
+        else {
+          if constexpr (reciprocal) {
+            for (ordinal_type i = 0; i < _output.extent_int(2); ++i)
+              _output(cl, pt, i) = _inputRight(pt, i) / val;
+          }
+          else {
+            for (ordinal_type i = 0; i < _output.extent_int(2); ++i)
+              _output(cl, pt, i) = val * _inputRight(pt, i);
+          }
+        }
+      }
+
+      // DataField
+      KOKKOS_INLINE_FUNCTION
+      void operator()(const ordinal_type cl, const ordinal_type bf, const ordinal_type pt) const
+      {
+        const auto val = _inputLeft(cl, pt % _inputLeft.extent(1));
+
+        if constexpr (equalRank) {
+          if constexpr (reciprocal) {
+            for (ordinal_type i = 0; i < _output.extent_int(3); ++i)
+              _output(cl, bf, pt, i) = _inputRight(cl, bf, pt, i) / val;
+          }
+          else {
+            for (ordinal_type i = 0; i < _output.extent_int(3); ++i)
+              _output(cl, bf, pt, i) = val * _inputRight(cl, bf, pt, i);
+          }
+        }
+        else {
+          if constexpr (reciprocal) {
+            for (ordinal_type i = 0; i < _output.extent_int(3); ++i)
+              _output(cl, bf, pt, i) = _inputRight(bf, pt, i) / val;
+          }
+          else {
+            for (ordinal_type i = 0; i < _output.extent_int(3); ++i)
+              _output(cl, bf, pt, i) = val * _inputRight(bf, pt, i);
+          }
+        }
+      }
+    };
+
+    template <typename OutputViewType,
+              typename inputLeftViewType,
+              typename inputRightViewType,
+              bool equalRank,
+              bool reciprocal>
+    struct F_scalarMultiplyTensor
+    {
+      OutputViewType _output;
+      const inputLeftViewType _inputLeft;
+      const inputRightViewType _inputRight;
+
+      KOKKOS_INLINE_FUNCTION
+      F_scalarMultiplyTensor(OutputViewType output_,
+                             inputLeftViewType inputLeft_,
+                             inputRightViewType inputRight_)
+          : _output(output_),
+            _inputLeft(inputLeft_),
+            _inputRight(inputRight_) {}
+
+      // DataData
+      KOKKOS_INLINE_FUNCTION
+      void operator()(const ordinal_type cl, const ordinal_type pt) const
+      {
+        const auto val = _inputLeft(cl, pt % _inputLeft.extent(1));
+
+        if constexpr (equalRank) {
+          if constexpr (reciprocal) {
+            for (ordinal_type i = 0; i < _output.extent_int(2); ++i)
+              for (ordinal_type j = 0; j < _output.extent_int(3); ++j)
+                _output(cl, pt, i, j) = _inputRight(cl, pt, i, j) / val;
+          }
+          else {
+            for (ordinal_type i = 0; i < _output.extent_int(2); ++i)
+              for (ordinal_type j = 0; j < _output.extent_int(3); ++j)
+                _output(cl, pt, i, j) = val * _inputRight(cl, pt, i, j);
+          }
+        }
+        else {
+          if constexpr (reciprocal) {
+            for (ordinal_type i = 0; i < _output.extent_int(2); ++i)
+              for (ordinal_type j = 0; j < _output.extent_int(3); ++j)
+                _output(cl, pt, i, j) = _inputRight(pt, i, j) / val;
+          }
+          else {
+            for (ordinal_type i = 0; i < _output.extent_int(2); ++i)
+              for (ordinal_type j = 0; j < _output.extent_int(3); ++j)
+                _output(cl, pt, i, j) = val * _inputRight(pt, i, j);
+          }
+        }
+      }
+
+      // DataField
+      KOKKOS_INLINE_FUNCTION
+      void operator()(const ordinal_type cl, const ordinal_type bf, const ordinal_type pt) const
+      {
+        const auto val = _inputLeft(cl, pt % _inputLeft.extent(1));
+
+        if constexpr (equalRank) {
+          if constexpr (reciprocal) {
+            for (ordinal_type i = 0; i < _output.extent_int(3); ++i)
+              for (ordinal_type j = 0; j < _output.extent_int(4); ++j)
+                _output(cl, bf, pt, i, j) = _inputRight(cl, bf, pt, i, j) / val;
+          }
+          else {
+            for (ordinal_type i = 0; i < _output.extent_int(3); ++i)
+              for (ordinal_type j = 0; j < _output.extent_int(4); ++j)
+                _output(cl, bf, pt, i, j) = val * _inputRight(cl, bf, pt, i, j);
+          }
+        }
+        else {
+          if constexpr (reciprocal) {
+            for (ordinal_type i = 0; i < _output.extent_int(3); ++i)
+              for (ordinal_type j = 0; j < _output.extent_int(4); ++j)
+                _output(cl, bf, pt, i, j) = _inputRight(bf, pt, i, j) / val;
+          }
+          else {
+            for (ordinal_type i = 0; i < _output.extent_int(3); ++i)
+              for (ordinal_type j = 0; j < _output.extent_int(4); ++j)
+                _output(cl, bf, pt, i, j) = val * _inputRight(bf, pt, i, j);
+          }
+        }
       }
     };
   } 
@@ -182,22 +303,67 @@ namespace Intrepid2 {
                                     { /*C*/ outputFields.extent(0), /*F*/ outputFields.extent(1), /*P*/ outputFields.extent(2) } );
     
     const bool equalRank = ( outputFields.rank() == inputFields.rank() );
-    if (equalRank) 
-      if (reciprocal) {
-        typedef FunctorArrayTools::F_scalarMultiply<outputFieldViewType,inputDataViewType,inputFieldViewType,true,true> FunctorType;
-        Kokkos::parallel_for( policy, FunctorType(outputFields, inputData, inputFields) );
-      } else {
-        typedef FunctorArrayTools::F_scalarMultiply<outputFieldViewType,inputDataViewType,inputFieldViewType,true,false> FunctorType;
-        Kokkos::parallel_for( policy, FunctorType(outputFields, inputData, inputFields) );
+
+    if (outputFields.rank() == 3) {
+      if (equalRank) {
+        if (reciprocal) {
+          typedef FunctorArrayTools::F_scalarMultiplyScalar<outputFieldViewType,inputDataViewType,inputFieldViewType,true,true> FunctorType;
+          Kokkos::parallel_for( policy, FunctorType(outputFields, inputData, inputFields) );
+        } else {
+          typedef FunctorArrayTools::F_scalarMultiplyScalar<outputFieldViewType,inputDataViewType,inputFieldViewType,true,false> FunctorType;
+          Kokkos::parallel_for( policy, FunctorType(outputFields, inputData, inputFields) );
+        }
       }
-    else 
-      if (reciprocal) {
-        typedef FunctorArrayTools::F_scalarMultiply<outputFieldViewType,inputDataViewType,inputFieldViewType,false,true> FunctorType;
-        Kokkos::parallel_for( policy, FunctorType(outputFields, inputData, inputFields) );
-      } else {
-        typedef FunctorArrayTools::F_scalarMultiply<outputFieldViewType,inputDataViewType,inputFieldViewType,false,false> FunctorType;
-        Kokkos::parallel_for( policy, FunctorType(outputFields, inputData, inputFields) );
+      else {
+        if (reciprocal) {
+          typedef FunctorArrayTools::F_scalarMultiplyScalar<outputFieldViewType,inputDataViewType,inputFieldViewType,false,true> FunctorType;
+          Kokkos::parallel_for( policy, FunctorType(outputFields, inputData, inputFields) );
+        } else {
+          typedef FunctorArrayTools::F_scalarMultiplyScalar<outputFieldViewType,inputDataViewType,inputFieldViewType,false,false> FunctorType;
+          Kokkos::parallel_for( policy, FunctorType(outputFields, inputData, inputFields) );
+        }
       }
+    }
+    else if (outputFields.rank() == 4) {
+      if (equalRank) {
+        if (reciprocal) {
+          typedef FunctorArrayTools::F_scalarMultiplyVector<outputFieldViewType,inputDataViewType,inputFieldViewType,true,true> FunctorType;
+          Kokkos::parallel_for( policy, FunctorType(outputFields, inputData, inputFields) );
+        } else {
+          typedef FunctorArrayTools::F_scalarMultiplyVector<outputFieldViewType,inputDataViewType,inputFieldViewType,true,false> FunctorType;
+          Kokkos::parallel_for( policy, FunctorType(outputFields, inputData, inputFields) );
+        }
+      }
+      else {
+        if (reciprocal) {
+          typedef FunctorArrayTools::F_scalarMultiplyVector<outputFieldViewType,inputDataViewType,inputFieldViewType,false,true> FunctorType;
+          Kokkos::parallel_for( policy, FunctorType(outputFields, inputData, inputFields) );
+        } else {
+          typedef FunctorArrayTools::F_scalarMultiplyVector<outputFieldViewType,inputDataViewType,inputFieldViewType,false,false> FunctorType;
+          Kokkos::parallel_for( policy, FunctorType(outputFields, inputData, inputFields) );
+        }
+      }
+    }
+    else {
+      if (equalRank) {
+        if (reciprocal) {
+          typedef FunctorArrayTools::F_scalarMultiplyTensor<outputFieldViewType,inputDataViewType,inputFieldViewType,true,true> FunctorType;
+          Kokkos::parallel_for( policy, FunctorType(outputFields, inputData, inputFields) );
+        } else {
+          typedef FunctorArrayTools::F_scalarMultiplyTensor<outputFieldViewType,inputDataViewType,inputFieldViewType,true,false> FunctorType;
+          Kokkos::parallel_for( policy, FunctorType(outputFields, inputData, inputFields) );
+        }
+      }
+      else {
+        if (reciprocal) {
+          typedef FunctorArrayTools::F_scalarMultiplyTensor<outputFieldViewType,inputDataViewType,inputFieldViewType,false,true> FunctorType;
+          Kokkos::parallel_for( policy, FunctorType(outputFields, inputData, inputFields) );
+        } else {
+          typedef FunctorArrayTools::F_scalarMultiplyTensor<outputFieldViewType,inputDataViewType,inputFieldViewType,false,false> FunctorType;
+          Kokkos::parallel_for( policy, FunctorType(outputFields, inputData, inputFields) );
+        }
+      }
+    }
   }
 
 
@@ -259,23 +425,67 @@ namespace Intrepid2 {
     const range_policy_type policy( { 0, 0 },
                                     { /*C*/ outputData.extent(0), /*P*/ outputData.extent(1) } );
 
-    const bool equalRank = ( outputData.rank() == inputDataRight.rank() );    
-    if (equalRank) 
-      if (reciprocal) {
-        typedef FunctorArrayTools::F_scalarMultiply<outputDataViewType,inputDataLeftViewType,inputDataRightViewType,true,true> FunctorType;
-        Kokkos::parallel_for( policy, FunctorType(outputData, inputDataLeft, inputDataRight) );
-      } else {
-        typedef FunctorArrayTools::F_scalarMultiply<outputDataViewType,inputDataLeftViewType,inputDataRightViewType,true,false> FunctorType;
-        Kokkos::parallel_for( policy, FunctorType(outputData, inputDataLeft, inputDataRight) );
+    const bool equalRank = ( outputData.rank() == inputDataRight.rank() );   
+    if (outputData.rank() == 2) { 
+      if (equalRank) {
+        if (reciprocal) {
+          typedef FunctorArrayTools::F_scalarMultiplyScalar<outputDataViewType,inputDataLeftViewType,inputDataRightViewType,true,true> FunctorType;
+          Kokkos::parallel_for( policy, FunctorType(outputData, inputDataLeft, inputDataRight) );
+        } else {
+          typedef FunctorArrayTools::F_scalarMultiplyScalar<outputDataViewType,inputDataLeftViewType,inputDataRightViewType,true,false> FunctorType;
+          Kokkos::parallel_for( policy, FunctorType(outputData, inputDataLeft, inputDataRight) );
+        }
       }
-    else 
-      if (reciprocal) {
-        typedef FunctorArrayTools::F_scalarMultiply<outputDataViewType,inputDataLeftViewType,inputDataRightViewType,false,true> FunctorType;
-        Kokkos::parallel_for( policy, FunctorType(outputData, inputDataLeft, inputDataRight) );
-      } else {
-        typedef FunctorArrayTools::F_scalarMultiply<outputDataViewType,inputDataLeftViewType,inputDataRightViewType,false,false> FunctorType;
-        Kokkos::parallel_for( policy, FunctorType(outputData, inputDataLeft, inputDataRight) );
+      else {
+        if (reciprocal) {
+          typedef FunctorArrayTools::F_scalarMultiplyScalar<outputDataViewType,inputDataLeftViewType,inputDataRightViewType,false,true> FunctorType;
+          Kokkos::parallel_for( policy, FunctorType(outputData, inputDataLeft, inputDataRight) );
+        } else {
+          typedef FunctorArrayTools::F_scalarMultiplyScalar<outputDataViewType,inputDataLeftViewType,inputDataRightViewType,false,false> FunctorType;
+          Kokkos::parallel_for( policy, FunctorType(outputData, inputDataLeft, inputDataRight) );
+        }
       }
+    }
+    else if (outputData.rank() == 3) { 
+      if (equalRank) {
+        if (reciprocal) {
+          typedef FunctorArrayTools::F_scalarMultiplyVector<outputDataViewType,inputDataLeftViewType,inputDataRightViewType,true,true> FunctorType;
+          Kokkos::parallel_for( policy, FunctorType(outputData, inputDataLeft, inputDataRight) );
+        } else {
+          typedef FunctorArrayTools::F_scalarMultiplyVector<outputDataViewType,inputDataLeftViewType,inputDataRightViewType,true,false> FunctorType;
+          Kokkos::parallel_for( policy, FunctorType(outputData, inputDataLeft, inputDataRight) );
+        }
+      }
+      else {
+        if (reciprocal) {
+          typedef FunctorArrayTools::F_scalarMultiplyVector<outputDataViewType,inputDataLeftViewType,inputDataRightViewType,false,true> FunctorType;
+          Kokkos::parallel_for( policy, FunctorType(outputData, inputDataLeft, inputDataRight) );
+        } else {
+          typedef FunctorArrayTools::F_scalarMultiplyVector<outputDataViewType,inputDataLeftViewType,inputDataRightViewType,false,false> FunctorType;
+          Kokkos::parallel_for( policy, FunctorType(outputData, inputDataLeft, inputDataRight) );
+        }
+      }
+    }
+    else {      
+      if (equalRank) {
+        if (reciprocal) {
+          typedef FunctorArrayTools::F_scalarMultiplyTensor<outputDataViewType,inputDataLeftViewType,inputDataRightViewType,true,true> FunctorType;
+          Kokkos::parallel_for( policy, FunctorType(outputData, inputDataLeft, inputDataRight) );
+        } else {
+          typedef FunctorArrayTools::F_scalarMultiplyTensor<outputDataViewType,inputDataLeftViewType,inputDataRightViewType,true,false> FunctorType;
+          Kokkos::parallel_for( policy, FunctorType(outputData, inputDataLeft, inputDataRight) );
+        }
+      }
+      else {
+        if (reciprocal) {
+          typedef FunctorArrayTools::F_scalarMultiplyTensor<outputDataViewType,inputDataLeftViewType,inputDataRightViewType,false,true> FunctorType;
+          Kokkos::parallel_for( policy, FunctorType(outputData, inputDataLeft, inputDataRight) );
+        } else {
+          typedef FunctorArrayTools::F_scalarMultiplyTensor<outputDataViewType,inputDataLeftViewType,inputDataRightViewType,false,false> FunctorType;
+          Kokkos::parallel_for( policy, FunctorType(outputData, inputDataLeft, inputDataRight) );
+        }
+      }
+    }
   }
   
 } // end namespace Intrepid2

@@ -1,44 +1,11 @@
-/*@HEADER
-// ***********************************************************************
-//
+// @HEADER
+// *****************************************************************************
 //       Ifpack2: Templated Object-Oriented Algebraic Preconditioner Package
-//                 Copyright (2009) Sandia Corporation
 //
-// Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
-// license for use of this work by or on behalf of the U.S. Government.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
-//
-// ***********************************************************************
-//@HEADER
-*/
+// Copyright 2009 NTESS and the Ifpack2 contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
 
 /// @file Ifpack2_Details_FastILU_Base_def.hpp
 
@@ -52,130 +19,118 @@
 #include <KokkosKernels_Utils.hpp>
 #include <Kokkos_Timer.hpp>
 #include <Teuchos_TimeMonitor.hpp>
+#include <Teuchos_Array.hpp>
 #include <stdexcept>
 
-namespace Ifpack2
-{
-namespace Details
-{
+namespace Ifpack2 {
+namespace Details {
 
-template<class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
+template <class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
 FastILU_Base<Scalar, LocalOrdinal, GlobalOrdinal, Node>::
-FastILU_Base(Teuchos::RCP<const TRowMatrix> A) :
-  mat_(A),
-  initFlag_(false),
-  computedFlag_(false),
-  nInit_(0),
-  nComputed_(0),
-  nApply_(0),
-  initTime_(0.0),
-  computeTime_(0.0),
-  applyTime_(0.0),
-  crsCopyTime_(0.0),
-  params_(Params::getDefaults()) {}
+    FastILU_Base(Teuchos::RCP<const TRowMatrix> A)
+  : mat_(A)
+  , initFlag_(false)
+  , computedFlag_(false)
+  , nInit_(0)
+  , nComputed_(0)
+  , nApply_(0)
+  , localCrs_(Teuchos::null)
+  , localCrsNonConst_(Teuchos::null)
+  , localCrsIsOwnedCopy_(false)
+  , initTime_(0.0)
+  , computeTime_(0.0)
+  , applyTime_(0.0)
+  , crsCopyTime_(0.0)
+  , params_(Params::getDefaults()) {}
 
-template<class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
-Teuchos::RCP<const Tpetra::Map<LocalOrdinal,GlobalOrdinal,Node> >
+template <class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
+Teuchos::RCP<const Tpetra::Map<LocalOrdinal, GlobalOrdinal, Node> >
 FastILU_Base<Scalar, LocalOrdinal, GlobalOrdinal, Node>::
-getDomainMap () const
-{
+    getDomainMap() const {
   return mat_->getDomainMap();
 }
 
-template<class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
-Teuchos::RCP<const Tpetra::Map<LocalOrdinal,GlobalOrdinal,Node> >
+template <class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
+Teuchos::RCP<const Tpetra::Map<LocalOrdinal, GlobalOrdinal, Node> >
 FastILU_Base<Scalar, LocalOrdinal, GlobalOrdinal, Node>::
-getRangeMap () const
-{
+    getRangeMap() const {
   return mat_->getRangeMap();
 }
 
-template<class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
+template <class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
 void FastILU_Base<Scalar, LocalOrdinal, GlobalOrdinal, Node>::
-apply (const Tpetra::MultiVector<Scalar,LocalOrdinal,GlobalOrdinal,Node> &X,
-       Tpetra::MultiVector<Scalar,LocalOrdinal,GlobalOrdinal,Node> &Y,
-       Teuchos::ETransp mode,
-       Scalar alpha,
-       Scalar beta) const
-{
-  const std::string timerName ("Ifpack2::FastILU::apply");
-  Teuchos::RCP<Teuchos::Time> timer = Teuchos::TimeMonitor::lookupCounter (timerName);
-  if (timer.is_null ()) {
-    timer = Teuchos::TimeMonitor::getNewCounter (timerName);
+    apply(const Tpetra::MultiVector<Scalar, LocalOrdinal, GlobalOrdinal, Node>& X,
+          Tpetra::MultiVector<Scalar, LocalOrdinal, GlobalOrdinal, Node>& Y,
+          Teuchos::ETransp /*mode*/,
+          Scalar /*alpha*/,
+          Scalar /*beta*/) const {
+  const std::string timerName("Ifpack2::FastILU::apply");
+  Teuchos::RCP<Teuchos::Time> timer = Teuchos::TimeMonitor::lookupCounter(timerName);
+  if (timer.is_null()) {
+    timer = Teuchos::TimeMonitor::getNewCounter(timerName);
   }
-  Teuchos::TimeMonitor timeMon (*timer);
+  Teuchos::TimeMonitor timeMon(*timer);
 
-  if(!isInitialized() || !isComputed())
-  {
+  if (!isInitialized() || !isComputed()) {
     throw std::runtime_error(std::string("Called ") + getName() + "::apply() without first calling initialize() and/or compute().");
   }
-  if(X.getNumVectors() != Y.getNumVectors())
-  {
+  if (X.getNumVectors() != Y.getNumVectors()) {
     throw std::invalid_argument(getName() + "::apply: X and Y have different numbers of vectors (pass X and Y with exactly matching dimensions)");
   }
-  if(X.getLocalLength() != Y.getLocalLength())
-  {
+  if (X.getLocalLength() != Y.getLocalLength()) {
     throw std::invalid_argument(getName() + "::apply: X and Y have different lengths (pass X and Y with exactly matching dimensions)");
   }
-  //zero out applyTime_ now, because the calls to applyLocalPrec() will add to it
-  applyTime_ = 0;
-  int  nvecs = X.getNumVectors();
+  // zero out applyTime_ now, because the calls to applyLocalPrec() will add to it
+  applyTime_  = 0;
+  int nvecs   = X.getNumVectors();
   auto nrowsX = X.getLocalLength();
   auto nrowsY = Y.getLocalLength();
-  if(nvecs == 1)
-  {
+  if (nvecs == 1) {
     auto x2d = X.getLocalViewDevice(Tpetra::Access::ReadOnly);
     auto y2d = Y.getLocalViewDevice(Tpetra::Access::ReadWrite);
-    ImplScalarArray x1d (const_cast<ImplScalar*>(x2d.data()), nrowsX);
-    ImplScalarArray y1d (const_cast<ImplScalar*>(y2d.data()), nrowsY);
+    ImplScalarArray x1d(const_cast<ImplScalar*>(x2d.data()), nrowsX);
+    ImplScalarArray y1d(const_cast<ImplScalar*>(y2d.data()), nrowsY);
 
     applyLocalPrec(x1d, y1d);
-  }
-  else
-  {
-    //Solve each vector one at a time (until FastILU supports multiple RHS)
+  } else {
+    // Solve each vector one at a time (until FastILU supports multiple RHS)
     auto x2d = X.getLocalViewDevice(Tpetra::Access::ReadOnly);
     auto y2d = Y.getLocalViewDevice(Tpetra::Access::ReadWrite);
-    for(int i = 0; i < nvecs; i++)
-    {
+    for (int i = 0; i < nvecs; i++) {
       auto xColView1d = Kokkos::subview(x2d, Kokkos::ALL(), i);
       auto yColView1d = Kokkos::subview(y2d, Kokkos::ALL(), i);
-      ImplScalarArray x1d (const_cast<ImplScalar*>(xColView1d.data()), nrowsX);
-      ImplScalarArray y1d (const_cast<ImplScalar*>(yColView1d.data()), nrowsY);
+      ImplScalarArray x1d(const_cast<ImplScalar*>(xColView1d.data()), nrowsX);
+      ImplScalarArray y1d(const_cast<ImplScalar*>(yColView1d.data()), nrowsY);
 
       applyLocalPrec(x1d, y1d);
     }
   }
 }
 
-template<class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
+template <class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
 void FastILU_Base<Scalar, LocalOrdinal, GlobalOrdinal, Node>::
-setParameters (const Teuchos::ParameterList& List)
-{
-  //Params constructor does all parameter validation, and sets default values
+    setParameters(const Teuchos::ParameterList& List) {
+  // Params constructor does all parameter validation, and sets default values
   params_ = Params(List, getName());
 }
 
-template<class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
+template <class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
 bool FastILU_Base<Scalar, LocalOrdinal, GlobalOrdinal, Node>::
-isBlockCrs() const
-{
+    isBlockCrs() const {
   return params_.blockCrs && params_.blockCrsSize > 1;
 }
 
-template<class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
+template <class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
 void FastILU_Base<Scalar, LocalOrdinal, GlobalOrdinal, Node>::
-initialize()
-{
-  const std::string timerName ("Ifpack2::FastILU::initialize");
-  Teuchos::RCP<Teuchos::Time> timer = Teuchos::TimeMonitor::lookupCounter (timerName);
-  if (timer.is_null ()) {
-    timer = Teuchos::TimeMonitor::getNewCounter (timerName);
+    initialize() {
+  const std::string timerName("Ifpack2::FastILU::initialize");
+  Teuchos::RCP<Teuchos::Time> timer = Teuchos::TimeMonitor::lookupCounter(timerName);
+  if (timer.is_null()) {
+    timer = Teuchos::TimeMonitor::getNewCounter(timerName);
   }
-  Teuchos::TimeMonitor timeMon (*timer);
+  Teuchos::TimeMonitor timeMon(*timer);
 
-  if(mat_.is_null())
-  {
+  if (mat_.is_null()) {
     throw std::runtime_error(std::string("Called ") + getName() + "::initialize() but matrix was null (call setMatrix() with a non-null matrix first)");
   }
 
@@ -185,35 +140,89 @@ initialize()
     if (params_.fillBlocks) {
       // Create new TCrsMatrix with the new filled data and conver to Bcrs
       auto crs_matrix_block_filled = Tpetra::fillLogicalBlocks(*crs_matrix, params_.blockCrsSize);
-      auto bcrs_matrix = Tpetra::convertToBlockCrsMatrix(*crs_matrix_block_filled, params_.blockCrsSize);
-      mat_ = bcrs_matrix;
-    }
-    else {
+      auto bcrs_matrix             = Tpetra::convertToBlockCrsMatrix(*crs_matrix_block_filled, params_.blockCrsSize);
+      mat_                         = bcrs_matrix;
+    } else {
       // Assume input is already filled, just convert to Bcrs
       auto bcrs_matrix = Tpetra::convertToBlockCrsMatrix(*crs_matrix, params_.blockCrsSize);
-      mat_ = bcrs_matrix;
+      mat_             = bcrs_matrix;
     }
   }
 
   Kokkos::Timer copyTimer;
-  CrsArrayReader<Scalar, ImplScalar, LocalOrdinal, GlobalOrdinal, Node>::getStructure(mat_.get(), localRowPtrsHost_, localRowPtrs_, localColInds_);
-  CrsArrayReader<Scalar, ImplScalar, LocalOrdinal, GlobalOrdinal, Node>::getValues(mat_.get(), localValues_, localRowPtrsHost_);
+
+  // Try to ensure that FastILU reads structure and values from a concrete
+  // Tpetra::CrsMatrix whenever possible.  This lets CrsArrayReader use its
+  // getStructureCrs/getValuesCrs fast paths instead of the generic RowMatrix
+  // host-row loop.  In BlockCrs mode, keep using mat_ directly so the BCRS
+  // specialization in CrsArrayReader remains available.
+  localCrs_            = Teuchos::null;
+  localCrsNonConst_    = Teuchos::null;
+  localCrsIsOwnedCopy_ = false;
+
+  const TRowMatrix* crsArraySource = mat_.get();
+  if (!isBlockCrs()) {
+    localCrs_ = Ifpack2::Details::getCrsMatrix(mat_);
+
+    if (localCrs_.is_null()) {
+      const LocalOrdinal numRows = static_cast<LocalOrdinal>(mat_->getLocalNumRows());
+      Teuchos::Array<size_t> entriesPerRow(numRows);
+      for (LocalOrdinal i = 0; i < numRows; ++i) {
+        entriesPerRow[i] = mat_->getNumEntriesInLocalRow(i);
+      }
+
+      localCrsNonConst_ = Teuchos::rcp(new TCrsMatrix(mat_->getRowMap(), mat_->getColMap(), entriesPerRow()));
+
+      using local_inds_host_view_type = typename TRowMatrix::nonconst_local_inds_host_view_type;
+      using values_host_view_type     = typename TRowMatrix::nonconst_values_host_view_type;
+
+      const size_t maxNnz = mat_->getLocalMaxNumRowEntries();
+      local_inds_host_view_type indices("FastILU local CRS indices", maxNnz);
+      values_host_view_type values("FastILU local CRS values", maxNnz);
+
+      for (LocalOrdinal i = 0; i < numRows; ++i) {
+        size_t numEntries = 0;
+        mat_->getLocalRowCopy(i, indices, values, numEntries);
+        localCrsNonConst_->insertLocalValues(
+            i,
+            numEntries,
+            reinterpret_cast<Scalar*>(values.data()),
+            indices.data());
+      }
+
+      localCrsNonConst_->fillComplete(mat_->getDomainMap(), mat_->getRangeMap());
+      localCrs_            = localCrsNonConst_;
+      localCrsIsOwnedCopy_ = true;
+    }
+
+    crsArraySource = localCrs_.get();
+  }
+
+  {
+    CrsArrayReader<Scalar, ImplScalar, LocalOrdinal, GlobalOrdinal, Node>::getStructure(
+        crsArraySource, localRowPtrsHost_, localRowPtrs_, localColInds_);
+  }
+
+  {
+    CrsArrayReader<Scalar, ImplScalar, LocalOrdinal, GlobalOrdinal, Node>::getValues(
+        crsArraySource, localValues_, localRowPtrsHost_);
+  }
+
   crsCopyTime_ = copyTimer.seconds();
 
-  if (params_.use_metis)
-  {
+  if (params_.use_metis) {
     assert(!params_.blockCrs);
-    const std::string timerNameMetis ("Ifpack2::FastILU::Metis");
-    Teuchos::RCP<Teuchos::Time> timerMetis = Teuchos::TimeMonitor::lookupCounter (timerNameMetis);
-    if (timerMetis.is_null ()) {
-      timerMetis = Teuchos::TimeMonitor::getNewCounter (timerNameMetis);
+    const std::string timerNameMetis("Ifpack2::FastILU::Metis");
+    Teuchos::RCP<Teuchos::Time> timerMetis = Teuchos::TimeMonitor::lookupCounter(timerNameMetis);
+    if (timerMetis.is_null()) {
+      timerMetis = Teuchos::TimeMonitor::getNewCounter(timerNameMetis);
     }
-    Teuchos::TimeMonitor timeMonMetis (*timerMetis);
-    #ifdef HAVE_IFPACK2_METIS
+    Teuchos::TimeMonitor timeMonMetis(*timerMetis);
+#ifdef HAVE_IFPACK2_METIS
     idx_t nrows = localRowPtrsHost_.size() - 1;
     if (nrows > 0) {
       // reorder will convert both graph and perm/iperm to the internal METIS integer type
-      metis_perm_  = MetisArrayHost(Kokkos::ViewAllocateWithoutInitializing("metis_perm"),  nrows);
+      metis_perm_  = MetisArrayHost(Kokkos::ViewAllocateWithoutInitializing("metis_perm"), nrows);
       metis_iperm_ = MetisArrayHost(Kokkos::ViewAllocateWithoutInitializing("metis_iperm"), nrows);
 
       // copy ColInds to host
@@ -230,35 +239,34 @@ initialize()
         // symmetrize
         using OrdinalArrayMirror = typename OrdinalArray::host_mirror_type;
         KokkosKernels::Impl::symmetrize_graph_symbolic_hashmap<
-          OrdinalArrayHost, OrdinalArrayMirror, MetisArrayHost, MetisArrayHost, Kokkos::HostSpace::execution_space>
-          (nrows, localRowPtrsHost_, localColIndsHost_, metis_rowptr, metis_colidx);
+            OrdinalArrayHost, OrdinalArrayMirror, MetisArrayHost, MetisArrayHost, Kokkos::HostSpace::execution_space>(nrows, localRowPtrsHost_, localColIndsHost_, metis_rowptr, metis_colidx);
 
         // remove diagonals
         idx_t old_nnz = nnz = 0;
         for (idx_t i = 0; i < nrows; i++) {
-          for (LocalOrdinal k = old_nnz; k < metis_rowptr(i+1); k++) {
+          for (LocalOrdinal k = old_nnz; k < metis_rowptr(i + 1); k++) {
             if (metis_colidx(k) != i) {
               metis_colidx(nnz) = metis_colidx(k);
               nnz++;
             }
           }
-          old_nnz = metis_rowptr(i+1);
-          metis_rowptr(i+1) = nnz;
+          old_nnz             = metis_rowptr(i + 1);
+          metis_rowptr(i + 1) = nnz;
         }
       } else {
         // copy and remove diagonals
-        metis_rowptr = MetisArrayHost(Kokkos::ViewAllocateWithoutInitializing("metis_rowptr"), nrows+1);
-        metis_colidx = MetisArrayHost(Kokkos::ViewAllocateWithoutInitializing("metis_colidx"), nnz);
-        nnz = 0;
+        metis_rowptr    = MetisArrayHost(Kokkos::ViewAllocateWithoutInitializing("metis_rowptr"), nrows + 1);
+        metis_colidx    = MetisArrayHost(Kokkos::ViewAllocateWithoutInitializing("metis_colidx"), nnz);
+        nnz             = 0;
         metis_rowptr(0) = 0;
         for (idx_t i = 0; i < nrows; i++) {
-          for (LocalOrdinal k = localRowPtrsHost_(i); k < localRowPtrsHost_(i+1); k++) {
+          for (LocalOrdinal k = localRowPtrsHost_(i); k < localRowPtrsHost_(i + 1); k++) {
             if (localColIndsHost_(k) != i) {
               metis_colidx(nnz) = localColIndsHost_(k);
               nnz++;
             }
           }
-          metis_rowptr(i+1) = nnz;
+          metis_rowptr(i + 1) = nnz;
         }
       }
 
@@ -266,136 +274,156 @@ initialize()
       int info = METIS_NodeND(&nrows, metis_rowptr.data(), metis_colidx.data(),
                               NULL, NULL, metis_perm_.data(), metis_iperm_.data());
       if (METIS_OK != info) {
-        throw std::runtime_error(std::string("METIS_NodeND returned info = " + info));
+        throw std::runtime_error(std::string("METIS_NodeND returned info = ") + std::to_string(info));
       }
     }
-    #else
+#else
     throw std::runtime_error(std::string("TPL METIS is not enabled"));
-    #endif
+#endif
   }
 
-  initLocalPrec();  //note: initLocalPrec updates initTime
+  initLocalPrec();  // note: initLocalPrec updates initTime
   initFlag_ = true;
   nInit_++;
 }
 
-template<class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
+template <class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
 bool FastILU_Base<Scalar, LocalOrdinal, GlobalOrdinal, Node>::
-isInitialized() const
-{
+    isInitialized() const {
   return initFlag_;
 }
 
-template<class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
+template <class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
 void FastILU_Base<Scalar, LocalOrdinal, GlobalOrdinal, Node>::
-compute()
-{
-  if(!initFlag_)
-  {
+    compute() {
+  if (!initFlag_) {
     throw std::runtime_error(getName() + ": initialize() must be called before compute()");
   }
 
-  const std::string timerName ("Ifpack2::FastILU::compute");
-  Teuchos::RCP<Teuchos::Time> timer = Teuchos::TimeMonitor::lookupCounter (timerName);
-  if (timer.is_null ()) {
-    timer = Teuchos::TimeMonitor::getNewCounter (timerName);
+  const std::string timerName("Ifpack2::FastILU::compute");
+  Teuchos::RCP<Teuchos::Time> timer = Teuchos::TimeMonitor::lookupCounter(timerName);
+  if (timer.is_null()) {
+    timer = Teuchos::TimeMonitor::getNewCounter(timerName);
   }
-  Teuchos::TimeMonitor timeMon (*timer);
+  Teuchos::TimeMonitor timeMon(*timer);
 
-  //get copy of values array from matrix
+  // get copy of values array from matrix
   Kokkos::Timer copyTimer;
-  CrsArrayReader<Scalar, ImplScalar, LocalOrdinal, GlobalOrdinal, Node>::getValues(mat_.get(), localValues_, localRowPtrsHost_);
-  crsCopyTime_ += copyTimer.seconds(); //add to the time spent getting rowptrs/colinds
-  computeLocalPrec(); //this updates computeTime_
+  const TRowMatrix* crsArraySource = mat_.get();
+
+  if (!isBlockCrs() && !localCrs_.is_null()) {
+    if (localCrsIsOwnedCopy_) {
+      localCrsNonConst_->resumeFill();
+
+      using local_inds_host_view_type = typename TRowMatrix::nonconst_local_inds_host_view_type;
+      using values_host_view_type     = typename TRowMatrix::nonconst_values_host_view_type;
+
+      const LocalOrdinal numRows = static_cast<LocalOrdinal>(mat_->getLocalNumRows());
+      const size_t maxNnz        = mat_->getLocalMaxNumRowEntries();
+      local_inds_host_view_type indices("FastILU refresh CRS indices", maxNnz);
+      values_host_view_type values("FastILU refresh CRS values", maxNnz);
+
+      for (LocalOrdinal i = 0; i < numRows; ++i) {
+        size_t numEntries = 0;
+        mat_->getLocalRowCopy(i, indices, values, numEntries);
+        localCrsNonConst_->replaceLocalValues(
+            i,
+            numEntries,
+            reinterpret_cast<Scalar*>(values.data()),
+            indices.data());
+      }
+
+      localCrsNonConst_->fillComplete(mat_->getDomainMap(), mat_->getRangeMap());
+      localCrs_ = localCrsNonConst_;
+    }
+
+    crsArraySource = localCrs_.get();
+  }
+
+  {
+    CrsArrayReader<Scalar, ImplScalar, LocalOrdinal, GlobalOrdinal, Node>::getValues(
+        crsArraySource, localValues_, localRowPtrsHost_);
+  }
+
+  crsCopyTime_ += copyTimer.seconds();  // add to the time spent getting rowptrs/colinds
+  computeLocalPrec();                   // this updates computeTime_
   computedFlag_ = true;
   nComputed_++;
 }
 
-template<class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
+template <class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
 bool FastILU_Base<Scalar, LocalOrdinal, GlobalOrdinal, Node>::
-isComputed() const
-{
+    isComputed() const {
   return computedFlag_;
 }
 
-template<class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
-Teuchos::RCP<const Tpetra::RowMatrix<Scalar,LocalOrdinal,GlobalOrdinal,Node> >
+template <class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
+Teuchos::RCP<const Tpetra::RowMatrix<Scalar, LocalOrdinal, GlobalOrdinal, Node> >
 FastILU_Base<Scalar, LocalOrdinal, GlobalOrdinal, Node>::
-getMatrix() const
-{
+    getMatrix() const {
   return mat_;
 }
 
-template<class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
+template <class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
 int FastILU_Base<Scalar, LocalOrdinal, GlobalOrdinal, Node>::
-getNumInitialize() const
-{
+    getNumInitialize() const {
   return nInit_;
 }
 
-template<class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
+template <class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
 int FastILU_Base<Scalar, LocalOrdinal, GlobalOrdinal, Node>::
-getNumCompute() const
-{
+    getNumCompute() const {
   return nComputed_;
 }
 
-template<class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
+template <class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
 int FastILU_Base<Scalar, LocalOrdinal, GlobalOrdinal, Node>::
-getNumApply() const
-{
+    getNumApply() const {
   return nApply_;
 }
 
-template<class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
+template <class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
 double FastILU_Base<Scalar, LocalOrdinal, GlobalOrdinal, Node>::
-getInitializeTime() const
-{
+    getInitializeTime() const {
   return initTime_;
 }
 
-template<class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
+template <class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
 double FastILU_Base<Scalar, LocalOrdinal, GlobalOrdinal, Node>::
-getComputeTime() const
-{
+    getComputeTime() const {
   return computeTime_;
 }
 
-template<class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
+template <class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
 double FastILU_Base<Scalar, LocalOrdinal, GlobalOrdinal, Node>::
-getApplyTime() const
-{
+    getApplyTime() const {
   return applyTime_;
 }
 
-template<class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
+template <class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
 double FastILU_Base<Scalar, LocalOrdinal, GlobalOrdinal, Node>::
-getCopyTime() const
-{
+    getCopyTime() const {
   return crsCopyTime_;
 }
 
-template<class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
+template <class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
 void FastILU_Base<Scalar, LocalOrdinal, GlobalOrdinal, Node>::
-checkLocalILU() const
-{
-  //if the underlying type of this doesn't implement checkLocalILU, it's an illegal operation
+    checkLocalILU() const {
+  // if the underlying type of this doesn't implement checkLocalILU, it's an illegal operation
   throw std::runtime_error(std::string("Preconditioner type Ifpack2::Details::") + getName() + " doesn't support checkLocalILU().");
 }
 
-template<class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
+template <class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
 void FastILU_Base<Scalar, LocalOrdinal, GlobalOrdinal, Node>::
-checkLocalIC() const
-{
-  //if the underlying type of this doesn't implement checkLocalIC, it's an illegal operation
+    checkLocalIC() const {
+  // if the underlying type of this doesn't implement checkLocalIC, it's an illegal operation
   throw std::runtime_error(std::string("Preconditioner type Ifpack2::Details::") + getName() + " doesn't support checkLocalIC().");
 }
 
-template<typename Scalar, typename LocalOrdinal, typename GlobalOrdinal, typename Node>
-std::string FastILU_Base<Scalar, LocalOrdinal, GlobalOrdinal, Node>::description() const
-{
+template <typename Scalar, typename LocalOrdinal, typename GlobalOrdinal, typename Node>
+std::string FastILU_Base<Scalar, LocalOrdinal, GlobalOrdinal, Node>::description() const {
   std::ostringstream os;
-  //Output is a YAML dictionary
+  // Output is a YAML dictionary
   os << "\"Ifpack2::Details::" << getName() << "\": {";
   os << "Initialized: " << (isInitialized() ? "true" : "false") << ", ";
   os << "Computed: " << (isComputed() ? "true" : "false") << ", ";
@@ -404,91 +432,88 @@ std::string FastILU_Base<Scalar, LocalOrdinal, GlobalOrdinal, Node>::description
   if (getSpTrsvType() == "Fast") {
     os << "# of triangular solve iterations: " << getNTrisol() << ", ";
   }
-  if(mat_.is_null())
-  {
+  if (mat_.is_null()) {
     os << "Matrix: null";
-  }
-  else
-  {
+  } else {
     os << "Global matrix dimensions: [" << mat_->getGlobalNumRows() << ", " << mat_->getGlobalNumCols() << "]";
     os << ", Global nnz: " << mat_->getGlobalNumEntries();
   }
   return os.str();
 }
 
-template<typename Scalar, typename LocalOrdinal, typename GlobalOrdinal, typename Node>
+template <typename Scalar, typename LocalOrdinal, typename GlobalOrdinal, typename Node>
 void FastILU_Base<Scalar, LocalOrdinal, GlobalOrdinal, Node>::
-setMatrix(const Teuchos::RCP<const TRowMatrix>& A)
-{
-  if(A.is_null())
-  {
+    setMatrix(const Teuchos::RCP<const TRowMatrix>& A) {
+  if (A.is_null()) {
     throw std::invalid_argument(std::string("Ifpack2::Details::") + getName() + "::setMatrix() called with a null matrix. Pass a non-null matrix.");
   }
-  //bmk note: this modeled after RILUK::setMatrix
-  if(mat_.get() != A.get())
-  {
-    mat_ = A;
-    initFlag_ = false;
-    computedFlag_ = false;
+  // bmk note: this modeled after RILUK::setMatrix
+  if (mat_.get() != A.get()) {
+    mat_                 = A;
+    localCrs_            = Teuchos::null;
+    localCrsNonConst_    = Teuchos::null;
+    localCrsIsOwnedCopy_ = false;
+    initFlag_            = false;
+    computedFlag_        = false;
   }
 }
 
-template<typename Scalar, typename LocalOrdinal, typename GlobalOrdinal, typename Node>
+template <typename Scalar, typename LocalOrdinal, typename GlobalOrdinal, typename Node>
 typename FastILU_Base<Scalar, LocalOrdinal, GlobalOrdinal, Node>::Params
 FastILU_Base<Scalar, LocalOrdinal, GlobalOrdinal, Node>::
-Params::getDefaults()
-{
+    Params::getDefaults() {
   Params p;
-  p.use_metis = false;
-  p.sptrsv_algo = FastILU::SpTRSV::Fast;
-  p.nFact = 5;          // # of sweeps for computing fastILU
-  p.nTrisol = 5;        // # of sweeps for applying fastSpTRSV
-  p.level = 0;          // level of ILU
-  p.omega = 1.0;        // damping factor for fastILU
-  p.shift = 0;
-  p.guessFlag = true;
-  p.blockSizeILU = 1;   // # of nonzeros / thread, for fastILU
-  p.blockSize = 1;      // # of rows / thread, for SpTRSV
-  p.blockCrs = false;   // whether to use block CRS for fastILU
-  p.blockCrsSize = 1;   // block size for block CRS
-  p.fillBlocks = false; // whether input matrix needs to be filled
+  p.use_metis    = false;
+  p.sptrsv_algo  = FastILU::SpTRSV::Fast;
+  p.nFact        = 5;    // # of sweeps for computing fastILU
+  p.nTrisol      = 5;    // # of sweeps for applying fastSpTRSV
+  p.level        = 0;    // level of ILU
+  p.omega        = 1.0;  // damping factor for fastILU
+  p.shift        = 0;
+  p.guessFlag    = true;
+  p.blockSizeILU = 1;      // # of nonzeros / thread, for fastILU
+  p.blockSize    = 1;      // # of rows / thread, for SpTRSV
+  p.blockCrs     = false;  // whether to use block CRS for fastILU
+  p.blockCrsSize = 1;      // block size for block CRS
+  p.fillBlocks   = false;  // whether input matrix needs to be filled
   return p;
 }
 
-template<typename Scalar, typename LocalOrdinal, typename GlobalOrdinal, typename Node>
+template <typename Scalar, typename LocalOrdinal, typename GlobalOrdinal, typename Node>
 FastILU_Base<Scalar, LocalOrdinal, GlobalOrdinal, Node>::
-Params::Params(const Teuchos::ParameterList& pL, std::string precType)
-{
+    Params::Params(const Teuchos::ParameterList& pL, std::string precType) {
   *this = getDefaults();
-  //For each parameter, check that if the parameter exists, it has the right type
-  //Then get the value and sanity check it
-  //If the parameter doesn't exist, leave it as default (from Params::getDefaults())
-  //"sweeps" aka nFact
-  #define TYPE_ERROR(name, correctTypeName) {throw std::invalid_argument(precType + "::setParameters(): parameter \"" + name + "\" has the wrong type (must be " + correctTypeName + ")");}
-  #define CHECK_VALUE(param, member, cond, msg) {if(cond) {throw std::invalid_argument(precType + "::setParameters(): parameter \"" + param + "\" has value " + std::to_string(member) + " but " + msg);}}
+// For each parameter, check that if the parameter exists, it has the right type
+// Then get the value and sanity check it
+// If the parameter doesn't exist, leave it as default (from Params::getDefaults())
+//"sweeps" aka nFact
+#define TYPE_ERROR(name, correctTypeName) \
+  { throw std::invalid_argument(precType + "::setParameters(): parameter \"" + name + "\" has the wrong type (must be " + correctTypeName + ")"); }
+#define CHECK_VALUE(param, member, cond, msg)                                                                                                       \
+  {                                                                                                                                                 \
+    if (cond) {                                                                                                                                     \
+      throw std::invalid_argument(precType + "::setParameters(): parameter \"" + param + "\" has value " + std::to_string(member) + " but " + msg); \
+    }                                                                                                                                               \
+  }
 
-  //metis
-  if(pL.isParameter("metis"))
-  {
-    if(pL.isType<bool>("metis"))
+  // metis
+  if (pL.isParameter("metis")) {
+    if (pL.isType<bool>("metis"))
       use_metis = pL.get<bool>("metis");
     else
       TYPE_ERROR("metis", "bool");
   }
 
-  if(pL.isParameter("sweeps"))
-  {
-    if(pL.isType<int>("sweeps"))
-    {
+  if (pL.isParameter("sweeps")) {
+    if (pL.isType<int>("sweeps")) {
       nFact = pL.get<int>("sweeps");
       CHECK_VALUE("sweeps", nFact, nFact < 1, "must have a value of at least 1");
-    }
-    else
+    } else
       TYPE_ERROR("sweeps", "int");
   }
   std::string sptrsv_type = "Fast";
-  if(pL.isParameter("triangular solve type")) {
-    sptrsv_type = pL.get<std::string> ("triangular solve type");
+  if (pL.isParameter("triangular solve type")) {
+    sptrsv_type = pL.get<std::string>("triangular solve type");
   }
   if (sptrsv_type == "Standard Host") {
     sptrsv_algo = FastILU::SpTRSV::StandardHost;
@@ -497,113 +522,94 @@ Params::Params(const Teuchos::ParameterList& pL, std::string precType)
   }
 
   //"triangular solve iterations" aka nTrisol
-  if(pL.isParameter("triangular solve iterations"))
-  {
-    if(pL.isType<int>("triangular solve iterations"))
-    {
+  if (pL.isParameter("triangular solve iterations")) {
+    if (pL.isType<int>("triangular solve iterations")) {
       nTrisol = pL.get<int>("triangular solve iterations");
       CHECK_VALUE("triangular solve iterations", nTrisol, nTrisol < 1, "must have a value of at least 1");
-    }
-    else
+    } else
       TYPE_ERROR("triangular solve iterations", "int");
   }
   //"level"
-  if(pL.isParameter("level"))
-  {
-    if(pL.isType<int>("level"))
-    {
+  if (pL.isParameter("level")) {
+    if (pL.isType<int>("level")) {
       level = pL.get<int>("level");
-    }
-    else if(pL.isType<double>("level"))
-    {
-      //Level can be read as double (like in ILUT), but must be an exact integer
-      //Any integer used for level-of-fill can be represented exactly in double (so use exact compare)
+    } else if (pL.isType<double>("level")) {
+      // Level can be read as double (like in ILUT), but must be an exact integer
+      // Any integer used for level-of-fill can be represented exactly in double (so use exact compare)
       double dval = pL.get<double>("level");
       double ipart;
       double fpart = modf(dval, &ipart);
-      level = ipart;
+      level        = ipart;
       CHECK_VALUE("level", level, fpart != 0, "must be an integral value");
-    }
-    else
-    {
+    } else {
       TYPE_ERROR("level", "int");
     }
     CHECK_VALUE("level", level, level < 0, "must be nonnegative");
   }
-  if(pL.isParameter("damping factor"))
-  {
-    if(pL.isType<double>("damping factor"))
+  if (pL.isParameter("damping factor")) {
+    if (pL.isType<double>("damping factor"))
       omega = pL.get<double>("damping factor");
     else
       TYPE_ERROR("damping factor", "double");
   }
-  if(pL.isParameter("shift"))
-  {
-    if(pL.isType<double>("shift"))
+  if (pL.isParameter("shift")) {
+    if (pL.isType<double>("shift"))
       shift = pL.get<double>("shift");
     else
       TYPE_ERROR("shift", "double");
   }
   //"guess" aka guessFlag
-  if(pL.isParameter("guess"))
-  {
-    if(pL.isType<bool>("guess"))
+  if (pL.isParameter("guess")) {
+    if (pL.isType<bool>("guess"))
       guessFlag = pL.get<bool>("guess");
     else
       TYPE_ERROR("guess", "bool");
   }
   //"block size" aka blkSz
-  if(pL.isParameter("block size for ILU"))
-  {
-    if(pL.isType<int>("block size for ILU"))
-    {
+  if (pL.isParameter("block size for ILU")) {
+    if (pL.isType<int>("block size for ILU")) {
       blockSizeILU = pL.get<int>("block size for ILU");
       CHECK_VALUE("block size for ILU", blockSizeILU, blockSizeILU < 1, "must have a value of at least 1");
-    }
-    else
+    } else
       TYPE_ERROR("block size for ILU", "int");
   }
   //"block size" aka blkSz
-  if(pL.isParameter("block size for SpTRSV"))
-  {
-    if(pL.isType<int>("block size for SpTRSV"))
+  if (pL.isParameter("block size for SpTRSV")) {
+    if (pL.isType<int>("block size for SpTRSV"))
       blockSize = pL.get<int>("block size for SpTRSV");
     else
       TYPE_ERROR("block size for SpTRSV", "int");
   }
   //"block crs" aka blockCrs
-  if(pL.isParameter("block crs"))
-  {
-    if(pL.isType<bool>("block crs"))
+  if (pL.isParameter("block crs")) {
+    if (pL.isType<bool>("block crs"))
       blockCrs = pL.get<bool>("block crs");
     else
       TYPE_ERROR("block crs", "bool");
   }
   //"block crs block size" aka blockCrsSize
-  if(pL.isParameter("block crs block size"))
-  {
-    if(pL.isType<int>("block crs block size"))
+  if (pL.isParameter("block crs block size")) {
+    if (pL.isType<int>("block crs block size"))
       blockCrsSize = pL.get<int>("block crs block size");
     else
       TYPE_ERROR("block crs block size", "int");
   }
   //"fill blocks for input" aka fillBlocks
-  if(pL.isParameter("fill blocks for input"))
-  {
-    if(pL.isType<bool>("fill blocks for input"))
+  if (pL.isParameter("fill blocks for input")) {
+    if (pL.isType<bool>("fill blocks for input"))
       blockCrsSize = pL.get<bool>("fill blocks for input");
     else
       TYPE_ERROR("fill blocks for input", "bool");
   }
 
-  #undef CHECK_VALUE
-  #undef TYPE_ERROR
+#undef CHECK_VALUE
+#undef TYPE_ERROR
 }
 
 #define IFPACK2_DETAILS_FASTILU_BASE_INSTANT(S, L, G, N) \
-template class Ifpack2::Details::FastILU_Base<S, L, G, N>;
+  template class Ifpack2::Details::FastILU_Base<S, L, G, N>;
 
-} //namespace Details
-} //namespace Ifpack2
+}  // namespace Details
+}  // namespace Ifpack2
 
 #endif

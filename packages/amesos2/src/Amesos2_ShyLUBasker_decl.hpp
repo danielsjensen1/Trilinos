@@ -1,44 +1,10 @@
 // @HEADER
-//
-// ***********************************************************************
-//
+// *****************************************************************************
 //           Amesos2: Templated Direct Sparse Solver Package
-//                  Copyright 2011 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
-//
-// ***********************************************************************
-//
+// Copyright 2011 NTESS and the Amesos2 contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 /**
@@ -89,6 +55,7 @@ public:
   typedef SolverCore<Amesos2::ShyLUBasker,Matrix,Vector>       super_type;
 
   // Since typedef's are not inheritted, go grab them
+  typedef typename VectorTraits<Vector>::scalar_t       vector_scalar_type;
   typedef typename super_type::scalar_type                     scalar_type;
   typedef typename super_type::local_ordinal_type              local_ordinal_type;
   typedef typename super_type::global_ordinal_type             global_ordinal_type;
@@ -161,6 +128,14 @@ private:
                  const Teuchos::Ptr<const MultiVecAdapter<Vector> > B) const;
 
 
+  /** 
+   * \brief Prints the status information about the current solver with some level
+   * of verbosity
+   */
+  void describe_impl(Teuchos::FancyOStream &out,
+                     const Teuchos::EVerbosityLevel verbLevel) const;
+
+
   /**
    * \brief Determines whether the shape of the matrix is OK for this solver.
    */
@@ -193,6 +168,11 @@ private:
 
   // Members
   int num_threads;
+  // Partial factorization
+  size_t schur_size;
+  host_ordinal_type_array schur_part;
+  host_value_type_array   schur_out;
+  scalar_type* schur_out_ptr;
 
   // The following Kokkos::View's are persisting storage for A's CCS arrays
   /// Stores the values of the nonzero entries for Umfpack
@@ -204,6 +184,7 @@ private:
 
 
   bool is_contiguous_;
+  bool use_gather_;
 
   typedef typename Kokkos::View<shylubasker_type**, Kokkos::LayoutLeft, 
                                 typename HostExecSpaceType::memory_space> host_solve_array_t;
@@ -216,21 +197,19 @@ private:
   mutable host_solve_array_t bValues_;
   int ldb_;
 
-    /*Handle for ShyLUBasker object*/
- 
-#if defined( HAVE_AMESOS2_KOKKOS ) && defined( KOKKOS_ENABLE_OPENMP )
+  /*Handle for ShyLUBasker object*/
+#if defined( HAVE_AMESOS2_KOKKOS )
   /*
   typedef typename node_type::device_type  kokkos_device;
   typedef typename kokkos_device::execution_space kokkos_exe;
   static_assert(std::is_same<kokkos_exe,Kokkos::OpenMP>::value,
   "Kokkos node type not support by experimental ShyLUBasker Amesos2");
   */
-  typedef Kokkos::OpenMP Exe_Space;
+  typedef Kokkos::DefaultHostExecutionSpace Exe_Space;
    ::BaskerNS::BaskerTrilinosInterface<local_ordinal_type, shylubasker_dtype, Exe_Space> *ShyLUbasker;
 #else
-  #pragma message("Amesos_ShyLUBasker_decl Error: ENABLED SHYLU_NODEBASKER BUT NOT KOKKOS or NOT OPENMP!")
+  #pragma message("Amesos_ShyLUBasker_decl Error: ENABLED SHYLU_NODEBASKER BUT NOT KOKKOS!")
 #endif
-
 
 }; // End class ShyLUBasker
 

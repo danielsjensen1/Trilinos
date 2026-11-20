@@ -1,43 +1,11 @@
-//@HEADER
-// ************************************************************************
-//
+// @HEADER
+// *****************************************************************************
 //                 Belos: Block Linear Solvers Package
-//                  Copyright 2004 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
-//
-// ************************************************************************
-//@HEADER
+// Copyright 2004-2016 NTESS and the Belos contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
 //
 
 #ifndef BELOS_STATUS_TEST_RESNORM_OUTPUT_HPP
@@ -70,13 +38,13 @@ namespace Belos {
     The frequency and occasion of the printing can be dictated according to some parameters passed to 
     StatusTestResNormOutput::StatusTestResNormOutput().
   */
-template <class ScalarType, class MV, class OP>
-class StatusTestResNormOutput : public StatusTestOutput<ScalarType,MV,OP> {
+template <class ScalarType, class MV, class OP, class DM = DefaultDenseMatrix<int,ScalarType>>
+class StatusTestResNormOutput : public StatusTestOutput<ScalarType,MV,OP,DM> {
 
-  typedef MultiVecTraits<ScalarType,MV> MVT;
-  typedef Belos::StatusTestCombo<ScalarType,MV,OP>  StatusTestCombo_t;
-  typedef Belos::StatusTestResNorm<ScalarType,MV,OP>  StatusTestResNorm_t;
-  typedef Belos::StatusTestMaxIters<ScalarType,MV,OP>  StatusTestMaxIters_t;
+  typedef MultiVecTraits<ScalarType,MV,DM> MVT;
+  typedef Belos::StatusTestCombo<ScalarType,MV,OP,DM>  StatusTestCombo_t;
+  typedef Belos::StatusTestResNorm<ScalarType,MV,OP,DM>  StatusTestResNorm_t;
+  typedef Belos::StatusTestMaxIters<ScalarType,MV,OP,DM>  StatusTestMaxIters_t;
 
  public:
   //! @name Constructors/destructors
@@ -98,7 +66,7 @@ class StatusTestResNormOutput : public StatusTestOutput<ScalarType,MV,OP> {
    *
    */
   StatusTestResNormOutput(const Teuchos::RCP<OutputManager<ScalarType> > &printer, 
-			Teuchos::RCP<StatusTest<ScalarType,MV,OP> > test,
+			Teuchos::RCP<StatusTest<ScalarType,MV,OP,DM> > test,
 			int mod = 1,
 			int printStates = Passed)
     : printer_(printer), 
@@ -142,14 +110,14 @@ class StatusTestResNormOutput : public StatusTestOutput<ScalarType,MV,OP> {
     
     \return ::StatusType indicating whether the underlying test passed or failed.
   */
-  StatusType checkStatus( Iteration<ScalarType,MV,OP>* solver ) 
+  StatusType checkStatus( Iteration<ScalarType,MV,OP,DM>* solver ) 
   {
     TEUCHOS_TEST_FOR_EXCEPTION(iterTest_ == Teuchos::null,StatusTestError,"StatusTestResNormOutput::checkStatus():  iteration test pointer is null.");
     TEUCHOS_TEST_FOR_EXCEPTION(resTestVec_.size() == 0,StatusTestError,"StatusTestResNormOutput::checkStatus():  residual test pointer is null.");
     state_ = test_->checkStatus(solver);
 
     // Update some information for the header, if it has not printed or the linear system has changed.
-    LinearProblem<ScalarType,MV,OP> currProb = solver->getProblem();
+    LinearProblem<ScalarType,MV,OP,DM> currProb = solver->getProblem();
     //if (!headerPrinted_ || currLSNum_ != currProb.getLSNumber()) {
     if (currLSNum_ != currProb.getLSNumber()) {
       currLSNum_ = currProb.getLSNumber();
@@ -197,12 +165,12 @@ class StatusTestResNormOutput : public StatusTestOutput<ScalarType,MV,OP> {
    *
    *  \note This also resets the test status to ::Undefined.
    */
-  void setChild(Teuchos::RCP<StatusTest<ScalarType,MV,OP> > test) {
+  void setChild(Teuchos::RCP<StatusTest<ScalarType,MV,OP,DM> > test) {
 
     // First check to see if this test is a combination test
     Teuchos::RCP<StatusTestCombo_t> comboTest = Teuchos::rcp_dynamic_cast<StatusTestCombo_t>(test);
     TEUCHOS_TEST_FOR_EXCEPTION(comboTest == Teuchos::null,StatusTestError,"StatusTestResNormOutput():  test must be a Belos::StatusTestCombo.");
-    std::vector<Teuchos::RCP<StatusTest<ScalarType,MV,OP> > > tmpVec = comboTest->getStatusTests();
+    std::vector<Teuchos::RCP<StatusTest<ScalarType,MV,OP,DM> > > tmpVec = comboTest->getStatusTests();
     
     // Get the number of tests.
     int numTests = tmpVec.size();
@@ -248,7 +216,7 @@ class StatusTestResNormOutput : public StatusTestOutput<ScalarType,MV,OP> {
   }
  
   //! \brief Get child test.
-  Teuchos::RCP<StatusTest<ScalarType,MV,OP> > getChild() const {
+  Teuchos::RCP<StatusTest<ScalarType,MV,OP,DM> > getChild() const {
     return test_;
   }
 
@@ -350,13 +318,13 @@ class StatusTestResNormOutput : public StatusTestOutput<ScalarType,MV,OP> {
     Teuchos::RCP<OutputManager<ScalarType> > printer_;
 
     // Overall status test.
-    Teuchos::RCP<StatusTest<ScalarType,MV,OP> > test_;
+    Teuchos::RCP<StatusTest<ScalarType,MV,OP,DM> > test_;
 
     // Iteration test (as passed in).
-    Teuchos::RCP<StatusTestMaxIters<ScalarType,MV,OP> > iterTest_;
+    Teuchos::RCP<StatusTestMaxIters<ScalarType,MV,OP,DM> > iterTest_;
 
     //! Vector of residual status tests
-    std::vector<Teuchos::RCP<StatusTestResNorm<ScalarType,MV,OP> > > resTestVec_;
+    std::vector<Teuchos::RCP<StatusTestResNorm<ScalarType,MV,OP,DM> > > resTestVec_;
 
     std::string solverDesc_;
     std::string precondDesc_;
@@ -371,5 +339,18 @@ class StatusTestResNormOutput : public StatusTestOutput<ScalarType,MV,OP> {
 };
 
 } // end of Belos namespace
+
+#ifdef HAVE_BELOS_TPETRA
+#include "BelosTpetraETIHelpers.hpp"
+
+#define BELOS_TPETRA_STATUSTESTRESNORMOUTPUT_NOEXTERN_CALL(SC, LO, GO, NT)            \
+  BELOS_TPETRA_CALL(Belos::StatusTestResNormOutput, SC, LO, GO, NT)
+
+#define BELOS_TPETRA_STATUSTESTRESNORMOUTPUT_EXTERN_CALL(SC, LO, GO, NT)              \
+  BELOS_TPETRA_EXTERN_CALL(Belos::StatusTestResNormOutput, SC, LO, GO, NT)
+
+TPETRA_INSTANTIATE_SLGN_NO_ORDINAL_SCALAR(BELOS_TPETRA_STATUSTESTRESNORMOUTPUT_EXTERN_CALL)
+#endif
+
 
 #endif /* BELOS_STATUS_TEST_RESNORM_OUTPUT_HPP */

@@ -1,56 +1,20 @@
 // @HEADER
-//
-// ***********************************************************************
-//
+// *****************************************************************************
 //        MueLu: A package for multigrid based preconditioning
-//                  Copyright 2012 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact
-//                    Jonathan Hu       (jhu@sandia.gov)
-//                    Andrey Prokopenko (aprokop@sandia.gov)
-//                    Ray Tuminaro      (rstumin@sandia.gov)
-//
-// ***********************************************************************
-//
+// Copyright 2012 NTESS and the MueLu contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
+
 #include "MueLu_Utilities_def.hpp"
 
 #include <string>
 #include <locale>
-
-#ifdef HAVE_MUELU_EPETRAEXT
-#include "EpetraExt_Transpose_RowMatrix.h"
+#ifdef _WIN32
+#define NOMINMAX
 #endif
+#include <algorithm>
 
 #ifdef HAVE_MPI
 #include <mpi.h>
@@ -87,11 +51,14 @@ long ExtractNonSerializableData(const Teuchos::ParameterList& inList, Teuchos::P
       const ParameterList& levelList = inList.sublist(levelName);
       for (ParameterList::ConstIterator levelListEntry = levelList.begin(); levelListEntry != levelList.end(); levelListEntry++) {
         const std::string& name = levelListEntry->first;
-        if (name == "A" || name == "P" || name == "R" || name == "M" || name == "Mdiag" || name == "K" || name == "Nullspace" || name == "Coordinates" || name == "D0" || name == "Dk_1" || name == "Dk_2" || name == "Mk_one" || name == "Mk_1_one" || name == "M1_beta" || name == "M1_alpha" || name == "invMk_1_invBeta" || name == "invMk_2_invAlpha" || name == "M1" || name == "Ms" || name == "M0inv" || name == "Pnodal" || name == "NodeMatrix" || name == "NodeAggMatrix" || name == "Node Comm" || name == "DualNodeID2PrimalNodeID"
-#ifdef HAVE_MUELU_INTREPID2  // For the IntrepidPCoarsenFactory
+        // Check if the name starts with "Nullspace", has length > 9, and the last character is a digit
+        bool isNumberedNullspace = (name.rfind("Nullspace", 0) == 0 && name.length() > 9 && std::isdigit(name.back(), std::locale::classic()));
+
+        if (name == "A" || name == "P" || name == "R" || name == "M" || name == "Mdiag" || name == "K" || name == "Nullspace" || name == "Material" || name == "Coordinates" || name == "BlockNumber" || name == "D0" || name == "Dk_1" || name == "Dk_2" || name == "Mk_one" || name == "Mk_1_one" || name == "M1_beta" || name == "M1_alpha" || name == "invMk_1_invBeta" || name == "invMk_2_invAlpha" || name == "M1" || name == "Ms" || name == "M0inv" || name == "Pnodal" || name == "NodeMatrix" || name == "NodeAggMatrix" || name == "CurlCurl" || name == "Node Comm" || name == "DualNodeID2PrimalNodeID" || name == "Minv" || name == "MinvA"
+#if defined(HAVE_MUELU_INTREPID2) && defined(HAVE_MUELU_EXPERIMENTAL)  // For the IntrepidPCoarsenFactory
             || name == "pcoarsen: element to node map"
 #endif
-            || name == "output stream") {
+            || name == "output stream" || isNumberedNullspace) {
           nonSerialList.sublist(levelName).setEntry(name, levelListEntry->second);
         }
 #ifdef HAVE_MUELU_MATLAB
@@ -253,7 +220,8 @@ Teuchos::RCP<const Teuchos::Comm<int> > GenerateNodeComm(RCP<const Teuchos::Comm
   int len;
   MPI_Get_processor_name(hostname, &len);
   struct hostent* host = gethostbyname(hostname);
-  int myaddr           = (int)inet_addr(inet_ntoa(*(struct in_addr*)host->h_addr));
+  TEUCHOS_TEST_FOR_EXCEPTION(host == nullptr, std::runtime_error, "Unable to retrieve host information.");
+  int myaddr = (int)inet_addr(inet_ntoa(*(struct in_addr*)host->h_addr));
 
   // All-to-all exchange of address integers
   std::vector<int> addressList(numRanks);

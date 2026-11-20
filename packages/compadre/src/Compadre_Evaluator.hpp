@@ -1,3 +1,11 @@
+// @HEADER
+// *****************************************************************************
+//     Compadre: COMpatible PArticle Discretization and REmap Toolkit
+//
+// Copyright 2018 NTESS and the Compadre contributors.
+// SPDX-License-Identifier: BSD-2-Clause
+// *****************************************************************************
+// @HEADER
 #ifndef _COMPADRE_EVALUATOR_HPP_
 #define _COMPADRE_EVALUATOR_HPP_
 
@@ -327,7 +335,7 @@ public:
 
             const int target_index = teamMember.league_rank();
 
-            scratch_matrix_right_type T
+            device_unmanaged_matrix_right_type T
                     (tangent_directions.data() + TO_GLOBAL(target_index)*TO_GLOBAL(global_dimensions)*TO_GLOBAL(global_dimensions), 
                      global_dimensions, global_dimensions);
             teamMember.team_barrier();
@@ -586,12 +594,12 @@ public:
 
                 const int target_index = teamMember.league_rank();
 
-                scratch_matrix_right_type T (tangent_directions.data() 
+                device_unmanaged_matrix_right_type T (tangent_directions.data() 
                             + TO_GLOBAL(target_index)*TO_GLOBAL(global_dimensions)*TO_GLOBAL(global_dimensions), 
                          global_dimensions, global_dimensions);
                 
-                scratch_matrix_right_type Coeffs;
-                Coeffs = scratch_matrix_right_type(coeffs.data() 
+                device_unmanaged_matrix_right_type Coeffs;
+                Coeffs = device_unmanaged_matrix_right_type(coeffs.data() 
                     + TO_GLOBAL(target_index)*TO_GLOBAL(coefficient_memory_layout_dims_device(0))
                         *TO_GLOBAL(coefficient_memory_layout_dims_device(1)),
                     coefficient_memory_layout_dims_device(0), coefficient_memory_layout_dims_device(1));

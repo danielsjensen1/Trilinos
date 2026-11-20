@@ -1,46 +1,10 @@
 // @HEADER
-//
-// ***********************************************************************
-//
+// *****************************************************************************
 //   Zoltan2: A package of combinatorial algorithms for scientific computing
-//                  Copyright 2012 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Karen Devine      (kddevin@sandia.gov)
-//                    Erik Boman        (egboman@sandia.gov)
-//                    Siva Rajamanickam (srajama@sandia.gov)
-//
-// ***********************************************************************
-//
+// Copyright 2012 NTESS and the Zoltan2 contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 /*! \file UserInputForTests.hpp
@@ -50,6 +14,7 @@
 #ifndef USERINPUTFORTESTS
 #define USERINPUTFORTESTS
 
+#include "Tpetra_Access.hpp"
 #include "Zoltan2_TestHelpers.hpp"
 #include <Zoltan2_XpetraTraits.hpp>
 #include <Zoltan2_Typedefs.hpp>
@@ -103,8 +68,6 @@ using namespace Zoltan2_TestingFramework;
  *   \li a Tpetra::CrsGraph
  *   \li a Xpetra::CrsMatrix
  *   \li a Xpetra::CrsGraph
- *   \li a Epetra_CrsMatrix (if built with double, int, int)
- *   \li a Epetra_CrsGraph  (if built with double, int, int)
  *
  *  Retrieve any of the these with the same map but with random data:
  *   \li a Tpetra::Vector
@@ -225,15 +188,6 @@ public:
   PamgenMesh * getPamGenMesh(){return this->pamgen_mesh.operator->();}
 #endif
 
-#ifdef HAVE_EPETRA_DATA_TYPES
-  RCP<Epetra_CrsGraph> getUIEpetraCrsGraph();
-
-  RCP<Epetra_CrsMatrix> getUIEpetraCrsMatrix();
-
-  RCP<Epetra_Vector> getUIEpetraVector();
-
-  RCP<Epetra_MultiVector> getUIEpetraMultiVector(int nvec);
-#endif
   bool hasInput();
 
   bool hasInputDataType(const string &input_type);
@@ -261,16 +215,6 @@ public:
   bool hasUIXpetraMultiVector();
 
   bool hasPamgenMesh();
-#ifdef HAVE_EPETRA_DATA_TYPES
-  bool hasUIEpetraCrsGraph();
-
-  bool hasUIEpetraCrsMatrix();
-
-  bool hasUIEpetraVector();
-
-  bool hasUIEpetraMultiVector();
-
-#endif
 
 private:
 
@@ -289,12 +233,6 @@ private:
   RCP<tMVector_t> xyz_;
   RCP<tMVector_t> vtxWeights_;
   RCP<tMVector_t> edgWeights_;
-
-#ifdef HAVE_EPETRA_DATA_TYPES
-  RCP<const Epetra_Comm> ecomm_;
-  RCP<Epetra_CrsMatrix> eM_;
-  RCP<Epetra_CrsGraph> eG_;
-#endif
 
   // Read a Matrix Market file into M_
   // using Tpetra::MatrixMarket::Reader.
@@ -390,9 +328,6 @@ UserInputForTests::UserInputForTests(string path, string testData,
                                      bool debugInfo, bool distributeInput):
 verbose_(debugInfo), tcomm_(c), havePamgenMesh(false),
 M_(), xM_(), xyz_(), vtxWeights_(), edgWeights_(),
-#ifdef HAVE_EPETRA_DATA_TYPES
-ecomm_(), eM_(), eG_(),
-#endif
 chaco_offset(0), chaco_break_pnt(CHACO_LINE_LENGTH)
 {
   bool zoltan1 = false;
@@ -404,10 +339,6 @@ chaco_offset(0), chaco_break_pnt(CHACO_LINE_LENGTH)
     readZoltanTestData(path, testData, distributeInput);
   else
     readMatrixMarketFile(path, testData);
-
-#ifdef HAVE_EPETRA_DATA_TYPES
-  ecomm_ = Xpetra::toEpetra(c);
-#endif
 }
 
 UserInputForTests::UserInputForTests(int x, int y, int z,
@@ -417,9 +348,6 @@ UserInputForTests::UserInputForTests(int x, int y, int z,
                                      bool distributeInput):
 verbose_(debugInfo), tcomm_(c), havePamgenMesh(false),
 M_(), xM_(), xyz_(), vtxWeights_(), edgWeights_(),
-#ifdef HAVE_EPETRA_DATA_TYPES
-ecomm_(), eM_(), eG_(),
-#endif
 chaco_offset(0), chaco_break_pnt(CHACO_LINE_LENGTH)
 {
   if (matrixType.size() == 0){
@@ -441,19 +369,12 @@ chaco_offset(0), chaco_break_pnt(CHACO_LINE_LENGTH)
   }
 
   buildCrsMatrix(x, y, z, matrixType, distributeInput);
-
-#ifdef HAVE_EPETRA_DATA_TYPES
-  ecomm_ = Xpetra::toEpetra(c);
-#endif
 }
 
 UserInputForTests::UserInputForTests(const ParameterList &pList,
                                      const RCP<const Comm<int> > &c):
 tcomm_(c), havePamgenMesh(false),
 M_(), xM_(), xyz_(), vtxWeights_(), edgWeights_(),
-#ifdef HAVE_EPETRA_DATA_TYPES
-ecomm_(), eM_(), eG_(),
-#endif
 chaco_offset(0), chaco_break_pnt(CHACO_LINE_LENGTH)
 {
 
@@ -534,10 +455,6 @@ chaco_offset(0), chaco_break_pnt(CHACO_LINE_LENGTH)
     std::cerr << "Input file block undefined!" << std::endl;
   }
 
-#ifdef HAVE_EPETRA_DATA_TYPES
-  ecomm_ = Xpetra::toEpetra(c);
-#endif
-
 }
 
 
@@ -613,90 +530,6 @@ RCP<Zoltan2_TestingFramework::xMVector_t> UserInputForTests::getUIXpetraMultiVec
   return Zoltan2::XpetraTraits<tMVector_t>::convertToXpetra(tMV);
 }
 
-#ifdef HAVE_EPETRA_DATA_TYPES
-RCP<Epetra_CrsGraph> UserInputForTests::getUIEpetraCrsGraph()
-{
-  if (M_.is_null())
-    throw std::runtime_error("could not read mtx file");
-  RCP<const tcrsGraph_t> tgraph = M_->getCrsGraph();
-  RCP<const Tpetra::Map<zlno_t, zgno_t> > trowMap = tgraph->getRowMap();
-  RCP<const Tpetra::Map<zlno_t, zgno_t> > tcolMap = tgraph->getColMap();
-
-  int nElts = static_cast<int>(trowMap->getGlobalNumElements());
-  int nMyElts = static_cast<int>(trowMap->getLocalNumElements());
-  int base = 0;
-  ArrayView<const int> gids = trowMap->getLocalElementList();
-
-  Epetra_BlockMap erowMap(nElts, nMyElts,
-                          gids.getRawPtr(), 1, base, *ecomm_);
-
-  Array<int> rowSize(nMyElts);
-  for (int i=0; i < nMyElts; i++){
-    rowSize[i] = static_cast<int>(M_->getNumEntriesInLocalRow(i));
-  }
-
-  size_t maxRow = M_->getLocalMaxNumRowEntries();
-  Array<int> colGids(maxRow);
-
-  typename tcrsGraph_t::local_inds_host_view_type colLid;
-  eG_ = rcp(new Epetra_CrsGraph(Copy, erowMap,
-                                rowSize.getRawPtr(), true));
-
-  for (int i=0; i < nMyElts; i++){
-    tgraph->getLocalRowView(i, colLid);
-    for (size_t j=0; j < colLid.extent(0); j++)
-      colGids[j] = tcolMap->getGlobalElement(colLid[j]);
-    eG_->InsertGlobalIndices(gids[i], rowSize[i], colGids.getRawPtr());
-  }
-  eG_->FillComplete();
-  return eG_;
-}
-
-RCP<Epetra_CrsMatrix> UserInputForTests::getUIEpetraCrsMatrix()
-{
-  if (M_.is_null())
-    throw std::runtime_error("could not read mtx file");
-  RCP<Epetra_CrsGraph> egraph = getUIEpetraCrsGraph();
-  eM_ = rcp(new Epetra_CrsMatrix(Copy, *egraph));
-
-  size_t maxRow = M_->getLocalMaxNumRowEntries();
-  int nrows = egraph->NumMyRows();
-  const Epetra_BlockMap &rowMap = egraph->RowMap();
-  const Epetra_BlockMap &colMap = egraph->ColMap();
-  Array<int> colGid(maxRow);
-  for (int i=0; i < nrows; i++){
-    typename tcrsMatrix_t::local_inds_host_view_type colLid;
-    typename tcrsMatrix_t::values_host_view_type nz;
-    M_->getLocalRowView(i, colLid, nz);
-    size_t rowSize = colLid.size();
-    int rowGid = rowMap.GID(i);
-    for (size_t j=0; j < rowSize; j++){
-      colGid[j] = colMap.GID(colLid[j]);
-    }
-    eM_->InsertGlobalValues(rowGid, (int)rowSize, nz.data(), colGid.getRawPtr());
-  }
-  eM_->FillComplete();
-  return eM_;
-}
-
-RCP<Epetra_Vector> UserInputForTests::getUIEpetraVector()
-{
-  RCP<Epetra_CrsGraph> egraph = getUIEpetraCrsGraph();
-  RCP<Epetra_Vector> V = rcp(new Epetra_Vector(egraph->RowMap()));
-  V->Random();
-  return V;
-}
-
-RCP<Epetra_MultiVector> UserInputForTests::getUIEpetraMultiVector(int nvec)
-{
-  RCP<Epetra_CrsGraph> egraph = getUIEpetraCrsGraph();
-  RCP<Epetra_MultiVector> mV =
-  rcp(new Epetra_MultiVector(egraph->RowMap(), nvec));
-  mV->Random();
-  return mV;
-}
-#endif
-
 bool UserInputForTests::hasInput()
 {
   // find out if an input source has been loaded
@@ -726,16 +559,6 @@ bool UserInputForTests::hasInputDataType(const string &input_type)
     return this->hasUIXpetraCrsGraph();
   else if(input_type == "xpetra_crs_matrix")
     return this->hasUIXpetraCrsMatrix();
-#ifdef HAVE_EPETRA_DATA_TYPES
-  else if(input_type == "epetra_vector")
-    return this->hasUIEpetraVector();
-  else if(input_type == "epetra_multivector")
-    return this->hasUIEpetraMultiVector();
-  else if(input_type == "epetra_crs_graph")
-    return this->hasUIEpetraCrsGraph();
-  else if(input_type == "epetra_crs_matrix")
-    return this->hasUIEpetraCrsMatrix();
-#endif
 
   return false;
 }
@@ -799,28 +622,6 @@ bool UserInputForTests::hasPamgenMesh()
 {
   return this->havePamgenMesh;
 }
-
-#ifdef HAVE_EPETRA_DATA_TYPES
-bool UserInputForTests::hasUIEpetraCrsGraph()
-{
-  return M_.is_null() ? false : true;
-}
-
-bool UserInputForTests::hasUIEpetraCrsMatrix()
-{
-  return hasUIEpetraCrsGraph();
-}
-
-bool UserInputForTests::hasUIEpetraVector()
-{
-  return hasUIEpetraCrsGraph();
-}
-
-bool UserInputForTests::hasUIEpetraMultiVector()
-{
-  return hasUIEpetraCrsGraph();
-}
-#endif
 
 void UserInputForTests::getUIRandomData(unsigned int seed, zlno_t length,
                                         zscalar_t min, zscalar_t max,
@@ -953,7 +754,13 @@ void UserInputForTests::readGeometricGenTestData(string path,
     }
 
     vtxWeights_ = RCP<tMVector_t>(new tMVector_t(mp, weightView.view(0, numWeightsPerCoord),
-                                                 numWeightsPerCoord));
+                                                  numWeightsPerCoord));
+    for(int i = 0; i < coord_dim; ++i) delete [] coords[i];
+    delete [] coords;
+    if(numWeightsPerCoord) {
+      for(int i = 0; i < numWeightsPerCoord; ++i) delete [] weight[i];
+      delete [] weight;
+    }
   }
 }
 
@@ -2742,44 +2549,24 @@ void UserInputForTests::setPamgenCoordinateMV()
 //  zgno_t numGlobalPoints = pamgen_mesh->num_nodes_global;
   zgno_t numelements = pamgen_mesh->num_elem;
   zgno_t numGlobalElements = pamgen_mesh->num_elems_global;
-  // allocate and set an array of coordinate arrays
-  zscalar_t **elem_coords = new zscalar_t * [dimension];
-  for(int i = 0; i < dimension; ++i){
-    elem_coords[i] = new zscalar_t[numelements];
-    double *tmp = &pamgen_mesh->element_coord[i*numelements];
-    for (int j = 0; j < numelements; j++) elem_coords[i][j] = tmp[j];
-  }
 
   // make a Tpetra map
-  RCP<Tpetra::Map<zlno_t, zgno_t, znode_t> > mp;
-  //   mp = rcp(new map_t(numGlobalElements, numelements, 0, this->tcomm_)); // constructo 1
-
-//  Array<zgno_t>::size_type numEltsPerProc = numelements;
   Array<zgno_t> elementList(numelements);
   for (Array<zgno_t>::size_type k = 0; k < numelements; ++k) {
     elementList[k] = pamgen_mesh->element_order_map[k];
   }
-
-  mp = rcp (new map_t (numGlobalElements, elementList, 0, this->tcomm_)); // constructor 2
-
-
-  // make an array of array views containing the coordinate data
-  Teuchos::Array<Teuchos::ArrayView<const zscalar_t> > coordView(dimension);
-  for (int i = 0; i < dimension; i++){
-    if(numelements > 0){
-      Teuchos::ArrayView<const zscalar_t> a(elem_coords[i], numelements);
-      coordView[i] = a;
-    }
-    else {
-      Teuchos::ArrayView<const zscalar_t> a;
-      coordView[i] = a;
-    }
-  }
+  auto mp = rcp (new map_t (numGlobalElements, elementList, 0, this->tcomm_));
 
   // set the xyz_ multivector
-  xyz_ = RCP<tMVector_t>(new
-                         tMVector_t(mp, coordView.view(0, dimension),
-                                    dimension));
+  xyz_ = RCP<tMVector_t>(new tMVector_t(mp, dimension, false));
+  {
+    auto lclXYZ = xyz_->getLocalViewHost(Tpetra::Access::OverwriteAll);
+    for(int i = 0; i < dimension; ++i){
+      double *tmp = &pamgen_mesh->element_coord[i*numelements];
+      for (int j = 0; j < numelements; j++)
+        lclXYZ(j, i) = tmp[j];
+    }
+  }
 }
 
 void UserInputForTests::setPamgenAdjacencyGraph()

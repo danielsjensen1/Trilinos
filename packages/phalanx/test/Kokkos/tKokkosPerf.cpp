@@ -1,59 +1,23 @@
 // @HEADER
-// ************************************************************************
-//
-//        Phalanx: A Partial Differential Equation Field Evaluation
+// *****************************************************************************
+//        Phalanx: A Partial Differential Equation Field Evaluation 
 //       Kernel for Flexible Management of Complex Dependency Chains
-//                    Copyright 2008 Sandia Corporation
 //
-// Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
-// license for use of this work by or on behalf of the U.S. Government.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Roger Pawlowski (rppawlo@sandia.gov), Sandia
-// National Laboratories.
-//
-// ************************************************************************
+// Copyright 2008 NTESS and the Phalanx contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #include "Teuchos_Assert.hpp"
 #include "Teuchos_UnitTestHarness.hpp"
 #include "Teuchos_TimeMonitor.hpp"
 #include "Phalanx_KokkosDeviceTypes.hpp"
-#include <Phalanx_any.hpp>
 #include "Phalanx_Print.hpp"
 #include <unordered_map>
 #include <map>
 
 #include "Sacado.hpp"
-#include "Kokkos_View_Fad.hpp"
-#include "Kokkos_DynRankView.hpp"
-#include "Kokkos_DynRankView_Fad.hpp"
+#include "Sacado_Fad_Kokkos.hpp"
 #include "KokkosSparse_CrsMatrix.hpp"
 
 #ifdef PHX_ENABLE_KOKKOS_AMT
@@ -72,7 +36,7 @@ namespace phalanx_test {
     Kokkos::View<Scalar*,Layout,Device,Props...> k_;
 
   public:
-    typedef PHX::Device execution_space;
+    typedef PHX::ExecutionSpace execution_space;
 
     ComputeRhoFlat(Kokkos::View<Scalar**,Layout,Device,Props...> &rho,
 		   Kokkos::View<Scalar**,Layout,Device,Props...> &P,
@@ -100,7 +64,7 @@ namespace phalanx_test {
     Kokkos::View<Scalar*,Layout,Device,Props...> k_;
 
   public:
-    typedef PHX::Device execution_space;
+    typedef PHX::ExecutionSpace execution_space;
 
     ComputeRhoHierarchic(Kokkos::View<Scalar**,Layout,Device,Props...> &rho,
 			 Kokkos::View<Scalar**,Layout,Device,Props...> &P,
@@ -112,11 +76,12 @@ namespace phalanx_test {
       , k_(k) {}
 
     KOKKOS_INLINE_FUNCTION
-    void operator () (const typename Kokkos::TeamPolicy<Device>::member_type& thread) const
+    void operator () (const typename Kokkos::TeamPolicy<
+                        typename Device::execution_space>::member_type& thread) const
     {
       const int i = thread.league_rank();
       const int num_qp = rho_.extent(1);
-      Kokkos::parallel_for(Kokkos::TeamThreadRange(thread,0,num_qp), [=] (const int& ip) {
+      Kokkos::parallel_for(Kokkos::TeamThreadRange(thread,0,num_qp), [&] (const int& ip) {
 	rho_(i,ip) = k_(0) * P_(i,ip) / T_(i,ip);
       });
     }
@@ -130,24 +95,15 @@ namespace phalanx_test {
     const int deriv_dim = 128;
 
     using FadType = Sacado::Fad::DFad<double>;
-    using DefaultLayout = typename PHX::Device::array_layout;
+    using DefaultLayout = typename PHX::ExecutionSpace::array_layout;
     // using DevLayout = DefaultLayout; // use preferred layout for device
     // using DevLayout = Kokkos::LayoutLeft;
     // using DevLayout = Kokkos::LayoutRight;
-#if defined(SACADO_VIEW_CUDA_HIERARCHICAL_DFAD)
-
-#if defined(KOKKOS_ENABLE_CUDA)
-    std::cout << "\n\nKOKKOS_ENABLE_CUDA = true" << std::endl;
-    const static int FadStride = 32;
+#if defined(SACADO_GPU_HIERARCHICAL_DFAD) || defined(SACADO_GPU_HIERARCHICAL)
+    std::cout << "\n\nHierarchical parallelism = true" << std::endl;
+    using DevLayout = PHX::DefaultFadLayout;
 #else
-    std::cout << "KOKKOS_ENABLE_CUDA = false" << std::endl;
-    const static int FadStride = 1;
-#endif
-
-    std::cout << "SACADO_VIEW_CUDA_HIERARCHICAL_DFAD = true" << std::endl;
-    using DevLayout = Kokkos::LayoutContiguous<DefaultLayout,FadStride>; // use Sacado continguous (best for cuda)
-#else
-    std::cout << "SACADO_VIEW_CUDA_HIERARCHICAL_DFAD = false" << std::endl;
+    std::cout << "\n\nHierarchical parallelism = false" << std::endl;
     using DevLayout = DefaultLayout;
 #endif
 
@@ -163,12 +119,12 @@ namespace phalanx_test {
     T = Kokkos::View<FadType**,DevLayout,PHX::Device>("T",num_cells,num_ip,deriv_dim);
     k = Kokkos::View<FadType*,DevLayout,PHX::Device>("k",1,deriv_dim);
 
-    Kokkos::View<FadType**,DevLayout,PHX::Device>::HostMirror host_P;
-    Kokkos::View<FadType**,DevLayout,PHX::Device>::HostMirror host_T;
-    Kokkos::View<FadType*,DevLayout,PHX::Device>::HostMirror host_k;
-    host_P = Kokkos::View<FadType**,DevLayout,PHX::Device>::HostMirror("host_P",num_cells,num_ip,deriv_dim);
-    host_T = Kokkos::View<FadType**,DevLayout,PHX::Device>::HostMirror("host_T",num_cells,num_ip,deriv_dim);
-    host_k = Kokkos::View<FadType*,DevLayout,PHX::Device>::HostMirror("host_k",1,deriv_dim);
+    Kokkos::View<FadType**,DevLayout,PHX::Device>::host_mirror_type host_P;
+    Kokkos::View<FadType**,DevLayout,PHX::Device>::host_mirror_type host_T;
+    Kokkos::View<FadType*,DevLayout,PHX::Device>::host_mirror_type host_k;
+    host_P = Kokkos::View<FadType**,DevLayout,PHX::Device>::host_mirror_type("host_P",num_cells,num_ip,deriv_dim);
+    host_T = Kokkos::View<FadType**,DevLayout,PHX::Device>::host_mirror_type("host_T",num_cells,num_ip,deriv_dim);
+    host_k = Kokkos::View<FadType*,DevLayout,PHX::Device>::host_mirror_type("host_k",1,deriv_dim);
 
 
     for (int i=0; i< num_cells; i++){
@@ -186,34 +142,34 @@ namespace phalanx_test {
     Kokkos::deep_copy(P, host_P);
     Kokkos::deep_copy(T, host_T);
     Kokkos::deep_copy(k, host_k);
-    typename PHX::Device().fence();
+    typename PHX::ExecutionSpace().fence();
 
     const int num_samples = 10;
 
     Teuchos::RCP<Teuchos::Time> timer = Teuchos::TimeMonitor::getNewTimer("Jacobian Flat");
-    typename PHX::Device().fence();
+    typename PHX::ExecutionSpace().fence();
     for (int i=0; i < num_samples; ++i) {
       Teuchos::TimeMonitor tm(*timer);
       Kokkos::parallel_for(num_cells, ComputeRhoFlat<FadType,DevLayout,PHX::Device>(rho, P, T, k));
-      typename PHX::Device().fence();
+      typename PHX::ExecutionSpace().fence();
     }
 
     timer = Teuchos::TimeMonitor::getNewTimer("Jacobian Hierarchic (AUTO())");
-    typename PHX::Device().fence();
+    typename PHX::ExecutionSpace().fence();
     for (int i=0; i < num_samples; ++i) {
       Teuchos::TimeMonitor tm(*timer);
-      Kokkos::parallel_for(Kokkos::TeamPolicy<PHX::exec_space>(num_cells,Kokkos::AUTO()),
+      Kokkos::parallel_for(Kokkos::TeamPolicy<PHX::ExecutionSpace>(num_cells,Kokkos::AUTO()),
 			   ComputeRhoHierarchic<FadType,DevLayout,PHX::Device>(rho, P, T, k));
-      typename PHX::Device().fence();
+      typename PHX::ExecutionSpace().fence();
     }
 
     timer = Teuchos::TimeMonitor::getNewTimer("Jacobian Hierarchic (team=AUTO(),warp=32)");
-    typename PHX::Device().fence();
+    typename PHX::ExecutionSpace().fence();
     for (int i=0; i < num_samples; ++i) {
       Teuchos::TimeMonitor tm(*timer);
-      Kokkos::parallel_for(Kokkos::TeamPolicy<PHX::exec_space>(num_cells,Kokkos::AUTO(),32),
+      Kokkos::parallel_for(Kokkos::TeamPolicy<PHX::ExecutionSpace>(num_cells,Kokkos::AUTO(),32),
 			   ComputeRhoHierarchic<FadType,DevLayout,PHX::Device>(rho, P, T, k));
-      typename PHX::Device().fence();
+      typename PHX::ExecutionSpace().fence();
     }
 
     // ****************************
@@ -225,9 +181,9 @@ namespace phalanx_test {
       PHX::View<FadType**> phx_T("phx_T",num_cells,num_ip,deriv_dim);
       PHX::View<FadType*> phx_k("phx_k",1,deriv_dim);
 
-      auto phx_host_P = PHX::View<FadType**>::HostMirror("phx_host_P",num_cells,num_ip,deriv_dim);
-      auto phx_host_T = PHX::View<FadType**>::HostMirror("phx_host_T",num_cells,num_ip,deriv_dim);
-      auto phx_host_k = PHX::View<FadType*>::HostMirror("phx_host_k",1,deriv_dim);
+      auto phx_host_P = PHX::View<FadType**>::host_mirror_type("phx_host_P",num_cells,num_ip,deriv_dim);
+      auto phx_host_T = PHX::View<FadType**>::host_mirror_type("phx_host_T",num_cells,num_ip,deriv_dim);
+      auto phx_host_k = PHX::View<FadType*>::host_mirror_type("phx_host_k",1,deriv_dim);
 
       for (int i=0; i< num_cells; i++){
 	for (int j=0; j< num_ip; j++){
@@ -244,14 +200,14 @@ namespace phalanx_test {
       Kokkos::deep_copy(phx_P, phx_host_P);
       Kokkos::deep_copy(phx_T, phx_host_T);
       Kokkos::deep_copy(phx_k, phx_host_k);
-      typename PHX::Device().fence();
+      typename PHX::ExecutionSpace().fence();
       timer = Teuchos::TimeMonitor::getNewTimer("Jacobian Hierarchic <PHX::View> (team=AUTO(),warp=32)");
-      typename PHX::Device().fence();
+      typename PHX::ExecutionSpace().fence();
       for (int i=0; i < num_samples; ++i) {
 	Teuchos::TimeMonitor tm(*timer);
-	Kokkos::parallel_for(Kokkos::TeamPolicy<PHX::exec_space>(num_cells,Kokkos::AUTO(),32),
+	Kokkos::parallel_for(Kokkos::TeamPolicy<PHX::ExecutionSpace>(num_cells,Kokkos::AUTO(),32),
 			     ComputeRhoHierarchic<FadType,typename PHX::DevLayout<FadType>::type,PHX::Device>(phx_rho, phx_P, phx_T, phx_k));
-	typename PHX::Device().fence();
+	typename PHX::ExecutionSpace().fence();
       }
     }
 

@@ -1,30 +1,10 @@
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //                           Sacado Package
-//                 Copyright (2006) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// This library is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as
-// published by the Free Software Foundation; either version 2.1 of the
-// License, or (at your option) any later version.
-//
-// This library is distributed in the hope that it will be useful, but
-// WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-// Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public
-// License along with this library; if not, write to the Free Software
-// Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301
-// USA
-// Questions? Contact David M. Gay (dmgay@sandia.gov) or Eric T. Phipps
-// (etphipp@sandia.gov).
-//
-// ***********************************************************************
+// Copyright 2006 NTESS and the Sacado contributors.
+// SPDX-License-Identifier: LGPL-2.1-or-later
+// *****************************************************************************
 // @HEADER
 
 #include <type_traits>
@@ -35,7 +15,6 @@
 #include "Teuchos_TestingHelpers.hpp"
 
 #include "Sacado_No_Kokkos.hpp"
-#include "Sacado_Fad_SimpleFad.hpp"
 #include "Sacado_Tay_CacheTaylor.hpp"
 #include "Sacado_mpl_apply.hpp"
 
@@ -189,13 +168,11 @@ typedef Sacado::Fad::DFad<double> Fad_DFadType;
 typedef Sacado::Fad::SLFad<double,global_fad_size> Fad_SLFadType;
 typedef Sacado::Fad::SFad<double,global_fad_size> Fad_SFadType;
 typedef Sacado::Fad::DVFad<double> Fad_DVFadType;
-typedef Sacado::Fad::SimpleFad<double> Fad_SimpleFadType;
 typedef Sacado::Fad::ViewFad<double,global_fad_size,1,Fad_DFadType> Fad_VFadType;
 TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( Conversion, ADConversions, Fad_DFadType )
 TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( Conversion, ADConversions, Fad_SLFadType )
 TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( Conversion, ADConversions, Fad_SFadType )
 TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( Conversion, ADConversions, Fad_DVFadType )
-TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( Conversion, ADConversions, Fad_SimpleFadType )
 TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( Conversion, ViewConversions, Fad_VFadType )
 
 typedef Sacado::ELRFad::DFad<double> ELRFad_DFadType;

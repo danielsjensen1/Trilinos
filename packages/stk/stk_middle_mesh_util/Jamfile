@@ -44,7 +44,6 @@ project votd
   : requirements
     $(sierra-warnings)
     <include>$(stk_middle_mesh_util-root-inc)
-    <define>STK_BUILT_IN_SIERRA
   : usage-requirements
     <include>$(stk_middle_mesh_util-root-inc)
   : build-dir $(stk_middle_mesh_util-builddir)
@@ -67,8 +66,8 @@ local installed-developer-files =
 #
 # SECTION 2: Development install
 #
-explicit install-serial-targets ;
-alias install-serial-targets ;
+
+
 
 # Dependencies listed in this target are installed in the developer's project.
 # This should include all executables and any other files needed for developer use.
@@ -162,5 +161,6 @@ exe stk_middle_mesh_util_utest
     stk_middle_mesh_util
     /sierra/stk_middle_mesh//stk_middle_mesh
     /sierra/stk_unit_test_utils//stk_mesh_fixtures
-  : <tag>@sierra-exec-tag
+  : <define>STK_BUILT_FOR_SIERRA
+    <tag>@sierra-exec-tag
   ;

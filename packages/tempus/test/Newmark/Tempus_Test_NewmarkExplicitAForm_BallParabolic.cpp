@@ -1,10 +1,11 @@
-// @HEADER
-// ****************************************************************************
-//                Tempus: Copyright (2017) Sandia Corporation
+//@HEADER
+// *****************************************************************************
+//          Tempus: Time Integration and Sensitivity Analysis Package
 //
-// Distributed under BSD 3-clause license (See accompanying file Copyright.txt)
-// ****************************************************************************
-// @HEADER
+// Copyright 2017 NTESS and the Tempus contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+//@HEADER
 
 #include "Teuchos_UnitTestHarness.hpp"
 #include "Teuchos_XMLParameterListHelpers.hpp"
@@ -105,8 +106,8 @@ TEUCHOS_UNIT_TEST(NewmarkExplicitAForm, BallParabolic)
       x_exact_plot                                    = model->getExactSolution(time_i).get_x();
       ftmp << time_i << "   " << get_ele(*(x_plot), 0) << "   "
            << get_ele(*(x_exact_plot), 0) << std::endl;
-      if (abs(get_ele(*(x_plot), 0) - get_ele(*(x_exact_plot), 0)) > err)
-        err = abs(get_ele(*(x_plot), 0) - get_ele(*(x_exact_plot), 0));
+      if (std::abs(get_ele(*(x_plot), 0) - get_ele(*(x_exact_plot), 0)) > err)
+        err = std::abs(get_ele(*(x_plot), 0) - get_ele(*(x_exact_plot), 0));
     }
     ftmp.close();
     out << "Max error = " << err << "\n \n";

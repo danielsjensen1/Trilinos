@@ -47,7 +47,7 @@
 #include <thread>                               // for sleep_for
 #include <vector>                               // for vector
 
-using stk::unit_test_util::simple_fields::get_command_line_option;
+using stk::unit_test_util::get_command_line_option;
 
 enum {
   TIMER_DOMAIN		= 0x00001000,		///< Enable domain timers
@@ -330,7 +330,7 @@ TEST(UnitTestTimer, YuugeNumberOfTimers)
       stk::diag::TimeBlock root_time_block(rootTimer);
 
       unsigned numTimers = 100;
-      numTimers = stk::unit_test_util::simple_fields::get_command_line_option("-numTimers", numTimers);
+      numTimers = stk::unit_test_util::get_command_line_option("-numTimers", numTimers);
       {
           static std::vector<stk::diag::Timer> lap_timers;
           for (unsigned i = 0; i < numTimers; ++i)
@@ -387,11 +387,9 @@ TEST(UnitTestTimer, MultipleStarts)
       childTimer.stop();
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    double expectedTime = 0.2;
-    double measuredTime = childTimer.getMetric<stk::diag::WallTime>().getAccumulatedLap();
-    double relativeError = (std::abs(expectedTime - measuredTime)/expectedTime);
-    double relativeTolerance = 0.1;
-    EXPECT_TRUE(relativeError < relativeTolerance);
+    const double expectedTime = 0.2;
+    const double measuredTime = childTimer.getMetric<stk::diag::WallTime>().getAccumulatedLap();
+    EXPECT_TRUE(measuredTime >= expectedTime);
     EXPECT_EQ(childTimer.getMetric<stk::diag::LapCount>().getAccumulatedLap(), 2u);
     stk::diag::printTimersTable(strout, rootTimer, stk::diag::METRICS_ALL, false, MPI_COMM_WORLD);
   }

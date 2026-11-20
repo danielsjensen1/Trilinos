@@ -1,43 +1,10 @@
 // @HEADER
-// ************************************************************************
-//
+// *****************************************************************************
 //                           Intrepid2 Package
-//                 Copyright (2007) Sandia Corporation
 //
-// Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
-// license for use of this work by or on behalf of the U.S. Government.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Kyungjoo Kim  (kyukim@sandia.gov), or
-//                    Mauro Perego  (mperego@sandia.gov)
-//
-// ************************************************************************
+// Copyright 2007 NTESS and the Intrepid2 contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 /** \file   Intrepid2_HGRAD_LINE_Cn_FEM_JACOBIDef.hpp
@@ -57,12 +24,12 @@ namespace Intrepid2 {
 
     // output (N,P,D)
     // input  (P,D) - assumes that it has a set of points to amortize the function call cost for jacobi polynomial.
-    template<EOperator opType>
+    template<EOperator OpType>
     template<typename OutputViewType,
              typename inputViewType>
     KOKKOS_INLINE_FUNCTION
     void
-    Basis_HGRAD_LINE_Cn_FEM_JACOBI::Serial<opType>::
+    Basis_HGRAD_LINE_Cn_FEM_JACOBI::Serial<OpType>::
     getValues(       OutputViewType output,
                const inputViewType  input,
                const ordinal_type   order,
@@ -76,35 +43,25 @@ namespace Intrepid2 {
       const auto pts = Kokkos::subview( input, Kokkos::ALL(), 0 );
       const ordinal_type np = input.extent(0);
 
-      switch (opType) {
-      case OPERATOR_VALUE: {
+      if constexpr (OpType == OPERATOR_VALUE) {
         const Kokkos::View<typename inputViewType::value_type*,
           typename inputViewType::memory_space,Kokkos::MemoryUnmanaged> null;
         for (ordinal_type p=0;p<card;++p) {
           auto poly = Kokkos::subview( output, p, Kokkos::ALL() );
           Polylib::Serial::JacobiPolynomial(np, pts, poly, null, p, alpha, beta);
         }
-        break;
       }
-      case OPERATOR_GRAD:
-      case OPERATOR_D1: {
+      else if constexpr ((OpType == OPERATOR_GRAD) || (OpType == OPERATOR_D1)) {
         for (ordinal_type p=0;p<card;++p) {
           auto polyd = Kokkos::subview( output, p, Kokkos::ALL(), 0 );
           Polylib::Serial::JacobiPolynomialDerivative(np, pts, polyd, p, alpha, beta);
         }
-        break;
       }
-      case OPERATOR_D2:
-      case OPERATOR_D3:
-      case OPERATOR_D4:
-      case OPERATOR_D5:
-      case OPERATOR_D6:
-      case OPERATOR_D7:
-      case OPERATOR_D8:
-      case OPERATOR_D9:
-      case OPERATOR_D10:
-        opDn = getOperatorOrder(opType);
-      case OPERATOR_Dn: {
+      else if constexpr ((OpType == OPERATOR_D2) || (OpType == OPERATOR_D3) || (OpType == OPERATOR_D4) || (OpType == OPERATOR_D5) || (OpType == OPERATOR_D6) || 
+                         (OpType == OPERATOR_D7) || (OpType == OPERATOR_D8) || (OpType == OPERATOR_D9)  || (OpType == OPERATOR_D10) || (OpType == OPERATOR_Dn)) {
+        if constexpr (OpType != OPERATOR_Dn)
+          opDn = getOperatorOrder(OpType  );
+
         {
           const ordinal_type pend = output.extent(0);
           const ordinal_type iend = output.extent(1);
@@ -113,7 +70,7 @@ namespace Intrepid2 {
           for (ordinal_type p=0;p<pend;++p)
             for (ordinal_type i=0;i<iend;++i)
               for (ordinal_type j=0;j<jend;++j)
-                output.access(p, i, j) = 0.0;
+                output(p, i, j) = 0.0;
         }
         {
           const Kokkos::View<typename inputViewType::value_type*,
@@ -130,12 +87,10 @@ namespace Intrepid2 {
               poly(i) = scaleFactor*poly(i);
           }
         }
-        break;
       }
-      default: {
+      else {
         INTREPID2_TEST_FOR_ABORT( true,
                                   ">>> ERROR: (Intrepid2::Basis_HGRAD_LINE_Cn_FEM_JACOBI::Serial::getValues) operator is not supported");
-      }
       }
     }
 
@@ -214,12 +169,12 @@ namespace Intrepid2 {
   Basis_HGRAD_LINE_Cn_FEM_JACOBI( const ordinal_type order,
                                   const double alpha,
                                   const double beta ) {
-    this->basisCardinality_  = order+1;
-    this->basisDegree_       = order;
-    this->basisCellTopology_ = shards::CellTopology(shards::getCellTopologyData<shards::Line<> >() );
-    this->basisType_         = BASIS_FEM_HIERARCHICAL;
-    this->basisCoordinates_  = COORDINATES_CARTESIAN;
-    this->functionSpace_     = FUNCTION_SPACE_HGRAD;
+    this->basisCardinality_     = order+1;
+    this->basisDegree_          = order;
+    this->basisCellTopologyKey_ = shards::Line<>::key;
+    this->basisType_            = BASIS_FEM_HIERARCHICAL;
+    this->basisCoordinates_     = COORDINATES_CARTESIAN;
+    this->functionSpace_        = FUNCTION_SPACE_HGRAD;
 
     // jacobi
     this->alpha_ = alpha;

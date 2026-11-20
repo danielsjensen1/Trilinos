@@ -1,47 +1,13 @@
-/*
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //    Thyra: Interfaces and Support for Abstract Numerical Algorithms
-//                 Copyright (2004) Sandia Corporation
 //
-// Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
-// license for use of this work by or on behalf of the U.S. Government.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Roscoe A. Bartlett (bartlettra@ornl.gov)
-//
-// ***********************************************************************
+// Copyright 2004 NTESS and the Thyra contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
-*/
 
-
+#include "Teuchos_RCPDecl.hpp"
 #include "Thyra_TpetraThyraWrappers.hpp"
 #include "Thyra_VectorSpaceTester.hpp"
 #include "Thyra_VectorStdOpsTester.hpp"
@@ -50,6 +16,7 @@
 #include "Thyra_MultiVectorStdOps.hpp"
 #include "Thyra_LinearOpTester.hpp"
 #include "Thyra_DefaultProductVector.hpp"
+#include "Thyra_DefaultProductVectorSpace.hpp"
 #include "Thyra_TestingTools.hpp"
 #include "Thyra_ScaledLinearOpBase.hpp"
 #include "Thyra_RowStatLinearOpBase.hpp"
@@ -102,6 +69,14 @@ RCP<const VectorSpaceBase<Scalar> >
 createTpetraVectorSpace(const int localDim)
 {
   return Thyra::createVectorSpace<Scalar>(createTpetraMap(g_localDim));
+}
+
+
+template<class Scalar>
+RCP<const VectorSpaceBase<Scalar> >
+createTpetraProductVectorSpace(const int localDim, const int numBlocks)
+{
+  return Thyra::productVectorSpace<Scalar>(Thyra::createVectorSpace<Scalar>(createTpetraMap(g_localDim)), numBlocks);
 }
 
 
@@ -236,6 +211,9 @@ TEUCHOS_UNIT_TEST_TEMPLATE_1_DECL( TpetraThyraWrappers, createVectorSpace,
   typedef Thyra::TpetraOperatorVectorExtraction<Scalar> ConverterT;
   RCP<const TpetraMap_t> tpetraMap2 = ConverterT::getTpetraMap(vs);
   TEST_EQUALITY(tpetraMap2, tpetraMap);
+
+  RCP<const TpetraMap_t> tpetraMap3 = toTpetra(vs);
+  TEST_EQUALITY(tpetraMap3, tpetraMap);
 }
 
 
@@ -420,11 +398,11 @@ TEUCHOS_UNIT_TEST_TEMPLATE_1_DECL( TpetraThyraWrappers, createConstMultiVector,
 
 
 //
-// TeptraVectorSpace
+// TpetraVectorSpace
 //
 
 
-TEUCHOS_UNIT_TEST_TEMPLATE_1_DECL( TpetraThyraWrappers, TeptraVectorSpace,
+TEUCHOS_UNIT_TEST_TEMPLATE_1_DECL( TpetraThyraWrappers, TpetraVectorSpace,
   Scalar )
 {
   const RCP<const VectorSpaceBase<Scalar> > vs =
@@ -514,6 +492,20 @@ TEUCHOS_UNIT_TEST_TEMPLATE_1_DECL( TpetraThyraWrappers, getTpetraMultiVector,
     TEST_EQUALITY(as<Ordinal>(tmv->getMap()->getGlobalNumElements()), vs->dim());
   }
 
+  {
+    const RCP<MultiVectorBase<Scalar> > mv = createMembers(vs, numCols);
+    const RCP<Tpetra::MultiVector<Scalar> > tmv = toTpetra(mv);
+    TEST_ASSERT(nonnull(tmv));
+    TEST_EQUALITY(as<Ordinal>(tmv->getMap()->getGlobalNumElements()), vs->dim());
+  }
+
+  {
+    const RCP<VectorBase<Scalar> > v = createMember(vs);
+    const RCP<Tpetra::MultiVector<Scalar> > tmv = toTpetra(v);
+    TEST_ASSERT(nonnull(tmv));
+    TEST_EQUALITY(as<Ordinal>(tmv->getMap()->getGlobalNumElements()), vs->dim());
+  }
+
 #ifdef THYRA_DEBUG
   const RCP<VectorBase<Scalar> > pv = Thyra::defaultProductVector<Scalar>();
   TEST_THROW(ConverterT::getTpetraMultiVector(pv), std::logic_error);
@@ -551,10 +543,333 @@ TEUCHOS_UNIT_TEST_TEMPLATE_1_DECL( TpetraThyraWrappers, getConstTpetraMultiVecto
     TEST_EQUALITY(as<Ordinal>(tmv->getMap()->getGlobalNumElements()), vs->dim());
   }
 
+  {
+    const RCP<const MultiVectorBase<Scalar> > mv = createMembers(vs, numCols);
+    const RCP<const Tpetra::MultiVector<Scalar> > tmv = toTpetra(mv);
+    TEST_ASSERT(nonnull(tmv));
+    TEST_EQUALITY(as<Ordinal>(tmv->getMap()->getGlobalNumElements()), vs->dim());
+  }
+
+  {
+    const RCP<const VectorBase<Scalar> > v = createMember(vs);
+    const RCP<const Tpetra::MultiVector<Scalar> > tmv = toTpetra(v);
+    TEST_ASSERT(nonnull(tmv));
+    TEST_EQUALITY(as<Ordinal>(tmv->getMap()->getGlobalNumElements()), vs->dim());
+  }
+
 #ifdef THYRA_DEBUG
   const RCP<const VectorBase<Scalar> > pv = Thyra::defaultProductVector<Scalar>();
   TEST_THROW(ConverterT::getConstTpetraMultiVector(pv), std::logic_error);
 #endif
+
+}
+
+
+//
+// getTpetraVectorBlock
+//
+
+TEUCHOS_UNIT_TEST_TEMPLATE_1_DECL( TpetraThyraWrappers, getTpetraVectorBlock,
+  Scalar )
+{
+  typedef Thyra::TpetraOperatorVectorExtraction<Scalar> ConverterT;
+
+  const int numBlocks = 2;
+  const RCP<const VectorSpaceBase<Scalar> > vs
+    = createTpetraProductVectorSpace<Scalar>(g_localDim, numBlocks);
+  const auto bvs = Teuchos::rcp_dynamic_cast<const ProductVectorSpaceBase<Scalar> >(vs, true);
+
+  {
+    const RCP<VectorBase<Scalar> > mv = createMember(vs);
+    const RCP<Tpetra::Vector<Scalar> > tmv =
+      ConverterT::getTpetraVectorBlock(mv, 0);
+    TEST_ASSERT(nonnull(tmv));
+    TEST_EQUALITY(as<Ordinal>(tmv->getMap()->getGlobalNumElements()), bvs->getBlock(0)->dim());
+  }
+
+  {
+    const RCP<VectorBase<Scalar> > mv = createMember(vs);
+    const RCP<Tpetra::Vector<Scalar> > tmv =
+      ConverterT::getTpetraVectorBlock(mv, 0);
+    TEST_ASSERT(nonnull(tmv));
+    TEST_EQUALITY(as<Ordinal>(tmv->getMap()->getGlobalNumElements()), bvs->getBlock(0)->dim());
+  }
+
+  {
+    const RCP<VectorBase<Scalar> > mv = createMember(vs);
+    const RCP<Tpetra::Vector<Scalar> > tmv =
+      ConverterT::getTpetraVectorBlock(mv, 1);
+    TEST_ASSERT(nonnull(tmv));
+    TEST_EQUALITY(as<Ordinal>(tmv->getMap()->getGlobalNumElements()), bvs->getBlock(1)->dim());
+  }
+
+  {
+    const RCP<VectorBase<Scalar> > mv = createMember(vs);
+    const RCP<Tpetra::Vector<Scalar> > tmv =
+      ConverterT::getTpetraVectorBlock(mv, 1);
+    TEST_ASSERT(nonnull(tmv));
+    TEST_EQUALITY(as<Ordinal>(tmv->getMap()->getGlobalNumElements()), bvs->getBlock(1)->dim());
+  }
+
+  {
+    const RCP<VectorBase<Scalar> > mv = createMember(vs);
+    const RCP<Tpetra::Vector<Scalar> > tmv = toTpetra(mv, 0);
+    TEST_ASSERT(nonnull(tmv));
+    TEST_EQUALITY(as<Ordinal>(tmv->getMap()->getGlobalNumElements()), bvs->getBlock(0)->dim());
+  }
+
+  {
+    const RCP<VectorBase<Scalar> > mv = createMember(vs);
+    const RCP<Tpetra::Vector<Scalar> > tmv = toTpetra(mv, 0);
+    TEST_ASSERT(nonnull(tmv));
+    TEST_EQUALITY(as<Ordinal>(tmv->getMap()->getGlobalNumElements()), bvs->getBlock(0)->dim());
+  }
+
+  {
+    const RCP<VectorBase<Scalar> > mv = createMember(vs);
+    const RCP<Tpetra::Vector<Scalar> > tmv = toTpetra(mv, 1);
+    TEST_ASSERT(nonnull(tmv));
+    TEST_EQUALITY(as<Ordinal>(tmv->getMap()->getGlobalNumElements()), bvs->getBlock(1)->dim());
+  }
+
+  {
+    const RCP<VectorBase<Scalar> > mv = createMember(vs);
+    const RCP<Tpetra::Vector<Scalar> > tmv = toTpetra(mv, 1);
+    TEST_ASSERT(nonnull(tmv));
+    TEST_EQUALITY(as<Ordinal>(tmv->getMap()->getGlobalNumElements()), bvs->getBlock(1)->dim());
+  }
+
+}
+
+
+//
+// getConstTpetraVectorBlock
+//
+
+TEUCHOS_UNIT_TEST_TEMPLATE_1_DECL( TpetraThyraWrappers, getConstTpetraVectorBlock,
+  Scalar )
+{
+  typedef Thyra::TpetraOperatorVectorExtraction<Scalar> ConverterT;
+
+  const int numBlocks = 2;
+  const RCP<const VectorSpaceBase<Scalar> > vs
+    = createTpetraProductVectorSpace<Scalar>(g_localDim, numBlocks);
+  const auto bvs = Teuchos::rcp_dynamic_cast<const ProductVectorSpaceBase<Scalar> >(vs, true);
+
+  {
+    const RCP<const VectorBase<Scalar> > mv = createMember(vs);
+    const RCP<const Tpetra::Vector<Scalar> > tmv =
+      ConverterT::getConstTpetraVectorBlock(mv, 0);
+    TEST_ASSERT(nonnull(tmv));
+    TEST_EQUALITY(as<Ordinal>(tmv->getMap()->getGlobalNumElements()), bvs->getBlock(0)->dim());
+  }
+
+  {
+    const RCP<const VectorBase<Scalar> > mv = createMember(vs);
+    const RCP<const Tpetra::Vector<Scalar> > tmv =
+      ConverterT::getConstTpetraVectorBlock(mv, 0);
+    TEST_ASSERT(nonnull(tmv));
+    TEST_EQUALITY(as<Ordinal>(tmv->getMap()->getGlobalNumElements()), bvs->getBlock(0)->dim());
+  }
+
+  {
+    const RCP<const VectorBase<Scalar> > mv = createMember(vs);
+    const RCP<const Tpetra::Vector<Scalar> > tmv =
+      ConverterT::getConstTpetraVectorBlock(mv, 1);
+    TEST_ASSERT(nonnull(tmv));
+    TEST_EQUALITY(as<Ordinal>(tmv->getMap()->getGlobalNumElements()), bvs->getBlock(1)->dim());
+  }
+
+  {
+    const RCP<const VectorBase<Scalar> > mv = createMember(vs);
+    const RCP<const Tpetra::Vector<Scalar> > tmv =
+      ConverterT::getConstTpetraVectorBlock(mv, 1);
+    TEST_ASSERT(nonnull(tmv));
+    TEST_EQUALITY(as<Ordinal>(tmv->getMap()->getGlobalNumElements()), bvs->getBlock(1)->dim());
+  }
+
+  {
+    const RCP<const VectorBase<Scalar> > mv = createMember(vs);
+    const RCP<const Tpetra::Vector<Scalar> > tmv = toTpetra(mv, 0);
+    TEST_ASSERT(nonnull(tmv));
+    TEST_EQUALITY(as<Ordinal>(tmv->getMap()->getGlobalNumElements()), bvs->getBlock(0)->dim());
+  }
+
+  {
+    const RCP<const VectorBase<Scalar> > mv = createMember(vs);
+    const RCP<const Tpetra::Vector<Scalar> > tmv = toTpetra(mv, 0);
+    TEST_ASSERT(nonnull(tmv));
+    TEST_EQUALITY(as<Ordinal>(tmv->getMap()->getGlobalNumElements()), bvs->getBlock(0)->dim());
+  }
+
+  {
+    const RCP<const VectorBase<Scalar> > mv = createMember(vs);
+    const RCP<const Tpetra::Vector<Scalar> > tmv = toTpetra(mv, 1);
+    TEST_ASSERT(nonnull(tmv));
+    TEST_EQUALITY(as<Ordinal>(tmv->getMap()->getGlobalNumElements()), bvs->getBlock(1)->dim());
+  }
+
+  {
+    const RCP<const VectorBase<Scalar> > mv = createMember(vs);
+    const RCP<const Tpetra::Vector<Scalar> > tmv = toTpetra(mv, 1);
+    TEST_ASSERT(nonnull(tmv));
+    TEST_EQUALITY(as<Ordinal>(tmv->getMap()->getGlobalNumElements()), bvs->getBlock(1)->dim());
+  }
+}
+
+
+//
+// getTpetraMultiVectorBlock
+//
+
+TEUCHOS_UNIT_TEST_TEMPLATE_1_DECL( TpetraThyraWrappers, getTpetraMultiVectorBlock,
+  Scalar )
+{
+  typedef Thyra::TpetraOperatorVectorExtraction<Scalar> ConverterT;
+
+  const int numCols = 3;
+  const int numBlocks = 2;
+  const RCP<const VectorSpaceBase<Scalar> > vs
+    = createTpetraProductVectorSpace<Scalar>(g_localDim, numBlocks);
+  const auto bvs = Teuchos::rcp_dynamic_cast<const ProductVectorSpaceBase<Scalar> >(vs, true);
+
+  {
+    const RCP<MultiVectorBase<Scalar> > mv = createMembers(vs, numCols);
+    const RCP<Tpetra::MultiVector<Scalar> > tmv =
+      ConverterT::getTpetraMultiVectorBlock(mv, 0);
+    TEST_ASSERT(nonnull(tmv));
+    TEST_EQUALITY(as<Ordinal>(tmv->getMap()->getGlobalNumElements()), bvs->getBlock(0)->dim());
+  }
+
+  {
+    const RCP<MultiVectorBase<Scalar> > mv = createMembers(vs, numCols);
+    const RCP<Tpetra::MultiVector<Scalar> > tmv =
+      ConverterT::getTpetraMultiVectorBlock(mv, 0);
+    TEST_ASSERT(nonnull(tmv));
+    TEST_EQUALITY(as<Ordinal>(tmv->getMap()->getGlobalNumElements()), bvs->getBlock(0)->dim());
+  }
+
+  {
+    const RCP<MultiVectorBase<Scalar> > mv = createMembers(vs, numCols);
+    const RCP<Tpetra::MultiVector<Scalar> > tmv =
+      ConverterT::getTpetraMultiVectorBlock(mv, 1);
+    TEST_ASSERT(nonnull(tmv));
+    TEST_EQUALITY(as<Ordinal>(tmv->getMap()->getGlobalNumElements()), bvs->getBlock(1)->dim());
+  }
+
+  {
+    const RCP<MultiVectorBase<Scalar> > mv = createMembers(vs, numCols);
+    const RCP<Tpetra::MultiVector<Scalar> > tmv =
+      ConverterT::getTpetraMultiVectorBlock(mv, 1);
+    TEST_ASSERT(nonnull(tmv));
+    TEST_EQUALITY(as<Ordinal>(tmv->getMap()->getGlobalNumElements()), bvs->getBlock(1)->dim());
+  }
+
+  {
+    const RCP<MultiVectorBase<Scalar> > mv = createMembers(vs, numCols);
+    const RCP<Tpetra::MultiVector<Scalar> > tmv = toTpetra(mv, 0);
+    TEST_ASSERT(nonnull(tmv));
+    TEST_EQUALITY(as<Ordinal>(tmv->getMap()->getGlobalNumElements()), bvs->getBlock(0)->dim());
+  }
+
+  {
+    const RCP<MultiVectorBase<Scalar> > mv = createMembers(vs, numCols);
+    const RCP<Tpetra::MultiVector<Scalar> > tmv = toTpetra(mv, 0);
+    TEST_ASSERT(nonnull(tmv));
+    TEST_EQUALITY(as<Ordinal>(tmv->getMap()->getGlobalNumElements()), bvs->getBlock(0)->dim());
+  }
+
+  {
+    const RCP<MultiVectorBase<Scalar> > mv = createMembers(vs, numCols);
+    const RCP<Tpetra::MultiVector<Scalar> > tmv = toTpetra(mv, 1);
+    TEST_ASSERT(nonnull(tmv));
+    TEST_EQUALITY(as<Ordinal>(tmv->getMap()->getGlobalNumElements()), bvs->getBlock(1)->dim());
+  }
+
+  {
+    const RCP<MultiVectorBase<Scalar> > mv = createMembers(vs, numCols);
+    const RCP<Tpetra::MultiVector<Scalar> > tmv = toTpetra(mv, 1);
+    TEST_ASSERT(nonnull(tmv));
+    TEST_EQUALITY(as<Ordinal>(tmv->getMap()->getGlobalNumElements()), bvs->getBlock(1)->dim());
+  }
+
+}
+
+
+//
+// getConstTpetraMultiVectorBlock
+//
+
+TEUCHOS_UNIT_TEST_TEMPLATE_1_DECL( TpetraThyraWrappers, getConstTpetraMultiVectorBlock,
+  Scalar )
+{
+  typedef Thyra::TpetraOperatorVectorExtraction<Scalar> ConverterT;
+
+  const int numCols = 3;
+  const int numBlocks = 2;
+  const RCP<const VectorSpaceBase<Scalar> > vs
+    = createTpetraProductVectorSpace<Scalar>(g_localDim, numBlocks);
+  const auto bvs = Teuchos::rcp_dynamic_cast<const ProductVectorSpaceBase<Scalar> >(vs, true);
+
+  {
+    const RCP<const MultiVectorBase<Scalar> > mv = createMembers(vs, numCols);
+    const RCP<const Tpetra::MultiVector<Scalar> > tmv =
+      ConverterT::getConstTpetraMultiVectorBlock(mv, 0);
+    TEST_ASSERT(nonnull(tmv));
+    TEST_EQUALITY(as<Ordinal>(tmv->getMap()->getGlobalNumElements()), bvs->getBlock(0)->dim());
+  }
+
+  {
+    const RCP<const MultiVectorBase<Scalar> > mv = createMembers(vs, numCols);
+    const RCP<const Tpetra::MultiVector<Scalar> > tmv =
+      ConverterT::getConstTpetraMultiVectorBlock(mv, 0);
+    TEST_ASSERT(nonnull(tmv));
+    TEST_EQUALITY(as<Ordinal>(tmv->getMap()->getGlobalNumElements()), bvs->getBlock(0)->dim());
+  }
+
+  {
+    const RCP<const MultiVectorBase<Scalar> > mv = createMembers(vs, numCols);
+    const RCP<const Tpetra::MultiVector<Scalar> > tmv =
+      ConverterT::getConstTpetraMultiVectorBlock(mv, 1);
+    TEST_ASSERT(nonnull(tmv));
+    TEST_EQUALITY(as<Ordinal>(tmv->getMap()->getGlobalNumElements()), bvs->getBlock(1)->dim());
+  }
+
+  {
+    const RCP<const MultiVectorBase<Scalar> > mv = createMembers(vs, numCols);
+    const RCP<const Tpetra::MultiVector<Scalar> > tmv =
+      ConverterT::getConstTpetraMultiVectorBlock(mv, 1);
+    TEST_ASSERT(nonnull(tmv));
+    TEST_EQUALITY(as<Ordinal>(tmv->getMap()->getGlobalNumElements()), bvs->getBlock(1)->dim());
+  }
+
+  {
+    const RCP<const MultiVectorBase<Scalar> > mv = createMembers(vs, numCols);
+    const RCP<const Tpetra::MultiVector<Scalar> > tmv = toTpetra(mv, 0);
+    TEST_ASSERT(nonnull(tmv));
+    TEST_EQUALITY(as<Ordinal>(tmv->getMap()->getGlobalNumElements()), bvs->getBlock(0)->dim());
+  }
+
+  {
+    const RCP<const MultiVectorBase<Scalar> > mv = createMembers(vs, numCols);
+    const RCP<const Tpetra::MultiVector<Scalar> > tmv = toTpetra(mv, 0);
+    TEST_ASSERT(nonnull(tmv));
+    TEST_EQUALITY(as<Ordinal>(tmv->getMap()->getGlobalNumElements()), bvs->getBlock(0)->dim());
+  }
+
+  {
+    const RCP<const MultiVectorBase<Scalar> > mv = createMembers(vs, numCols);
+    const RCP<const Tpetra::MultiVector<Scalar> > tmv = toTpetra(mv, 1);
+    TEST_ASSERT(nonnull(tmv));
+    TEST_EQUALITY(as<Ordinal>(tmv->getMap()->getGlobalNumElements()), bvs->getBlock(1)->dim());
+  }
+
+  {
+    const RCP<const MultiVectorBase<Scalar> > mv = createMembers(vs, numCols);
+    const RCP<const Tpetra::MultiVector<Scalar> > tmv = toTpetra(mv, 1);
+    TEST_ASSERT(nonnull(tmv));
+    TEST_EQUALITY(as<Ordinal>(tmv->getMap()->getGlobalNumElements()), bvs->getBlock(1)->dim());
+  }
 
 }
 
@@ -645,6 +960,26 @@ TEUCHOS_UNIT_TEST_TEMPLATE_1_DECL( TpetraThyraWrappers, createLinearOp,
     TEST_EQUALITY(tpetraOp2, tpetraOp);
   }
 
+  {
+    const RCP<LinearOpBase<Scalar> > thyraOp =
+      createLinearOp(tpetraOp, rangeSpace, domainSpace);
+    TEST_EQUALITY(thyraOp->range(), rangeSpace);
+    TEST_EQUALITY(thyraOp->domain(), domainSpace);
+    const RCP<Tpetra::Operator<Scalar> > tpetraOp2 = toTpetra(thyraOp);
+    TEST_EQUALITY(tpetraOp2, tpetraOp);
+  }
+
+  {
+    const RCP<LinearOpBase<Scalar> > thyraOp =
+      Thyra::createLinearOp(tpetraOp);
+    TEST_INEQUALITY(thyraOp->range(), rangeSpace);
+    TEST_INEQUALITY(thyraOp->domain(), domainSpace);
+    TEST_ASSERT(thyraOp->range()->isCompatible(*rangeSpace));
+    TEST_ASSERT(thyraOp->domain()->isCompatible(*domainSpace));
+    const RCP<Tpetra::Operator<Scalar> > tpetraOp2 = toTpetra(thyraOp);
+    TEST_EQUALITY(tpetraOp2, tpetraOp);
+  }
+
 }
 
 
@@ -687,6 +1022,26 @@ TEUCHOS_UNIT_TEST_TEMPLATE_1_DECL( TpetraThyraWrappers, createConstLinearOp,
     TEST_ASSERT(thyraOp->domain()->isCompatible(*domainSpace));
     const RCP<const Tpetra::Operator<Scalar> > tpetraOp2 =
       ConverterT::getConstTpetraOperator(thyraOp);
+    TEST_EQUALITY(tpetraOp2, tpetraOp);
+  }
+
+  {
+    const RCP<const LinearOpBase<Scalar> > thyraOp =
+      createConstLinearOp(tpetraOp, rangeSpace, domainSpace);
+    TEST_EQUALITY(thyraOp->range(), rangeSpace);
+    TEST_EQUALITY(thyraOp->domain(), domainSpace);
+    const RCP<const Tpetra::Operator<Scalar> > tpetraOp2 = toTpetra(thyraOp);
+    TEST_EQUALITY(tpetraOp2, tpetraOp);
+  }
+
+  {
+    const RCP<const LinearOpBase<Scalar> > thyraOp =
+      Thyra::createConstLinearOp(tpetraOp);
+    TEST_INEQUALITY(thyraOp->range(), rangeSpace);
+    TEST_INEQUALITY(thyraOp->domain(), domainSpace);
+    TEST_ASSERT(thyraOp->range()->isCompatible(*rangeSpace));
+    TEST_ASSERT(thyraOp->domain()->isCompatible(*domainSpace));
+    const RCP<const Tpetra::Operator<Scalar> > tpetraOp2 = toTpetra(thyraOp);
     TEST_EQUALITY(tpetraOp2, tpetraOp);
   }
 
@@ -1046,7 +1401,7 @@ TEUCHOS_UNIT_TEST_TEMPLATE_1_DECL( TpetraThyraWrappers, TpetraLinearOp_ScaledLin
     createConstMultiVector, SCALAR ) \
    \
   TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( TpetraThyraWrappers, \
-    TeptraVectorSpace, SCALAR ) \
+    TpetraVectorSpace, SCALAR ) \
    \
   TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( TpetraThyraWrappers, \
     vectorSpaceTester, SCALAR ) \
@@ -1062,6 +1417,18 @@ TEUCHOS_UNIT_TEST_TEMPLATE_1_DECL( TpetraThyraWrappers, TpetraLinearOp_ScaledLin
    \
   TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( TpetraThyraWrappers, \
     getConstTpetraMultiVector, SCALAR ) \
+   \
+  TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( TpetraThyraWrappers, \
+    getTpetraVectorBlock, SCALAR ) \
+   \
+  TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( TpetraThyraWrappers, \
+    getConstTpetraVectorBlock, SCALAR ) \
+   \
+  TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( TpetraThyraWrappers, \
+    getTpetraMultiVectorBlock, SCALAR ) \
+   \
+  TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( TpetraThyraWrappers, \
+    getConstTpetraMultiVectorBlock, SCALAR ) \
    \
   TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( TpetraThyraWrappers, \
     TpetraLinearOp, SCALAR ) \

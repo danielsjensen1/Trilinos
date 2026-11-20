@@ -1,3 +1,11 @@
+// @HEADER
+// *****************************************************************************
+//     Compadre: COMpatible PArticle Discretization and REmap Toolkit
+//
+// Copyright 2018 NTESS and the Compadre contributors.
+// SPDX-License-Identifier: BSD-2-Clause
+// *****************************************************************************
+// @HEADER
 #include <vector>
 #include <map>
 #include <random>
@@ -163,9 +171,9 @@ bool all_passed = true;
             // CreatePointCloudSearch constructs an object of type PointCloudSearch, but deduces the templates for you
             auto point_cloud_search(CreatePointCloudSearch(source_coords, dimension));
 
-            Kokkos::View<int*, Kokkos::DefaultHostExecutionSpace> neighbor_lists("neighbor lists", 
+            Kokkos::View<size_t*, Kokkos::DefaultHostExecutionSpace> neighbor_lists("neighbor lists", 
                     number_target_coords); // first column is # of neighbors
-            Kokkos::View<int*, Kokkos::DefaultHostExecutionSpace> number_neighbors_list("number of neighbors list", 
+            Kokkos::View<size_t*, Kokkos::DefaultHostExecutionSpace> number_neighbors_list("number of neighbors list", 
                     number_target_coords); // first column is # of neighbors
             
             // each target site has a window size

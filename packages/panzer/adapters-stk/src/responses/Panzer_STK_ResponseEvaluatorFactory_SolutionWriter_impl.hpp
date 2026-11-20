@@ -1,3 +1,13 @@
+// @HEADER
+// *****************************************************************************
+//           Panzer: A partial differential equation assembly
+//       engine for strongly coupled complex multiphysics systems
+//
+// Copyright 2011 NTESS and the Panzer contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
+
 #ifndef __Panzer_STK_ResponseEvaluatorFactory_SolutionWriter_impl_hpp__
 #define __Panzer_STK_ResponseEvaluatorFactory_SolutionWriter_impl_hpp__
 
@@ -286,7 +296,7 @@ computeReferenceCentroid(const std::map<std::string,Teuchos::RCP<const panzer::P
    for(std::map<std::string,RCP<const panzer::PureBasis> >::const_iterator itr=bases.begin();
        itr!=bases.end();++itr) {
 
-      RCP<Intrepid2::Basis<PHX::exec_space,double,double>> intrepidBasis = itr->second->getIntrepid2Basis();
+      RCP<Intrepid2::Basis<PHX::Device,double,double>> intrepidBasis = itr->second->getIntrepid2Basis();
 
       // we've got coordinates, lets commpute the "centroid"
       Kokkos::DynRankView<double,PHX::Device> coords("coords",intrepidBasis->getCardinality(),

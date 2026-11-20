@@ -12,8 +12,9 @@
 #include <Akri_Facet.hpp>
 #include <Akri_SearchTree.hpp>
 #include <Akri_Surface.hpp>
-#include <type_traits>
 #include <stk_util/parallel/ParallelComm.hpp>
+
+#include <optional>
 
 namespace krino {
 
@@ -34,10 +35,13 @@ public:
 
   virtual void swap(FacetedSurfaceBase & other) = 0;
   virtual void clear() = 0;
+  virtual bool empty() const = 0;
   virtual size_t size() const = 0;
   virtual size_t nonlocal_size() const = 0;
   virtual double point_distance(const stk::math::Vector3d &x, const double narrow_band_size, const double far_field_value, const bool compute_signed_distance) const = 0;
-  virtual void prepare_to_compute(const double time, const BoundingBox & point_bbox, const double truncation_length) = 0;
+  void prepare_to_compute(const double time,
+      const BoundingBox & point_bbox,
+      const double truncation_length) override = 0;
   virtual std::string print_sizes() const = 0;
   virtual stk::math::Vector3d closest_point(const stk::math::Vector3d &x) const = 0;
 
@@ -76,8 +80,30 @@ public:
   void emplace_back_2d(const stk::math::Vector3d & x0, const stk::math::Vector3d & x1) { get_facets_2d().emplace_back(x0,x1); }
   void emplace_back_3d(const stk::math::Vector3d & x0, const stk::math::Vector3d & x1, const stk::math::Vector3d & x2)  { get_facets_3d().emplace_back(x0,x1,x2); }
 
+  // When enabled, redundant coincident facets are removed in prepare_to_compute: opposing-normal
+  // pairs cancel (they otherwise produce an indeterminate signed distance) and same-normal
+  // duplicates collapse to a single copy (extra copies double-count the normal in the average-normal
+  // calculation).  See remove_coincident_facets.  Default off.
+  void set_remove_coincident_facets(const bool flag) { myRemoveCoincidentFacets = flag; }
+  bool get_remove_coincident_facets() const { return myRemoveCoincidentFacets; }
+
+  // When enabled, prepare_to_compute checks that the faceted surface is watertight (every 3D facet
+  // edge / 2D segment endpoint shared by exactly two facets) and emits a non-fatal warning listing
+  // any non-watertight edges.  The faceted signed-distance calculation assumes watertight input.
+  // When a bounding box is also set, only non-watertight edges with both endpoints inside it are
+  // flagged, and edges lying on a face of the box are treated as watertight (they are the open
+  // boundary from clipping the surface to the box, not a crack); otherwise all are flagged.
+  // Default off.
+  void set_check_watertight(const bool flag) { myCheckWatertight = flag; }
+  bool get_check_watertight() const { return myCheckWatertight; }
+  void set_watertight_bounding_box(const BoundingBox & bbox) { myWatertightBbox = bbox; }
+  const std::optional<BoundingBox> & get_watertight_bounding_box() const { return myWatertightBbox; }
+
 private:
   int myDim;
+  bool myRemoveCoincidentFacets{false};
+  bool myCheckWatertight{false};
+  std::optional<BoundingBox> myWatertightBbox;
 };
 
 template<class FACET>
@@ -88,7 +114,7 @@ public:
 
   virtual size_t storage_size() const override;
   virtual void prepare_to_compute(const double time, const BoundingBox & point_bbox, const double truncation_length) override;
-  virtual double truncated_point_signed_distance(const stk::math::Vector3d &x, const double narrow_band_size, const double far_field_value) const override
+  virtual double possibly_truncated_point_signed_distance(const stk::math::Vector3d &x, const double narrow_band_size, const double far_field_value) const override
   {
     return point_distance(x, narrow_band_size, far_field_value, true);
   }
@@ -96,11 +122,12 @@ public:
   
   // query/modify facets
   virtual void clear() override { myLocalFacets.clear(); }
+  virtual bool empty() const override { return my_facet_tree->empty(); } // valid after prepare_to_compute
   virtual size_t size() const override { return myLocalFacets.size(); }
   virtual void swap(FacetedSurfaceBase & other) override;
 
   virtual size_t nonlocal_size() const override { return myNonLocalFacets.size(); }
-  virtual std::string print_sizes() const;
+  std::string print_sizes() const override;
 
   void parallel_distribute_facets(const size_t batch_size, const std::vector<BoundingBox> & proc_bboxes);
   double point_distance(const stk::math::Vector3d &x, const double narrow_band_size, const double far_field_value, const bool compute_signed_distance) const override;
@@ -109,13 +136,15 @@ public:
   std::vector<FACET> & get_facets() { return myLocalFacets; }
 
   virtual stk::math::Vector3d closest_point(const stk::math::Vector3d &x) const override;
+  virtual bool can_approximate_closest_point_normal() const override { return true; }
+  virtual stk::math::Vector3d closest_point_normal(const stk::math::Vector3d &x) const override;
 
 public:
   stk::math::Vector3d pseudo_normal_at_closest_point(const stk::math::Vector3d &x) const;
   const FACET * get_closest_facet(const stk::math::Vector3d &x) const;
 
 private:
-  virtual void build_local_facets(const BoundingBox & proc_bbox) {}
+  virtual void build_local_facets(const BoundingBox & /*proc_bbox*/) {}
   
   std::vector<FACET> myLocalFacets;
 
@@ -138,6 +167,10 @@ inline std::unique_ptr<FacetedSurfaceBase> FacetedSurfaceBase::build_with_veloci
     return std::make_unique<Faceted_Surface<FacetWithVelocity2d>>();
   return std::make_unique<Faceted_Surface<FacetWithVelocity3d>>();
 }
+
+// For each faceted surface in surfaces that has the watertight check enabled but no explicit
+// watertight bounding box, default its restriction box to bbox.  Non-faceted surfaces are ignored.
+void default_watertight_bounding_box_from_domain(const std::vector<std::shared_ptr<Surface>> & surfaces, const BoundingBox & bbox);
 
 } // namespace krino
 

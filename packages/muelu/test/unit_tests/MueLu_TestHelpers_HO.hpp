@@ -1,61 +1,21 @@
 // @HEADER
-//
-// ***********************************************************************
-//
+// *****************************************************************************
 //        MueLu: A package for multigrid based preconditioning
-//                  Copyright 2012 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact
-//                    Jonathan Hu       (jhu@sandia.gov)
-//                    Andrey Prokopenko (aprokop@sandia.gov)
-//                    Ray Tuminaro      (rstumin@sandia.gov)
-//
-// ***********************************************************************
-//
+// Copyright 2012 NTESS and the MueLu contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
+
 #ifndef MUELU_TEST_HELPERS_HO_H
 #define MUELU_TEST_HELPERS_HO_H
 #include "MueLu_ConfigDefs.hpp"
 
 // Intrepid
-#ifdef HAVE_MUELU_INTREPID2
+#if defined(HAVE_MUELU_INTREPID2) && defined(HAVE_MUELU_EXPERIMENTAL)
 #include "Kokkos_DynRankView.hpp"
 
 #include "MueLu_TestHelpers.hpp"
-
-#ifdef HAVE_MUELU_EPETRA
-#include "Epetra_FECrsMatrix.h"
-#endif
 
 #include "MueLu_Utilities_def.hpp"
 
@@ -115,7 +75,7 @@ Build1DPseudoPoissonHigherOrder(GlobalOrdinal nx, int degree,
   int Nproc                           = comm->getSize();
 
   // Get maps
-  RCP<CrsMatrix> Acrs      = rcp_dynamic_cast<CrsMatrixWrap>(A)->getCrsMatrix();
+  RCP<CrsMatrix> Acrs      = toCrsMatrix(A);
   RCP<const Map> p1_colmap = Acrs->getColMap();
   RCP<const Map> p1_rowmap = Acrs->getRowMap();
 
@@ -216,9 +176,7 @@ Build1DPseudoPoissonHigherOrder(GlobalOrdinal nx, int degree,
 
   // Since we're inserting off-proc, we really need to use the Epetra_FECrsMatrix here if we're in Epetra mode
   RCP<Matrix> B;
-  if (lib == Xpetra::UseEpetra) {
-    AllocateEpetraFECrsMatrix(pn_rowmap, pn_colmap, B);
-  } else {
+  {
     // Tpetra is easy
     B = rcp(new CrsMatrixWrap(pn_rowmap, pn_colmap, global_num_elements));
   }
@@ -288,6 +246,6 @@ Build1DPseudoPoissonHigherOrder(GlobalOrdinal nx, int degree,
 
 }  // namespace MueLuTests
 
-#endif  // ifdef HAVE_MUELU_INTREPID2
+#endif  // if defined(HAVE_MUELU_INTREPID2) && defined(HAVE_MUELU_EXPERIMENTAL)
 
 #endif  // ifndef MUELU_TEST_HELPERS_HO_H

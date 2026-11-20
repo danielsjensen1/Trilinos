@@ -18,7 +18,7 @@
 #include <memory>
 
 namespace stk { namespace mesh { class BulkData; } }
-namespace stk { namespace mesh { class Entity; } }
+namespace stk { namespace mesh { struct Entity; } }
 namespace stk { namespace mesh { class MetaData; } }
 namespace stk { namespace mesh { class Selector; } }
 
@@ -36,11 +36,13 @@ public:
   virtual void build_local_facets(const BoundingBox & proc_bbox) override;
 
 protected:
-  void add_facet2d(const stk::mesh::BulkData& mesh, stk::mesh::Entity side, unsigned p0, unsigned p1);
-  void add_facet3d(const stk::mesh::BulkData& mesh, stk::mesh::Entity side, unsigned p0, unsigned p1, unsigned p2);
-  void add_quad3d(const stk::mesh::BulkData& mesh, stk::mesh::Entity side, unsigned p0, unsigned p1, unsigned p2, unsigned p3);
-  void add_facet2d(stk::math::Vector3d & p0, stk::math::Vector3d & p1);
-  void add_facet3d(stk::math::Vector3d & p0, stk::math::Vector3d & p1, stk::math::Vector3d & p2);
+  void add_side_facet(const stk::mesh::BulkData & mesh, const stk::mesh::Selector & volumeSelector, const stk::topology sideTopology, const stk::mesh::Entity side);
+  void add_selected_side_facets(const stk::mesh::BulkData & mesh, const stk::mesh::Selector & volumeSelector, const stk::mesh::Selector & sideSelector);
+  void add_facet2d(const stk::mesh::BulkData& mesh, const stk::mesh::Entity side, const bool doFlip, unsigned p0, unsigned p1);
+  void add_facet3d(const stk::mesh::BulkData& mesh, const stk::mesh::Entity side, const bool doFlip, unsigned p0, unsigned p1, unsigned p2);
+  void add_quad3d(const stk::mesh::BulkData& mesh, const stk::mesh::Entity side, const bool doFlip, unsigned p0, unsigned p1, unsigned p2, unsigned p3);
+  void add_facet2d(const stk::math::Vector3d & p0, const stk::math::Vector3d & p1);
+  void add_facet3d(const stk::math::Vector3d & p0, const stk::math::Vector3d & p1, const stk::math::Vector3d & p2);
   
 private:
   int my_sign;
@@ -56,7 +58,7 @@ std::unique_ptr<FacetedSurfaceBase> build_mesh_surface(const stk::mesh::MetaData
 
 class Parallel_Facet_File_Reader {
 public:
-  Parallel_Facet_File_Reader(const std::string & in_filename) : my_filename(in_filename) {}
+  Parallel_Facet_File_Reader(const std::string & in_filename);
 
   static void get_batch_size(const int local_num_facets, int & batch_size, int & num_batches);
 
@@ -74,7 +76,7 @@ private:
 
 class Faceted_Surface_From_File : public Faceted_Surface<Facet3d> {
 public:
-  Faceted_Surface_From_File(const std::string & surface_name, const stk::diag::Timer &parent_timer);
+  Faceted_Surface_From_File(const stk::diag::Timer &parent_timer);
   virtual ~Faceted_Surface_From_File() {}
   virtual void build_local_facets(const BoundingBox & proc_bbox) override;
   virtual BoundingBox get_bounding_box() = 0;
@@ -89,11 +91,15 @@ private:
 
 class STLSurface : public Faceted_Surface_From_File {
 public:
-  STLSurface(const std::string & surface_name,
-      const stk::diag::Timer &parent_timer,
+  STLSurface(const stk::diag::Timer &parent_timer,
       const std::string & filename,
       const int sign,
       const stk::math::Vector3d & scale);
+  STLSurface(const std::string & filename,
+      const stk::diag::Timer &parentTimer = sierra::Diag::sierraTimer(),
+      const int sign = 1,
+      const stk::math::Vector3d & scale = stk::math::Vector3d(1.,1.,1.))
+  : STLSurface(parentTimer, filename, sign, scale) {}
 
   virtual ~STLSurface() {}
   virtual BoundingBox get_bounding_box() override;
@@ -116,8 +122,7 @@ private:
 
 class FACSurface : public Faceted_Surface_From_File {
 public:
-  FACSurface(const std::string & surface_name,
-      const stk::diag::Timer &parent_timer,
+  FACSurface(const stk::diag::Timer &parent_timer,
       const std::string & filename,
       const int sign,
       const stk::math::Vector3d & scale);
@@ -138,8 +143,7 @@ private:
 
 class PLYSurface : public Faceted_Surface_From_File {
 public:
-  PLYSurface(const std::string & surface_name,
-      const stk::diag::Timer &parent_timer,
+  PLYSurface(const stk::diag::Timer &parent_timer,
       const std::string & filename,
       const int sign,
       const stk::math::Vector3d & scale);
@@ -161,8 +165,7 @@ private:
 
 class EXOSurface : public Faceted_Surface_From_File {
 public:
-  EXOSurface(const std::string & surface_name,
-      const stk::diag::Timer &parent_timer,
+  EXOSurface(const stk::diag::Timer &parent_timer,
       const std::string & filename,
       const int sign,
       const stk::math::Vector3d & scale);

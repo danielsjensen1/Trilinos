@@ -1,43 +1,10 @@
 // @HEADER
-// ************************************************************************
-//
+// *****************************************************************************
 //                           Intrepid2 Package
-//                 Copyright (2007) Sandia Corporation
 //
-// Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
-// license for use of this work by or on behalf of the U.S. Government.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Kyungjoo Kim  (kyukim@sandia.gov), or
-//                    Mauro Perego  (mperego@sandia.gov)
-//
-// ************************************************************************
+// Copyright 2007 NTESS and the Intrepid2 contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 /** \file   Intrepid2_HGRAD_TET_COMP12_FEM.hpp
@@ -54,11 +21,19 @@
 namespace Intrepid2 {
 
   /** \class  Intrepid2::Basis_HGRAD_TET_COMP12_FEM
-      \brief  Implementation of the default H(grad)-compatible FEM basis of degree 2 on Tetrahedron cell
+      \brief  Implementation of the composite H(grad)-compatible FEM basis on Tetrahedron cell,
+              with 10 nodes and 12 linear sub-tetrahedra
 
-      Implements Lagrangian basis of degree 2 on the reference Tetrahedron cell. The basis has
-      cardinality 10 and spans a COMPLETE quadratic polynomial space. Basis functions are dual
-      to a unisolvent set of degrees-of-freedom (DoF) defined and enumerated as follows:
+      Implements the basis of the 10-node composite tetrahedral element on the reference
+      Tetrahedron cell. The cell is split into 12 sub-tetrahedra: the 4 corner tetrahedra of the
+      regular refinement, and 8 tetrahedra obtained by connecting the 8 faces of the remaining
+      inner octahedron to an auxiliary node at the centroid (1/4,1/4,1/4). The basis functions are
+      continuous and piecewise linear on the 12 sub-tetrahedra. The auxiliary node is not a
+      degree-of-freedom: its value is the average of the values at the 6 edge midpoints.
+
+      The basis has cardinality 10 and degree 1: it contains the COMPLETE linear polynomial space,
+      but NOT the quadratic polynomials. Basis functions are dual to a unisolvent set of
+      degrees-of-freedom (DoF) defined and enumerated as follows:
 
       \verbatim
       =================================================================================================
@@ -95,6 +70,26 @@ namespace Intrepid2 {
       in this topology follows the natural order of k-subcells where the nodes are located, i.e.,
       L_0 to L_3 correspond to 0-subcells (vertices) 0 to 3 and L_4 to L_9 correspond to
       1-subcells (edges) 0 to 5.
+
+      \remark   OPERATOR_GRAD (and OPERATOR_D1) does NOT return the gradients of the functions
+      returned by OPERATOR_VALUE. Those gradients are piecewise constant on the 12 sub-tetrahedra;
+      OPERATOR_GRAD returns instead their L2 projection, over the parent tetrahedron, onto linear
+      polynomials, which is the gradient used by the composite tetrahedral element, see
+      J.T. Ostien et al., "A 10-node composite tetrahedral finite element for solid mechanics",
+      Int. J. Numer. Meth. Engng. 107(13):1145-1170, 2016.
+      As a consequence, a Galerkin discretization that uses OPERATOR_GRAD is a projected-gradient
+      method, not the standard Galerkin method for the space spanned by OPERATOR_VALUE.
+      OPERATOR_Dk, k >= 2, returns zero, which is consistent with OPERATOR_VALUE but not with
+      OPERATOR_GRAD. When this basis is used to define the cell geometry, Jacobians computed from
+      OPERATOR_GRAD are the projected Jacobians, which are exact only for affine cells.
+
+      \remark   OPERATOR_VALUE is only piecewise polynomial on the parent tetrahedron, so integrals
+      involving it are computed exactly only by a composite cubature on the 12 sub-tetrahedra.
+
+      \remark   OPERATOR_VALUE can be evaluated at points slightly outside the reference
+      tetrahedron (e.g., boundary points perturbed by round-off): such points are assigned to an
+      adjacent sub-tetrahedron and the basis functions are extended linearly from it, so the
+      values are continuous across the boundary of the reference tetrahedron.
   */
 
   namespace Impl {
@@ -107,7 +102,9 @@ namespace Intrepid2 {
       typedef struct Tetrahedron<4> cell_topology_type;
 
       /**
-        \brief See Intrepid2::Basis_HGRAD_TET_COMP12_FEM
+        \brief Returns the index (0 to 11) of the sub-tetrahedron containing the point (x,y,z).
+               Never fails: a point outside the reference tetrahedron is assigned to an adjacent
+               sub-tetrahedron. See Intrepid2::Basis_HGRAD_TET_COMP12_FEM
       */
       template<typename pointValueType>
       KOKKOS_INLINE_FUNCTION
@@ -156,26 +153,21 @@ namespace Intrepid2 {
 
         KOKKOS_INLINE_FUNCTION
         void operator()(const ordinal_type pt) const {
-          switch (opType) {
-          case OPERATOR_VALUE : {
+          if constexpr (opType == OPERATOR_VALUE) {
             auto       output = Kokkos::subview( _outputValues, Kokkos::ALL(), pt );
             const auto input  = Kokkos::subview( _inputPoints,                 pt, Kokkos::ALL() );
             Serial<opType>::getValues( output, input );
-            break;
           }
-          case OPERATOR_GRAD :
-          case OPERATOR_MAX : {
+          else if constexpr ((opType == OPERATOR_GRAD) || (opType == OPERATOR_MAX)) {
             auto       output = Kokkos::subview( _outputValues, Kokkos::ALL(), pt, Kokkos::ALL() );
             const auto input  = Kokkos::subview( _inputPoints,                 pt, Kokkos::ALL() );
             Serial<opType>::getValues( output, input );
-            break;
           }
-          default: {
+          else {
             INTREPID2_TEST_FOR_ABORT( opType != OPERATOR_VALUE &&
                                       opType != OPERATOR_GRAD &&
                                       opType != OPERATOR_MAX,
                                       ">>> ERROR: (Intrepid2::Basis_HGRAD_TET_COMP12_FEM::Functor::operator() operator is not supported");
-          }
           }
         }
       };
@@ -236,12 +228,22 @@ namespace Intrepid2 {
                               operatorType);
     }
 
-    /** \brief  Returns spatial locations (coordinates) of degrees of freedom on a
-        <strong>reference Tetrahedron</strong>.
+    virtual void 
+    getScratchSpaceSize(      ordinal_type& perThreadSpaceSize,
+                        const PointViewType inputPoints,
+                        const EOperator operatorType = OPERATOR_VALUE) const override;
 
-        \param  DofCoords      [out] - array with the coordinates of degrees of freedom,
-        dimensioned (F,D)
-    */
+    KOKKOS_INLINE_FUNCTION
+    virtual void 
+    getValues(       
+          OutputViewType outputValues,
+      const PointViewType  inputPoints,
+      const EOperator operatorType,
+      const typename Kokkos::TeamPolicy<typename DeviceType::execution_space>::member_type& team_member,
+      const int threadScratchLevel, 
+      const ordinal_type subcellDim = -1,
+      const ordinal_type subcellOrdinal = -1) const override;
+
     virtual
     void
     getDofCoords( ScalarViewType dofCoords ) const override {

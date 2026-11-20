@@ -1,43 +1,11 @@
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //           Panzer: A partial differential equation assembly
 //       engine for strongly coupled complex multiphysics systems
-//                 Copyright (2011) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Roger P. Pawlowski (rppawlo@sandia.gov) and
-// Eric C. Cyr (eccyr@sandia.gov)
-// ***********************************************************************
+// Copyright 2011 NTESS and the Panzer contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #ifndef __Panzer_ScatterDirichletResidual_Tpetra_Hessian_hpp__
@@ -54,26 +22,43 @@ namespace panzer {
 // **************************************************************
 // Hessian Specialization
 // **************************************************************
+
+/**
+ * \brief Hessian specialization of ScatterDirichletResidual_Tpetra.
+ *
+ * Enforces Dirichlet boundary values at the affected degrees of
+ * freedom (overwriting, rather than accumulating into, the
+ * corresponding residual/matrix entries) while additionally
+ * propagating second-derivative (Hessian) information, so that
+ * Dirichlet BCs are correctly reflected in Hessian-vector products
+ * used by e.g. optimization or uncertainty quantification drivers.
+ */
 template<typename TRAITS,typename LO,typename GO,typename NodeT>
 class ScatterDirichletResidual_Tpetra<panzer::Traits::Hessian,TRAITS,LO,GO,NodeT>
   : public panzer::EvaluatorWithBaseImpl<TRAITS>,
     public PHX::EvaluatorDerived<panzer::Traits::Hessian, TRAITS>,
     public panzer::CloneableEvaluator  {
-  
+
 public:
+  /// \brief Construct with a global indexer only; scattered field names must be set later (e.g. via clone()).
   ScatterDirichletResidual_Tpetra(const Teuchos::RCP<const GlobalIndexer> & indexer)
      : globalIndexer_(indexer) {}
-  
+
+  /// \brief Construct from a global indexer and a ParameterList describing the fields to scatter and the Dirichlet BC side set.
   ScatterDirichletResidual_Tpetra(const Teuchos::RCP<const GlobalIndexer> & indexer,
                                   const Teuchos::ParameterList& p);
-  
+
+  /// \brief Looks up and caches the Tpetra linear object container and field offsets needed by evaluateFields(). Called once before the first evaluation.
   void postRegistrationSetup(typename TRAITS::SetupData d,
 			     PHX::FieldManager<TRAITS>& vm);
 
+  /// \brief Fetches the Tpetra containers (residual/matrix/Dirichlet counter) to scatter into for the upcoming fill.
   void preEvaluate(typename TRAITS::PreEvalData d);
-  
+
+  /// \brief Overwrites the Dirichlet-affected residual, matrix, and Hessian-vector-product entries for this workset with the scattered field values and their derivatives.
   void evaluateFields(typename TRAITS::EvalData workset);
-  
+
+  /// \brief Creates a copy of this evaluator configured from a new ParameterList, sharing the same global indexer.
   virtual Teuchos::RCP<CloneableEvaluator> clone(const Teuchos::ParameterList & pl) const
   { return Teuchos::rcp(new ScatterDirichletResidual_Tpetra<panzer::Traits::Hessian,TRAITS,LO,GO>(globalIndexer_,pl)); }
 
@@ -105,7 +90,7 @@ private:
 
   ScatterDirichletResidual_Tpetra() {}
 
-  Teuchos::RCP<typename LOC::VectorType> dirichletCounter_;
+  Teuchos::RCP<typename LOC::MultiVectorType> dirichletCounter_;
 
   std::string globalDataKey_; // what global data does this fill?
   Teuchos::RCP<const LOC> tpetraContainer_;

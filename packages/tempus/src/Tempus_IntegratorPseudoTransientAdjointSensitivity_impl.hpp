@@ -1,10 +1,11 @@
-// @HEADER
-// ****************************************************************************
-//                Tempus: Copyright (2017) Sandia Corporation
+//@HEADER
+// *****************************************************************************
+//          Tempus: Time Integration and Sensitivity Analysis Package
 //
-// Distributed under BSD 3-clause license (See accompanying file Copyright.txt)
-// ****************************************************************************
-// @HEADER
+// Copyright 2017 NTESS and the Tempus contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+//@HEADER
 
 #ifndef Tempus_IntegratorPseudoTransientAdjointSensitivity_impl_hpp
 #define Tempus_IntegratorPseudoTransientAdjointSensitivity_impl_hpp
@@ -13,6 +14,8 @@
 #include "Thyra_VectorStdOps.hpp"
 #include "Thyra_MultiVectorStdOps.hpp"
 #include "Thyra_ImplicitAdjointModelEvaluator.hpp"
+
+#include "Tempus_StepperImplicit_decl.hpp"
 
 namespace Tempus {
 
@@ -31,7 +34,8 @@ IntegratorPseudoTransientAdjointSensitivity<Scalar>::
   state_integrator_       = createIntegratorBasic<Scalar>(inputPL, model_);
   sens_model_             = createSensitivityModel(model_, adjoint_residual_model_,
                                                    adjoint_solve_model_, inputPL);
-  sens_integrator_        = createIntegratorBasic<Scalar>(inputPL, sens_model_);
+  sens_integrator_        = createIntegratorBasic<Scalar>(adjointParameters(inputPL),
+                                                   sens_model_);
   stepMode_               = SensitivityStepMode::Forward;
   do_forward_integration_ = true;
   do_adjoint_integration_ = true;
@@ -466,8 +470,24 @@ void IntegratorPseudoTransientAdjointSensitivity<Scalar>::setParameterList(
 
   model = Teuchos::rcp_const_cast<Thyra::ModelEvaluator<Scalar>>(
       sens_integrator_->getStepper()->getModel());
-  auto tmp_sens_integrator = createIntegratorBasic<Scalar>(inputPL, model);
+  auto tmp_sens_integrator =
+      createIntegratorBasic<Scalar>(adjointParameters(inputPL), model);
   sens_integrator_->copy(tmp_sens_integrator);
+}
+
+template <class Scalar>
+Teuchos::RCP<Teuchos::ParameterList>
+IntegratorPseudoTransientAdjointSensitivity<Scalar>::adjointParameters(
+    const Teuchos::RCP<Teuchos::ParameterList>& inputPL)
+{
+  // The adjoint integrator uses a copy of the parameters, without the objects
+  // of the forward problem that the nonlinear solver of the forward stepper
+  // stores in them (e.g., for NOX row sum scaling), which do not apply to the
+  // adjoint problem (see removeIntegratorSolverObjects).
+  if (inputPL == Teuchos::null) return inputPL;
+  auto adjointPL = Teuchos::rcp(new Teuchos::ParameterList(*inputPL));
+  removeIntegratorSolverObjects(*adjointPL);
+  return adjointPL;
 }
 
 template <class Scalar>
@@ -529,7 +549,7 @@ Teuchos::RCP<AdjointSensitivityModelEvaluator<Scalar>>
 IntegratorPseudoTransientAdjointSensitivity<Scalar>::createSensitivityModel(
     const Teuchos::RCP<Thyra::ModelEvaluator<Scalar>>& model,
     const Teuchos::RCP<Thyra::ModelEvaluator<Scalar>>& adjoint_residual_model,
-    const Teuchos::RCP<Thyra::ModelEvaluator<Scalar>>& adjoint_solve_model,
+    const Teuchos::RCP<Thyra::ModelEvaluator<Scalar>>& /*adjoint_solve_model*/,
     const Teuchos::RCP<Teuchos::ParameterList>& inputPL)
 {
   using Teuchos::rcp;

@@ -1,44 +1,10 @@
 // @HEADER
-// ************************************************************************
-//
+// *****************************************************************************
 //                           Intrepid2 Package
-//                 Copyright (2007) Sandia Corporation
 //
-// Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
-// license for use of this work by or on behalf of the U.S. Government.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Kyungjoo Kim  (kyukim@sandia.gov), or
-//                    Mauro Perego  (mperego@sandia.gov), or
-//                    Nathan Roberts  (nvrober@sandia.gov)
-//
-// ************************************************************************
+// Copyright 2007 NTESS and the Intrepid2 contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 /** \file   Intrepid2_CellDataDef.hpp
@@ -67,28 +33,28 @@ isSupported( const unsigned cellTopoKey ) {
   case shards::Beam<2>::key:
   case shards::Beam<3>::key:
   case shards::Triangle<3>::key:
-  // case shards::Triangle<4>::key:
+  //case shards::Triangle<4>::key:
   case shards::Triangle<6>::key:
-  // case shards::ShellTriangle<3>::key:
-  // case shards::ShellTriangle<6>::key:
+  case shards::ShellTriangle<3>::key:
+  case shards::ShellTriangle<6>::key:
   case shards::Quadrilateral<4>::key:
   case shards::Quadrilateral<8>::key:
   case shards::Quadrilateral<9>::key:
-  // case shards::ShellQuadrilateral<4>::key:
-  // case shards::ShellQuadrilateral<8>::key:
-  // case shards::ShellQuadrilateral<9>::key:
+  case shards::ShellQuadrilateral<4>::key:
+  case shards::ShellQuadrilateral<8>::key:
+  case shards::ShellQuadrilateral<9>::key:
   case shards::Tetrahedron<4>::key:
-  // case shards::Tetrahedron<8>::key:
+  //case shards::Tetrahedron<8>::key:
   case shards::Tetrahedron<10>::key:
-  // case shards::Tetrahedron<11>::key:
+  case shards::Tetrahedron<11>::key:
   case shards::Hexahedron<8>::key:
   case shards::Hexahedron<20>::key:
   case shards::Hexahedron<27>::key:
   case shards::Pyramid<5>::key:
-  // case shards::Pyramid<13>::key:
-  // case shards::Pyramid<14>::key:
+  case shards::Pyramid<13>::key:
+  //case shards::Pyramid<14>::key:
   case shards::Wedge<6>::key:
-  // case shards::Wedge<15>::key:
+  case shards::Wedge<15>::key:
   case shards::Wedge<18>::key:
   return true;
   default:
@@ -134,17 +100,17 @@ get( const ordinal_type          subcellDim,
   case shards::Quadrilateral<8>::key:
   case shards::Quadrilateral<9>::key:      subcellParam = quadEdgesParam; break;
 
-  // case shards::ShellTriangle<3>::key:
-  // case shards::ShellTriangle<6>::key:      subcellParam = ( subcellDim == 2 ? shellTriFacesParam : shellTriEdgesParam ); break;
+  case shards::ShellTriangle<3>::key:
+  case shards::ShellTriangle<6>::key:      subcellParam = ( subcellDim == 2 ? shellTriFacesParam : shellTriEdgesParam ); break;
 
-  // case shards::ShellQuadrilateral<4>::key:
-  // case shards::ShellQuadrilateral<8>::key:
-  // case shards::ShellQuadrilateral<9>::key: subcellParam = ( subcellDim == 2 ? shellQuadFacesParam : shellQuadEdgesParam ); break;
+  case shards::ShellQuadrilateral<4>::key:
+  case shards::ShellQuadrilateral<8>::key:
+  case shards::ShellQuadrilateral<9>::key: subcellParam = ( subcellDim == 2 ? shellQuadFacesParam : shellQuadEdgesParam ); break;
 
   case shards::ShellLine<2>::key:
-  case shards::ShellLine<3>::key:
+  case shards::ShellLine<3>::key:          subcellParam = shellLineEdgesParam; break;
   case shards::Beam<2>::key:
-  case shards::Beam<3>::key:               subcellParam = lineEdgesParam; break;
+  case shards::Beam<3>::key:               subcellParam = beamEdgeParam; break;
   default: {
     INTREPID2_TEST_FOR_EXCEPTION( true, std::invalid_argument,
         ">>> ERROR (Intrepid2::RefSubcellParametrization::get): invalid cell topology.");
@@ -223,12 +189,27 @@ RefSubcellParametrization<DeviceType>::set() {
   }
   {
     const auto tri = shards::CellTopology(shards::getCellTopologyData<shards::Triangle<3> >());
-
     subcellDim = 1;
     triEdgesParam = ViewType("CellTools::SubcellParametrization::triEdges", tri.getSubcellCount(subcellDim), tri.getDimension(), subcellDim+1);
     auto subcellParamHost = Kokkos::create_mirror_view(triEdgesParam);
     set( subcellParamHost, subcellDim, tri );
     deep_copy(triEdgesParam,subcellParamHost);
+  }
+  {
+    const auto shellTri = shards::CellTopology(shards::getCellTopologyData<shards::ShellTriangle<3> >());
+
+    subcellDim = 2;
+    shellTriFacesParam = ViewType("CellTools::SubcellParametrization::shellTriFaces", shellTri.getSubcellCount(subcellDim), shellTri.getDimension(), subcellDim+1);
+    auto subcell2dParamHost = Kokkos::create_mirror_view(shellTriFacesParam);
+    set( subcell2dParamHost, subcellDim, shellTri );
+    deep_copy(shellTriFacesParam,subcell2dParamHost);
+
+
+    subcellDim = 1;
+    shellTriEdgesParam = ViewType("CellTools::SubcellParametrization::shellTriEdges", shellTri.getSubcellCount(subcellDim), shellTri.getDimension(), subcellDim+1);
+    auto subcellParamHost = Kokkos::create_mirror_view(shellTriEdgesParam);
+    set( subcellParamHost, subcellDim, shellTri );
+    deep_copy(shellTriEdgesParam,subcellParamHost);
   }
   {
     const auto quad = shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >());
@@ -241,17 +222,42 @@ RefSubcellParametrization<DeviceType>::set() {
 
   }
   {
-    const auto line = shards::CellTopology(shards::getCellTopologyData<shards::ShellLine<2> >());
+    const auto shellQuad = shards::CellTopology(shards::getCellTopologyData<shards::ShellQuadrilateral<4> >());
+
+    subcellDim = 2;
+    shellQuadFacesParam = ViewType("CellTools::SubcellParametrization::shellQuadFaces", shellQuad.getSubcellCount(subcellDim), shellQuad.getDimension(), subcellDim+1);
+    auto subcell2dParamHost = Kokkos::create_mirror_view(shellQuadFacesParam);
+    set( subcell2dParamHost, subcellDim, shellQuad );
+    deep_copy(shellQuadFacesParam,subcell2dParamHost);
 
     subcellDim = 1;
-    lineEdgesParam = ViewType("CellTools::SubcellParametrization::lineEdges", line.getSubcellCount(subcellDim), line.getDimension(), subcellDim+1);
-    auto subcellParamHost = Kokkos::create_mirror_view(lineEdgesParam);
-    set( subcellParamHost, subcellDim, line );
-    deep_copy(lineEdgesParam,subcellParamHost);
+    shellQuadEdgesParam = ViewType("CellTools::SubcellParametrization::shellQuadEdges", shellQuad.getSubcellCount(subcellDim), shellQuad.getDimension(), subcellDim+1);
+    auto subcellParamHost = Kokkos::create_mirror_view(shellQuadEdgesParam);
+    set( subcellParamHost, subcellDim, shellQuad );
+    deep_copy(shellQuadEdgesParam,subcellParamHost);
+  }
+  {
+    const auto beam = shards::CellTopology(shards::getCellTopologyData<shards::Beam<2> >());
+
+    subcellDim = 1;
+    beamEdgeParam = ViewType("CellTools::SubcellParametrization::beamEdge", beam.getSubcellCount(subcellDim), beam.getDimension(), subcellDim+1);
+    auto subcellParamHost = Kokkos::create_mirror_view(beamEdgeParam);
+    set( subcellParamHost, subcellDim, beam );
+    deep_copy(beamEdgeParam,subcellParamHost);
+  }
+  {
+    const auto shellLine = shards::CellTopology(shards::getCellTopologyData<shards::ShellLine<2> >());
+
+    subcellDim = 1;
+    shellLineEdgesParam = ViewType("CellTools::SubcellParametrization::shellLineEdges", shellLine.getSubcellCount(subcellDim), shellLine.getDimension(), subcellDim+1);
+    auto subcellParamHost = Kokkos::create_mirror_view(shellLineEdgesParam);
+    set( subcellParamHost, subcellDim, shellLine );
+    deep_copy(shellLineEdgesParam,subcellParamHost);
   }
 
   Kokkos::push_finalize_hook( [=] {
-    lineEdgesParam = ViewType();
+    beamEdgeParam = ViewType();
+    shellLineEdgesParam = ViewType();
     triEdgesParam = ViewType();
     quadEdgesParam = ViewType();
     shellTriEdgesParam = ViewType();
@@ -415,7 +421,8 @@ isSubcellParametrizationSet_ = false;
     RefSubcellParametrization<DeviceType>:: \
     obj = typename RefSubcellParametrization<DeviceType>::ViewType();
 
-DefineStaticRefParametrization(lineEdgesParam)
+DefineStaticRefParametrization(beamEdgeParam)
+DefineStaticRefParametrization(shellLineEdgesParam)
 DefineStaticRefParametrization(triEdgesParam)
 DefineStaticRefParametrization(quadEdgesParam)
 DefineStaticRefParametrization(shellTriEdgesParam)
@@ -656,7 +663,7 @@ refNodeDataStatic_ = {
     },
     { // 11
         { 0.0, 0.0, 0.0}, { 1.0, 0.0, 0.0}, { 0.0, 1.0, 0.0}, { 0.0, 0.0, 1.0},
-        { 0.5, 0.0, 0.0}, { 0.5, 0.5, 0.0}, { 0.0, 0.5, 0.0}, { 0.0, 0.0, 0.5}, { 0.5, 0.0, 0.5}, { 0.0, 0.5, 0.5}
+        { 0.5, 0.0, 0.0}, { 0.5, 0.5, 0.0}, { 0.0, 0.5, 0.0}, { 0.0, 0.0, 0.5}, { 0.5, 0.0, 0.5}, { 0.0, 0.5, 0.5}, {0.25, 0.25, 0.25}
     },
     // hex
     { // 8
@@ -855,7 +862,127 @@ refCenterDataStatic_ = {
     // wedge
     { 1.0/3.0, 1.0/3.0, 0.0},
 };
-}
+
+
+// ParametricDistance
+
+  template<typename PointViewType>
+  KOKKOS_INLINE_FUNCTION
+  typename ScalarTraits<typename PointViewType::value_type>::scalar_type 
+  ParametricDistance<shards::Line<>::key>::
+  distance(const PointViewType &point) {
+    using scalar_type = typename ScalarTraits<typename PointViewType::value_type>::scalar_type;
+    const scalar_type p0 = get_scalar_value(point(0));
+    return Util<scalar_type>::max(-p0, p0); 
+  }
+
+  template<typename PointViewType>
+  KOKKOS_INLINE_FUNCTION
+  typename ScalarTraits<typename PointViewType::value_type>::scalar_type 
+  ParametricDistance<shards::Beam<>::key>::
+  distance(const PointViewType &point) {
+    return ParametricDistance<shards::Quadrilateral<>::key>::distance(point);
+  }
+
+  template<typename PointViewType>
+  KOKKOS_INLINE_FUNCTION
+  typename ScalarTraits<typename PointViewType::value_type>::scalar_type 
+  ParametricDistance<shards::ShellLine<>::key>::
+  distance(const PointViewType &point) {
+    return ParametricDistance<shards::Quadrilateral<>::key>::distance(point);
+  }
+
+  template<typename PointViewType>
+  KOKKOS_INLINE_FUNCTION
+  typename ScalarTraits<typename PointViewType::value_type>::scalar_type 
+  ParametricDistance<shards::Triangle<>::key>::
+  distance(const PointViewType &point) {
+    using scalar_type = typename ScalarTraits<typename PointViewType::value_type>::scalar_type;
+    constexpr scalar_type one(1), two(2), three(3);
+    const scalar_type p0 = get_scalar_value(point(0));
+    const scalar_type p1 = get_scalar_value(point(1));
+    return Util<scalar_type>::max(one-three*p0, three*(p0+p1)-two, one-three*p1); 
+  }
+
+  template<typename PointViewType>
+  KOKKOS_INLINE_FUNCTION
+  typename ScalarTraits<typename PointViewType::value_type>::scalar_type 
+  ParametricDistance<shards::ShellTriangle<>::key>::
+  distance(const PointViewType &point) {
+    return ParametricDistance<shards::Wedge<>::key>::distance(point);
+  }
+
+  template<typename PointViewType>
+  KOKKOS_INLINE_FUNCTION
+  typename ScalarTraits<typename PointViewType::value_type>::scalar_type 
+  ParametricDistance<shards::Quadrilateral<>::key>::
+  distance(const PointViewType &point) {
+    using scalar_type = typename ScalarTraits<typename PointViewType::value_type>::scalar_type;
+    const scalar_type p0 = get_scalar_value(point(0));
+    const scalar_type p1 = get_scalar_value(point(1));
+    return Util<scalar_type>::max(-p1, p0, p1, -p0); 
+  }
+
+  template<typename PointViewType>
+  KOKKOS_INLINE_FUNCTION
+  typename ScalarTraits<typename PointViewType::value_type>::scalar_type 
+  ParametricDistance<shards::ShellQuadrilateral<>::key>::
+  distance(const PointViewType &point) {
+    return ParametricDistance<shards::Hexahedron<>::key>::distance(point);
+  }
+
+  template<typename PointViewType>
+  KOKKOS_INLINE_FUNCTION
+  typename ScalarTraits<typename PointViewType::value_type>::scalar_type 
+  ParametricDistance<shards::Tetrahedron<>::key>::
+  distance(const PointViewType &point) {
+    using scalar_type = typename ScalarTraits<typename PointViewType::value_type>::scalar_type;
+    constexpr scalar_type one(1), three(3), four(4);
+    const scalar_type p0 = get_scalar_value(point(0));
+    const scalar_type p1 = get_scalar_value(point(1));
+    const scalar_type p2 = get_scalar_value(point(2));
+    return Util<scalar_type>::max(one-four*p1, four*(p0+p1+p2)-three, one-four*p0, one-four*p2);
+  }
+
+  template<typename PointViewType>
+  KOKKOS_INLINE_FUNCTION
+  typename ScalarTraits<typename PointViewType::value_type>::scalar_type 
+  ParametricDistance<shards::Hexahedron<>::key>::
+  distance(const PointViewType &point) {
+    using scalar_type = typename ScalarTraits<typename PointViewType::value_type>::scalar_type;
+    const scalar_type p0 = get_scalar_value(point(0));
+    const scalar_type p1 = get_scalar_value(point(1));
+    const scalar_type p2 = get_scalar_value(point(2));
+    return Util<scalar_type>::max(-p1, p0, p1, -p0, -p2, p2); 
+  }
+
+  template<typename PointViewType>
+  KOKKOS_INLINE_FUNCTION
+  typename ScalarTraits<typename PointViewType::value_type>::scalar_type 
+  ParametricDistance<shards::Pyramid<>::key>::
+  distance(const PointViewType &point) {
+    using scalar_type = typename ScalarTraits<typename PointViewType::value_type>::scalar_type;
+    constexpr scalar_type one(1), four(4), onethird(1.0/3.0), fourthirds(4.0/3.0);
+    const scalar_type p0 = get_scalar_value(point(0));
+    const scalar_type p1 = get_scalar_value(point(1));
+    const scalar_type p2 = get_scalar_value(point(2));
+    return Util<scalar_type>::max(fourthirds*(p2-p1)-onethird,  fourthirds*(p2+p0)-onethird, fourthirds*(p2+p1)-onethird, fourthirds*(p2-p0)-onethird, one-four*p2);
+  }
+  
+  template<typename PointViewType>
+  KOKKOS_INLINE_FUNCTION
+  typename ScalarTraits<typename PointViewType::value_type>::scalar_type 
+  ParametricDistance<shards::Wedge<>::key>::
+  distance(const PointViewType &point) {
+    using scalar_type = typename ScalarTraits<typename PointViewType::value_type>::scalar_type;
+    constexpr scalar_type one(1), two(2), three(3);
+    const scalar_type p0 = get_scalar_value(point(0));
+    const scalar_type p1 = get_scalar_value(point(1));
+    const scalar_type p2 = get_scalar_value(point(2));
+    return Util<scalar_type>::max(one-three*p0, three*(p0+p1)-two, one-three*p1, -p2, p2);
+  }
+
+}  // Intrepid2 namespace
 
 #endif
 

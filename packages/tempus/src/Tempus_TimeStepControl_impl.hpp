@@ -1,10 +1,11 @@
-// @HEADER
-// ****************************************************************************
-//                Tempus: Copyright (2017) Sandia Corporation
+//@HEADER
+// *****************************************************************************
+//          Tempus: Time Integration and Sensitivity Analysis Package
 //
-// Distributed under BSD 3-clause license (See accompanying file Copyright.txt)
-// ****************************************************************************
-// @HEADER
+// Copyright 2017 NTESS and the Tempus contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+//@HEADER
 
 #ifndef Tempus_TimeStepControl_impl_hpp
 #define Tempus_TimeStepControl_impl_hpp
@@ -300,16 +301,23 @@ void TimeStepControl<Scalar>::setNextTimeStep(
     Scalar tone          = endTime;
     bool landOnExactly   = false;
     if (teThisStep) {
+      // Land on the earliest of the TimeEvents in this time step.
+      for (auto& e : constrainingTEs) {
+        if (e->getLandOnExactly() == true) {
+          const Scalar te_time = e->timeOfNextEvent(lastTime);
+          if (!landOnExactly || te_time < tone) tone = te_time;
+          landOnExactly = true;
+        }
+      }
+      // With "Variable" time steps landing on an earlier TimeEvent, a later
+      // output time is not reached in this time step.
       for (auto& e : constrainingTEs) {
         if (e->getName() == "Output Time Interval" ||
             e->getName() == "Output Time List") {
-          outputDueToTime = true;
-        }
-
-        if (e->getLandOnExactly() == true) {
-          landOnExactly = true;
-          tone          = e->timeOfNextEvent(lastTime);
-          break;
+          if (getStepType() != "Variable" || !e->getLandOnExactly() ||
+              e->timeOfNextEvent(lastTime) <=
+                  tone + std::fabs(tone) * numericalTol<Scalar>())
+            outputDueToTime = true;
         }
       }
     }

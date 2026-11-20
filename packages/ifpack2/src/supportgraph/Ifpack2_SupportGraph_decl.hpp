@@ -1,44 +1,11 @@
-/*@HEADER
-// ***********************************************************************
-//
+// @HEADER
+// *****************************************************************************
 //       Ifpack2: Templated Object-Oriented Algebraic Preconditioner Package
-//                 Copyright (2009) Sandia Corporation
 //
-// Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
-// license for use of this work by or on behalf of the U.S. Government.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
-//
-// ***********************************************************************
-//@HEADER
-*/
+// Copyright 2009 NTESS and the Ifpack2 contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
 
 /// \file Ifpack2_SupportGraph_decl.hpp
 /// \brief Declaration of SupportGraph preconditioner
@@ -56,12 +23,11 @@
 // bugs that future development might introduce in the CMake scripts.
 
 #ifdef HAVE_IFPACK2_AMESOS2
-#  include <Amesos2.hpp>
-#  include <Amesos2_Version.hpp>
+#include <Amesos2.hpp>
+#include <Amesos2_Version.hpp>
 #else
-#  error "Ifpack2::SupportGraph requires that Trilinos be built with the Amesos2 package enabled."
-#endif // HAVE_IFPACK2_AMESOS2
-
+#error "Ifpack2::SupportGraph requires that Trilinos be built with the Amesos2 package enabled."
+#endif  // HAVE_IFPACK2_AMESOS2
 
 namespace Ifpack2 {
 
@@ -91,18 +57,16 @@ namespace Ifpack2 {
 ///
 /// See the documentation of setParameters() for a list of valid
 /// parameters.
-template<class MatrixType>
-class SupportGraph :
-    virtual public Ifpack2::Preconditioner<typename MatrixType::scalar_type,
-                                           typename MatrixType::local_ordinal_type,
-                                           typename MatrixType::global_ordinal_type,
-                                           typename MatrixType::node_type>,
-    virtual public Ifpack2::Details::CanChangeMatrix<Tpetra::RowMatrix<typename MatrixType::scalar_type,
-                                                                       typename MatrixType::local_ordinal_type,
-                                                                       typename MatrixType::global_ordinal_type,
-                                                                       typename MatrixType::node_type> >
-{
-public:
+template <class MatrixType>
+class SupportGraph : virtual public Ifpack2::Preconditioner<typename MatrixType::scalar_type,
+                                                            typename MatrixType::local_ordinal_type,
+                                                            typename MatrixType::global_ordinal_type,
+                                                            typename MatrixType::node_type>,
+                     virtual public Ifpack2::Details::CanChangeMatrix<Tpetra::RowMatrix<typename MatrixType::scalar_type,
+                                                                                        typename MatrixType::local_ordinal_type,
+                                                                                        typename MatrixType::global_ordinal_type,
+                                                                                        typename MatrixType::node_type> > {
+ public:
   //! \name Typedefs
   //@{
 
@@ -125,12 +89,14 @@ public:
   typedef Tpetra::RowMatrix<scalar_type,
                             local_ordinal_type,
                             global_ordinal_type,
-                            node_type> row_matrix_type;
+                            node_type>
+      row_matrix_type;
 
   //! Type of the Tpetra::Map specialization that this class uses.
   typedef Tpetra::Map<local_ordinal_type,
                       global_ordinal_type,
-                      node_type> map_type;
+                      node_type>
+      map_type;
 
   //@}
   //! \name Constructors and destructor
@@ -144,7 +110,7 @@ public:
   ///
   /// This will <i>not</i> modify the input matrix.  It
   /// stores the support graph separately.
-  explicit SupportGraph (const Teuchos::RCP<const row_matrix_type>& A);
+  explicit SupportGraph(const Teuchos::RCP<const row_matrix_type>& A);
 
   //! Destructor
   virtual ~SupportGraph();
@@ -163,7 +129,7 @@ public:
   /// The absolute and relative threshold parameters affect how this
   /// code modifies the diagonal entry of the output factor.
   ///
-  void setParameters (const Teuchos::ParameterList& params);
+  void setParameters(const Teuchos::ParameterList& params);
 
   /// \brief Clear any previously computed support graph.
   ///
@@ -172,7 +138,7 @@ public:
   /// called.  If you call this after calling compute(), you must
   /// recompute the factorization (by calling compute() again) before
   /// you may call apply().
-  void initialize ();
+  void initialize();
 
   //! Returns \c true if the preconditioner has been successfully initialized.
   inline bool isInitialized() const {
@@ -215,7 +181,7 @@ public:
   /// The new matrix A need not necessarily have the same Maps or even
   /// the same communicator as the original matrix.
   virtual void
-  setMatrix (const Teuchos::RCP<const row_matrix_type>& A);
+  setMatrix(const Teuchos::RCP<const row_matrix_type>& A);
 
   //@}
   //! \name Implementation of Tpetra::Operator
@@ -226,21 +192,21 @@ public:
   /// \param X [in] Input multivector; "right-hand side" of the solve.
   /// \param Y [out] Output multivector; result of the solve.
   void
-  apply (const Tpetra::MultiVector<scalar_type, local_ordinal_type, global_ordinal_type,node_type>& X,
-         Tpetra::MultiVector<scalar_type, local_ordinal_type, global_ordinal_type, node_type>& Y,
-         Teuchos::ETransp mode = Teuchos::NO_TRANS,
-         scalar_type alpha = Teuchos::ScalarTraits<scalar_type>::one (),
-         scalar_type beta = Teuchos::ScalarTraits<scalar_type>::zero ()) const;
+  apply(const Tpetra::MultiVector<scalar_type, local_ordinal_type, global_ordinal_type, node_type>& X,
+        Tpetra::MultiVector<scalar_type, local_ordinal_type, global_ordinal_type, node_type>& Y,
+        Teuchos::ETransp mode = Teuchos::NO_TRANS,
+        scalar_type alpha     = Teuchos::ScalarTraits<scalar_type>::one(),
+        scalar_type beta      = Teuchos::ScalarTraits<scalar_type>::zero()) const;
 
   //! Tpetra::Map representing the domain of this operator.
-  Teuchos::RCP<const map_type> getDomainMap () const;
+  Teuchos::RCP<const map_type> getDomainMap() const;
 
   //! Tpetra::Map representing the range of this operator.
-  Teuchos::RCP<const map_type> getRangeMap () const;
+  Teuchos::RCP<const map_type> getRangeMap() const;
 
   //! Whether this object's apply() method can apply the transpose
   //! (or conjugate transpose, if applicable).
-  bool hasTransposeApply () const;
+  bool hasTransposeApply() const;
 
   //@}
   //! \name Mathematical functions
@@ -250,7 +216,7 @@ public:
   Teuchos::RCP<const Teuchos::Comm<int> > getComm() const;
 
   //! The matrix to be preconditioned.
-  Teuchos::RCP<const row_matrix_type> getMatrix () const;
+  Teuchos::RCP<const row_matrix_type> getMatrix() const;
 
   //! Returns the number of calls to initialize().
   int getNumInitialize() const;
@@ -272,12 +238,12 @@ public:
 
   //! Get absolute threshold value
   inline magnitude_type getAbsoluteThreshold() const {
-    return(Athresh_);
+    return (Athresh_);
   }
 
   //! Get relative threshold value
   inline magnitude_type getRelativeThreshold() const {
-    return(Rthresh_);
+    return (Rthresh_);
   }
 
   // @}
@@ -289,33 +255,35 @@ public:
 
   //! Print the object with some verbosity level to a Teuchos::nFancyOStream.
   void
-  describe (Teuchos::FancyOStream& out,
-            const Teuchos::EVerbosityLevel verbLevel =
-            Teuchos::Describable::verbLevel_default) const;
+  describe(Teuchos::FancyOStream& out,
+           const Teuchos::EVerbosityLevel verbLevel =
+               Teuchos::Describable::verbLevel_default) const;
 
   //@}
 
-private:
+ private:
   typedef Teuchos::ScalarTraits<scalar_type> STS;
   typedef Teuchos::ScalarTraits<magnitude_type> STM;
   typedef typename Teuchos::Array<local_ordinal_type>::size_type size_type;
   typedef Tpetra::MultiVector<scalar_type,
                               local_ordinal_type,
                               global_ordinal_type,
-                              node_type> MV;
+                              node_type>
+      MV;
   typedef Tpetra::CrsMatrix<scalar_type,
                             local_ordinal_type,
                             global_ordinal_type,
-                            node_type> crs_matrix_type;
+                            node_type>
+      crs_matrix_type;
 
   //! Find the maximum weight spanning tree and construct a CrsMatrix with it
-  void findSupport ();
+  void findSupport();
 
   //! Copy constructor (declared private and undefined; may not be used)
-  SupportGraph (const SupportGraph<MatrixType>& RHS);
+  SupportGraph(const SupportGraph<MatrixType>& RHS);
 
   //! operator= (declared private and undefined; may not be used)
-  SupportGraph<MatrixType>& operator= (const SupportGraph<MatrixType>& RHS);
+  SupportGraph<MatrixType>& operator=(const SupportGraph<MatrixType>& RHS);
 
   /// \brief Wrap the given matrix in a "local filter," if necessary.
   ///
@@ -328,7 +296,7 @@ private:
   /// matrix is already "local," so this function just returns the
   /// original input.
   static Teuchos::RCP<const row_matrix_type>
-  makeLocalFilter (const Teuchos::RCP<const row_matrix_type>& A);
+  makeLocalFilter(const Teuchos::RCP<const row_matrix_type>& A);
 
   //@}
   // \name The matrix, its support graph, and the (local) solver
@@ -352,21 +320,21 @@ private:
                                Tpetra::MultiVector<scalar_type,
                                                    local_ordinal_type,
                                                    global_ordinal_type,
-                                                   node_type> > > solver_;
+                                                   node_type> > >
+      solver_;
 
   //@}
   // \name Parameters (set by the input ParameterList)
   //@{
 
-  magnitude_type Athresh_; //!< Absolute threshold
-  magnitude_type Rthresh_; //!< Relative threshold
+  magnitude_type Athresh_;  //!< Absolute threshold
+  magnitude_type Rthresh_;  //!< Relative threshold
   int Randomize_;
   int NumForests_;
   double KeepDiag_;
   //@}
   // \name Other internal data
   //@{
-
 
   //! Total time in seconds for all successful calls to initialize().
   double InitializeTime_;
@@ -386,8 +354,8 @@ private:
   bool IsComputed_;
 
   //@}
-}; // class SupportGraph
+};  // class SupportGraph
 
-} // namespace Ifpack2
+}  // namespace Ifpack2
 
 #endif /* IFPACK2_SUPPORTGRAPH_HPP */

@@ -1,48 +1,12 @@
 // @HEADER
-//
-// ***********************************************************************
-//
+// *****************************************************************************
 //        MueLu: A package for multigrid based preconditioning
-//                  Copyright 2012 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact
-//                    Jonathan Hu       (jhu@sandia.gov)
-//                    Andrey Prokopenko (aprokop@sandia.gov)
-//                    Ray Tuminaro      (rstumin@sandia.gov)
-//
-// ***********************************************************************
-//
+// Copyright 2012 NTESS and the MueLu contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
+
 #ifndef MUELU_IFPACK2SMOOTHER_DECL_HPP
 #define MUELU_IFPACK2SMOOTHER_DECL_HPP
 
@@ -52,14 +16,10 @@
 #include <Xpetra_CrsMatrixWrap_fwd.hpp>
 #include <Xpetra_Matrix_fwd.hpp>
 #include <Xpetra_MultiVectorFactory_fwd.hpp>
-#ifdef HAVE_XPETRA_TPETRA  // needed for clone()
 #include <Xpetra_TpetraCrsMatrix_fwd.hpp>
-#endif
 
 #include "MueLu_ConfigDefs.hpp"
 #include "MueLu_Ifpack2Smoother_fwd.hpp"
-
-#if defined(HAVE_MUELU_IFPACK2)
 
 #include <Tpetra_CrsMatrix.hpp>
 
@@ -217,9 +177,6 @@ class Ifpack2Smoother : public SmootherPrototype<Scalar, LocalOrdinal, GlobalOrd
   Scalar SetupChebyshevEigenvalues(Level& currentLevel, const std::string& matrixName, const std::string& label, Teuchos::ParameterList& paramList) const;
 
  private:
-  //!
-  bool constructionSuccessful_;
-
   //! ifpack2-specific key phrase that denote smoother type
   std::string type_;
 
@@ -234,57 +191,7 @@ class Ifpack2Smoother : public SmootherPrototype<Scalar, LocalOrdinal, GlobalOrd
 
 };  // class Ifpack2Smoother
 
-#ifdef HAVE_MUELU_EPETRA
-
-#if ((defined(EPETRA_HAVE_OMP) && (!defined(HAVE_TPETRA_INST_OPENMP) || !defined(HAVE_TPETRA_INST_INT_INT))) || \
-     (!defined(EPETRA_HAVE_OMP) && (!defined(HAVE_TPETRA_INST_SERIAL) || !defined(HAVE_TPETRA_INST_INT_INT))))
-// Stub specialization for missing Epetra template args
-template <>
-class Ifpack2Smoother<double, int, int, Xpetra::EpetraNode> : public SmootherPrototype<double, int, int, Xpetra::EpetraNode> {
-  typedef double Scalar;
-  typedef int LocalOrdinal;
-  typedef int GlobalOrdinal;
-  typedef Xpetra::EpetraNode Node;
-#undef MUELU_AMESOS2SMOOTHER_SHORT
-#include "MueLu_UseShortNames.hpp"
-
- public:
-#ifndef _MSC_VER
-  // Avoid error C3772: invalid friend template declaration
-  template <class Scalar2, class LocalOrdinal2, class GlobalOrdinal2, class Node2>
-  friend class Ifpack2Smoother;
-#endif
-
-  Ifpack2Smoother(const std::string& type, const Teuchos::ParameterList& paramList = Teuchos::ParameterList(), const LocalOrdinal& overlap = 0) {
-    MUELU_TPETRA_ETI_EXCEPTION("Ifpack2Smoother<double,int,int,EpetraNode>", "Ifpack2Smoother<double,int,int,EpetraNode>", "int");
-  };
-
-  virtual ~Ifpack2Smoother() {}
-
-  void SetParameterList(const Teuchos::ParameterList& paramList) {}
-  void DeclareInput(Level& currentLevel) const {}
-  void Setup(Level& currentLevel) {}
-  void Apply(MultiVector& X, const MultiVector& B, bool InitialGuessIsZero = false) const {}
-  RCP<SmootherPrototype> Copy() const { return Teuchos::null; }
-
-  std::string description() const { return std::string(""); }
-  void print(Teuchos::FancyOStream& out, const VerbLevel verbLevel = Default) const {}
-
-  //! Get a rough estimate of cost per iteration
-  size_t getNodeSmootherComplexity() const {
-    size_t cplx = 0;
-    return cplx;
-  };
-
- private:
-  void SetPrecParameters(const Teuchos::ParameterList& list = Teuchos::ParameterList()) const {}
-};
-#endif
-
-#endif  // HAVE_MUELU_EPETRA
-
 }  // namespace MueLu
 
 #define MUELU_IFPACK2SMOOTHER_SHORT
-#endif  // HAVE_MUELU_IFPACK2
 #endif  // MUELU_IFPACK2SMOOTHER_DECL_HPP

@@ -1,43 +1,11 @@
-//@HEADER
-// ************************************************************************
-//
+// @HEADER
+// *****************************************************************************
 //                 Belos: Block Linear Solvers Package
-//                  Copyright 2004 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
-//
-// ************************************************************************
-//@HEADER
+// Copyright 2004-2016 NTESS and the Belos contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
 
 // Purpose
 // The example tests the successive right-hand sides capabilities of ML
@@ -50,7 +18,7 @@
 // for later solves.
 // The optimal numbers of vectors to deflate and save are not known.
 // Presently, the maximum number of vectors to deflate (seed space dimension)
-// and to save are user paraemters.
+// and to save are user parameters.
 // The seed space dimension is less than or equal to total number of vectors
 // saved. The difference between the seed space dimension and the total number
 // of vectors, is the number of vectors used to update the seed space after each
@@ -94,9 +62,10 @@
 #include "BelosLinearProblem.hpp"
 #include "BelosPCPGSolMgr.hpp"
 #include "BelosTpetraAdapter.hpp"
+#include "BelosKokkosDenseAdapter.hpp"
+#include "BelosTpetraTestFramework.hpp"
 
-template <typename ScalarType>
-int run(int argc, char *argv[]) {
+int main(int argc, char *argv[]) {
   //
   // Laplace's equation, homogeneous Dirichlet boundary conditions, [0,1]^2
   // regular mesh, Q1 finite elements
@@ -107,6 +76,8 @@ int run(int argc, char *argv[]) {
   using Teuchos::rcp;
   using Teuchos::tuple;
 
+  using ScalarType = double;
+  using DM = Belos::DefaultDenseMatrix<int, ScalarType>;
   using ST = typename Tpetra::MultiVector<ScalarType>::scalar_type;
   using LO = typename Tpetra::Vector<>::local_ordinal_type;
   using GO = typename Tpetra::Vector<>::global_ordinal_type;
@@ -115,15 +86,15 @@ int run(int argc, char *argv[]) {
   using V = typename Tpetra::Vector<ST, LO, GO, NT>;
   using MV = typename Tpetra::MultiVector<ST, LO, GO, NT>;
   using OP = typename Tpetra::Operator<ST, LO, GO, NT>;
-  using MVT = typename Belos::MultiVecTraits<ST, MV>;
+  using MVT = typename Belos::MultiVecTraits<ST, MV, DM>;
   using OPT = typename Belos::OperatorTraits<ST, MV, OP>;
   using MAP = typename Tpetra::Map<LO, GO, NT>;
   using MAT = typename Tpetra::CrsMatrix<ST, LO, GO, NT>;
   using SCT = typename Teuchos::ScalarTraits<ST>;
   using MT = typename SCT::magnitudeType;
 
-  using LinearProblem = typename Belos::LinearProblem<ST, MV, OP>;
-  using PCPGSolMgr = ::Belos::PCPGSolMgr<ST, MV, OP>;
+  using LinearProblem = typename Belos::LinearProblem<ST, MV, OP, DM>;
+  using PCPGSolMgr = ::Belos::PCPGSolMgr<ST, MV, OP, DM>;
 
   Teuchos::GlobalMPISession session(&argc, &argv, NULL);
   RCP<const Teuchos::Comm<int>> comm = Tpetra::getDefaultComm();
@@ -403,7 +374,10 @@ int run(int argc, char *argv[]) {
             badRes = true;
         }
       }
-      if (ret != Belos::Converged || badRes) {
+      if (ret==Belos::Converged && !badRes) {
+	// Ok
+      }
+      else {
         success = false;
         break;
       }
@@ -419,11 +393,6 @@ int run(int argc, char *argv[]) {
   TEUCHOS_STANDARD_CATCH_STATEMENTS(verbose, std::cerr, success);
 
   return success ? EXIT_SUCCESS : EXIT_FAILURE;
-}
-
-int main(int argc, char *argv[]) { 
-  return run<double>(argc, argv);
-  // return run<float>(argc, argv); }
 }
 
 // end PCPGTpetraExFile.cpp

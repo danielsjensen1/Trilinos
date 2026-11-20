@@ -1,46 +1,51 @@
-// Copyright(C) 1999-2024 National Technology & Engineering Solutions
+// Copyright(C) 1999-2025 National Technology & Engineering Solutions
 // of Sandia, LLC (NTESS).  Under the terms of Contract DE-NA0003525 with
 // NTESS, the U.S. Government retains certain rights in this software.
 //
 // See packages/seacas/LICENSE for details
 
 #include "Ioss_CodeTypes.h"
+#include "Ioss_DecompositionUtils.h"
 #include "exodus/Ioex_DecompositionData.h"
+
 #if defined PARALLEL_AWARE_EXODUS
-#include "Ioss_ElementTopology.h" // for ElementTopology
-#include "Ioss_Field.h"           // for Field, etc
-#include "Ioss_Map.h"             // for Map, MapContainer
-#include "Ioss_PropertyManager.h" // for PropertyManager
+#include "Ioss_ElementTopology.h"
+#include "Ioss_Field.h"
+#include "Ioss_IOFactory.h"
+#include "Ioss_Map.h"
+#include "Ioss_PropertyManager.h"
+#include "Ioss_Region.h"
 #include "Ioss_SmartAssert.h"
 #include "Ioss_Sort.h"
 #include "Ioss_Utils.h"
 #include "exodus/Ioex_Utils.h"
 
-#include <algorithm> // for lower_bound, copy, etc
-#include <cassert>   // for assert
-#include <climits>   // for INT_MAX
+#include <algorithm>
+#include <cassert>
+#include <climits>
 #include <cmath>
-#include <cstdlib> // for exit, EXIT_FAILURE
+#include <cstdlib>
 #include <cstring>
+#include <fmt/format.h>
 #include <fmt/ostream.h>
-#include <iostream> // for operator<<, ostringstream, etc
-#include <iterator> // for distance
-#include <map>      // for map
-#include <numeric>  // for accumulate
-#include <utility>  // for pair, make_pair
+#include <iostream>
+#include <iterator>
+#include <map>
+#include <numeric>
+#include <utility>
 
 #if !defined(NO_PARMETIS_SUPPORT)
-#include <parmetis.h> // for ParMETIS_V3_Mesh2Dual, etc
+#include <parmetis.h>
 #endif
 
 #if !defined(NO_ZOLTAN_SUPPORT)
-#include <zoltan.h>     // for Zoltan_Initialize
-#include <zoltan_cpp.h> // for Zoltan
+#include <zoltan.h>
+#include <zoltan_cpp.h>
 #endif
 
 namespace {
-  // ZOLTAN Callback functions...
 
+  // ZOLTAN Callback functions...
 #if !defined(NO_ZOLTAN_SUPPORT)
   int zoltan_num_dim(void *data, int *ierr)
   {
@@ -79,7 +84,12 @@ namespace {
     }
 
     if (wdim != 0) {
-      std::fill(wgts, wgts + element_count, 1.0);
+      if (zdata->weights().empty()) {
+        std::fill(wgts, wgts + element_count, 1.0);
+      }
+      else {
+        std::copy(zdata->weights().begin(), zdata->weights().end(), &wgts[0]);
+      }
     }
 
     if (ngid_ent == 1) {
@@ -107,6 +117,7 @@ namespace {
     *ierr = ZOLTAN_OK;
   }
 #endif
+
 } // namespace
 
 namespace Ioex {
@@ -125,7 +136,8 @@ namespace Ioex {
     m_processorCount = pu.parallel_size();
   }
 
-  template <typename INT> void DecompositionData<INT>::decompose_model(int filePtr)
+  template <typename INT>
+  void DecompositionData<INT>::decompose_model(int filePtr, const std::string &filename)
   {
     m_decomposition.show_progress(__func__);
     // Initial decomposition is linear where processor #p contains
@@ -143,7 +155,10 @@ namespace Ioex {
     // processor p contains all elements/nodes from X_dist[p] .. X_dist[p+1]
     m_decomposition.generate_entity_distributions(globalNodeCount, globalElementCount);
 
-    generate_adjacency_list(filePtr, m_decomposition);
+    if (!m_decomposition.m_lineDecomp) {
+      generate_adjacency_list(filePtr, m_decomposition);
+      generate_omitted_block_weights(filePtr, m_decomposition);
+    }
 
 #if IOSS_DEBUG_OUTPUT
     fmt::print(Ioss::DebugOut(), "Processor {} has {} elements; offset = {}\n", m_processor,
@@ -152,7 +167,7 @@ namespace Ioex {
                fmt::group_digits(decomp_node_count()), fmt::group_digits(decomp_node_offset()));
 #endif
 
-    if (m_decomposition.needs_centroids()) {
+    if (!m_decomposition.m_lineDecomp && m_decomposition.needs_centroids()) {
       // Get my coordinate data using direct exodus calls
       size_t size = decomp_node_count();
       if (size == 0) {
@@ -185,19 +200,27 @@ namespace Ioex {
       if (map_count > 0) {
         int max_name_length = ex_inquire_int(filePtr, EX_INQ_DB_MAX_USED_NAME_LENGTH);
         max_name_length     = max_name_length < 32 ? 32 : max_name_length;
-        char **names        = Ioss::Utils::get_name_array(map_count, max_name_length);
+        char **names        = Ioex::get_name_array(map_count, max_name_length);
         ex_get_names(filePtr, EX_ELEM_MAP, names);
 
         for (int i = 0; i < map_count; i++) {
           if (std::string(names[i]) == map_name) {
             m_decomposition.m_elementToProc.resize(decomp_elem_count());
-            ex_get_partial_num_map(filePtr, EX_ELEM_MAP, i + 1, decomp_elem_offset() + 1,
-                                   decomp_elem_count(), Data(m_decomposition.m_elementToProc));
+            if (sizeof(INT) == 4) {
+              ex_get_partial_num_map(filePtr, EX_ELEM_MAP, i + 1, decomp_elem_offset() + 1,
+                                     decomp_elem_count(), Data(m_decomposition.m_elementToProc));
+            }
+            else {
+              std::vector<INT> tmp_map(decomp_elem_count());
+              ex_get_partial_num_map(filePtr, EX_ELEM_MAP, i + 1, decomp_elem_offset() + 1,
+                                     decomp_elem_count(), Data(tmp_map));
+              std::copy(tmp_map.begin(), tmp_map.end(), m_decomposition.m_elementToProc.begin());
+            }
             map_read = true;
             break;
           }
         }
-        Ioss::Utils::delete_name_array(names, map_count);
+        Ioex::delete_name_array(names, map_count);
       }
 
       if (!map_read) {
@@ -221,7 +244,7 @@ namespace Ioex {
       if (var_count > 0) {
         int max_name_length = ex_inquire_int(filePtr, EX_INQ_DB_MAX_USED_NAME_LENGTH);
         max_name_length     = max_name_length < 32 ? 32 : max_name_length;
-        char **names        = Ioss::Utils::get_name_array(var_count, max_name_length);
+        char **names        = Ioex::get_name_array(var_count, max_name_length);
         ex_get_variable_names(filePtr, EX_ELEM_BLOCK, var_count, names);
 
         for (int i = 0; i < var_count; i++) {
@@ -230,7 +253,7 @@ namespace Ioex {
             break;
           }
         }
-        Ioss::Utils::delete_name_array(names, var_count);
+        Ioex::delete_name_array(names, var_count);
       }
 
       if (var_index == 0) {
@@ -254,6 +277,72 @@ namespace Ioex {
           m_decomposition.m_elementToProc.push_back((int)value);
         }
       }
+    }
+
+    if (m_decomposition.m_lineDecomp) {
+      // For first iteration of this, we do the line-decomp modified decomposition on a single rank
+      // and then communicate the m_elementToProc vector to each of the ranks.  This is then used
+      // do do the parallel distributions/decomposition of the elements assuming a "guided"
+      // decomposition.
+      std::vector<int> element_to_proc_global{};
+
+      m_decomposition.show_progress("***LINE_DECOMPOSE BEGIN***");
+      if (m_processor == 0) {
+        Ioss::PropertyManager properties;
+        Ioss::DatabaseIO     *dbi = Ioss::IOFactory::create(
+            "exodus", filename, Ioss::READ_RESTART, Ioss::ParallelUtils::comm_self(), properties);
+
+        // Set integer size to match what the caller is using
+        if (sizeof(INT) == 8) {
+          dbi->set_int_byte_size_api(Ioss::USE_INT64_API);
+        }
+        else {
+          dbi->set_int_byte_size_api(Ioss::USE_INT32_API);
+        }
+
+        Ioss::Region region(dbi, "line_decomp_region");
+
+        Ioss::DecompUtils::line_decompose(region, m_processorCount, m_decomposition.m_method,
+                                          m_decomposition.m_decompExtra, element_to_proc_global,
+                                          INT(0));
+
+        if (m_decomposition.m_showHWM || m_decomposition.m_showProgress) {
+          auto work_per_rank =
+              Ioss::DecompUtils::get_work_per_rank(element_to_proc_global, m_processorCount);
+          Ioss::DecompUtils::output_decomposition_statistics(work_per_rank);
+        }
+      }
+      // Now broadcast the parts of the `element_to_proc_global`
+      // vector to the owning ranks in the initial linear
+      // decomposition...
+
+      std::vector<int> sendcounts(m_processorCount);
+      std::vector<int> displs(m_processorCount);
+      m_decomposition.m_elementToProc.resize(decomp_elem_count());
+
+      // calculate send counts and displacements
+      int sum = 0;
+      int rem = globalElementCount % m_processorCount;
+      for (int i = 0; i < m_processorCount; i++) {
+        sendcounts[i] = globalElementCount / m_processorCount;
+        if (rem > 0) {
+          sendcounts[i]++;
+          rem--;
+        }
+        displs[i] = sum;
+        sum += sendcounts[i];
+      }
+      MPI_Scatterv(Data(element_to_proc_global), Data(sendcounts), Data(displs), MPI_INT,
+                   Data(m_decomposition.m_elementToProc), decomp_elem_count(), MPI_INT, 0,
+                   m_decomposition.m_comm);
+      m_decomposition.m_method = "LINE_DECOMP";
+      m_decomposition.show_progress("***LINE_DECOMPOSE END***");
+    }
+
+    if (m_decomposition.m_lineDecomp) {
+      // Do not combine into previous if block since we want to release memory for
+      // the local vectors in that block before allocating the large adjacency vector.
+      generate_adjacency_list(filePtr, m_decomposition);
     }
 
 #if !defined(NO_ZOLTAN_SUPPORT)
@@ -356,28 +445,23 @@ namespace Ioex {
     // Reading a corrupt mesh in which there are elements not in an element block
     // can cause hard to track down problems...
     if (decomposition.m_globalElementCount != decomposition.m_fileBlockIndex[block_count]) {
-      std::ostringstream errmsg;
-      fmt::print(errmsg,
-                 "ERROR: The sum of the element counts in each element block gives a total of {} "
-                 "elements.\n"
-                 "       This does not match the total element count of {} which indicates a "
-                 "corrupt mesh description.\n"
-                 "       Contact gdsjaar@sandia.gov for more details.\n",
-                 decomposition.m_fileBlockIndex[block_count], decomposition.m_globalElementCount);
-      IOSS_ERROR(errmsg);
+      IOSS_ERROR(fmt::format(
+          "ERROR: The sum of the element counts in each element block gives a total of {} "
+          "elements.\n"
+          "       This does not match the total element count of {} which indicates a "
+          "corrupt mesh description.\n"
+          "       Contact sierra-help@sandia.gov for more details.\n",
+          decomposition.m_fileBlockIndex[block_count], decomposition.m_globalElementCount));
     }
 
     // Make sure 'sum' can fit in INT...
     INT tmp_sum = (INT)sum;
     if ((size_t)tmp_sum != sum) {
-      std::ostringstream errmsg;
-      fmt::print(
-          errmsg,
+      IOSS_ERROR(fmt::format(
           "ERROR: The decomposition of this mesh requires 64-bit integers, but is being\n"
           "       run with 32-bit integer code. Please rerun with the property INTEGER_SIZE_API\n"
           "       set to 8. The details of how to do this vary with the code that is being run.\n"
-          "       Contact gdsjaar@sandia.gov for more details.\n");
-      IOSS_ERROR(errmsg);
+          "       Contact sierra-help@sandia.gov for more details.\n"));
     }
 
     decomposition.m_pointer.reserve(decomp_elem_count() + 1);
@@ -425,6 +509,100 @@ namespace Ioex {
       }
     }
     decomposition.m_pointer.push_back(decomposition.m_adjacency.size());
+  }
+
+  template <typename INT>
+  void
+  DecompositionData<INT>::generate_omitted_block_weights(int                       filePtr,
+                                                         Ioss::Decomposition<INT> &decomposition)
+  {
+    // This routine is assumed to be called *after* generate_adjacency...
+    if (decomposition.m_omittedBlocks.empty() && decomposition.m_omittedBlockNames.empty()) {
+      return;
+    }
+
+    size_t           block_count = el_blocks.size();
+    std::vector<INT> ids(block_count);
+    ex_get_ids(filePtr, EX_ELEM_BLOCK, Data(ids));
+
+    if (!decomposition.m_omittedBlockNames.empty()) {
+      // Need to determine the id of each block name in the list...
+      // Probably easiest to go through each id and get its name and
+      // see if it exists in `m_omittedBlockNames`
+      int max_name_length = ex_inquire_int(filePtr, EX_INQ_DB_MAX_USED_NAME_LENGTH);
+      max_name_length     = std::max(max_name_length, 32);
+      size_t num_found    = 0;
+      for (INT id : ids) {
+        std::vector<char> buffer(max_name_length + 1);
+        buffer[0] = '\0';
+        ex_get_name(filePtr, EX_ELEM_BLOCK, id, Data(buffer));
+        if (buffer[0] != '\0') {
+          std::string name(Data(buffer));
+          bool        found = std::find(decomposition.m_omittedBlockNames.begin(),
+                                        decomposition.m_omittedBlockNames.end(),
+                                        name) != decomposition.m_omittedBlockNames.end();
+          if (found) {
+#if IOSS_DEBUG_OUTPUT
+            if (m_processor == 0) {
+              fmt::print(stderr, "Found name {} with id {}\n", name, id);
+            }
+#endif
+            decomposition.m_omittedBlocks.push_back(id);
+            num_found++;
+            if (num_found == decomposition.m_omittedBlockNames.size()) {
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    m_decomposition.show_progress(__func__);
+    if (decomposition.m_fileBlockIndex.size() != block_count + 1) {
+      IOSS_ERROR(
+          fmt::format("ERROR: The `generate_adjacency` function was not called prior to calling "
+                      "`generate_omitted_block_weights`\n"
+                      "       Contact sierra-help@sandia.gov for more details.\n"));
+    }
+
+    // Get the global element block index list at this time also.
+    // The global element at index 'I' (0-based) is on block B
+    // if global_block_index[B] <= I && global_block_index[B+1] < I
+    std::vector<ex_block> ebs(block_count);
+    for (size_t b = 0; b < block_count; b++) {
+      el_blocks[b].id_ = ids[b];
+      ebs[b].id        = ids[b];
+      ebs[b].type      = EX_ELEM_BLOCK;
+      ex_get_block_param(filePtr, &ebs[b]);
+    }
+
+    // Now, populate the weight vector...
+    decomposition.m_weights.reserve(decomp_elem_count());
+
+    // Range of elements currently handled by this processor [)
+    size_t p_start = decomp_elem_offset();
+    size_t p_end   = p_start + decomp_elem_count();
+
+    size_t b_start = 0;
+    for (const auto &block : ebs) {
+      // Range of elements in element block b is [b_start,b_end)
+      size_t b_end = b_start + block.num_entry;
+
+      if (b_start < p_end && p_start < b_end) {
+        // Some of this blocks elements are on this processor...
+        size_t  overlap = std::min(b_end, p_end) - std::max(b_start, p_start);
+        int64_t id      = block.id;
+
+        bool omitted =
+            std::find(decomposition.m_omittedBlocks.begin(), decomposition.m_omittedBlocks.end(),
+                      id) != decomposition.m_omittedBlocks.end();
+        float weight = omitted ? 0.0f : 1.0f;
+        for (size_t elem = 0; elem < overlap; elem++) {
+          decomposition.m_weights.push_back(weight);
+        }
+      }
+      b_start = b_end;
+    }
   }
 
   template <typename INT>
@@ -479,14 +657,12 @@ namespace Ioex {
 
     size_t one = 1;
     if (entitylist_size >= one << 31) {
-      std::ostringstream errmsg;
-      fmt::print(errmsg,
-                 "ERROR: The sum of the {} entity counts is larger than 2.1 Billion "
-                 " which cannot be correctly handled with the current IOSS decomposition "
-                 "implementation.\n"
-                 "       Contact gdsjaar@sandia.gov for more details.\n",
-                 set_type_name);
-      IOSS_ERROR(errmsg);
+      IOSS_ERROR(
+          fmt::format("ERROR: The sum of the {} entity counts is larger than 2.1 Billion "
+                      " which cannot be correctly handled with the current IOSS decomposition "
+                      "implementation.\n"
+                      "       Contact sierra-help@sandia.gov for more details.\n",
+                      set_type_name));
     }
 
     std::vector<INT> entitylist(max_size);
@@ -1139,17 +1315,12 @@ namespace Ioex {
     }
 
     if (type != EX_NODE_SET && type != EX_SIDE_SET) {
-      std::ostringstream errmsg;
-      fmt::print(errmsg,
-                 "ERROR: Invalid set type specified in get_decomp_set. Only node set or side set "
+      IOSS_ERROR("ERROR: Invalid set type specified in get_decomp_set. Only node set or side set "
                  "supported\n");
-      IOSS_ERROR(errmsg);
     }
     else {
-      std::string        typestr = type == EX_NODE_SET ? "node set" : "side set";
-      std::ostringstream errmsg;
-      fmt::print(errmsg, "ERROR: Count not find {} {}\n", typestr, id);
-      IOSS_ERROR(errmsg);
+      std::string typestr = type == EX_NODE_SET ? "node set" : "side set";
+      IOSS_ERROR(fmt::format("ERROR: Count not find {} {}\n", typestr, id));
     }
     return node_sets[0];
   }
@@ -1745,11 +1916,9 @@ namespace Ioex {
                             comm_, &status);
 
       if (result != MPI_SUCCESS) {
-        std::ostringstream errmsg;
-        fmt::print(errmsg,
-                   "ERROR: MPI_Recv error on processor {} receiving nodes_per_face sideset data",
-                   m_processor);
-        IOSS_ERROR(errmsg);
+        IOSS_ERROR(fmt::format(
+            "ERROR: MPI_Recv error on processor {} receiving nodes_per_face sideset data",
+            m_processor));
       }
       df_count = nodes_per_face.back();
     }
@@ -1788,11 +1957,9 @@ namespace Ioex {
           MPI_Recv(Data(file_data), file_data.size(), MPI_DOUBLE, set.root_, 333, comm_, &status);
 
       if (result != MPI_SUCCESS) {
-        std::ostringstream errmsg;
-        fmt::print(errmsg,
-                   "ERROR: MPI_Recv error on processor {} receiving nodes_per_face sideset data",
-                   m_processor);
-        IOSS_ERROR(errmsg);
+        IOSS_ERROR(fmt::format(
+            "ERROR: MPI_Recv error on processor {} receiving nodes_per_face sideset data",
+            m_processor));
       }
     }
 
@@ -1853,7 +2020,7 @@ namespace Ioex {
     // map for all locally-owned nodes and also determine how many
     // of my nodes are owned by which other processors.
 
-    global_implicit_map.resize(owning_proc.size());
+    global_implicit_map.resize(owning_proc.size(), -1);
 
     std::vector<int64_t> snd_count(m_processorCount);
     std::vector<int64_t> rcv_count(m_processorCount);
@@ -1882,7 +2049,9 @@ namespace Ioex {
     }
 
     for (auto &i : global_implicit_map) {
-      i += *processor_offset + 1;
+      if (i >= 0) {
+        i += *processor_offset + 1;
+      }
     }
 
     // Now, tell the other processors how many nodes I will be sending
@@ -1914,12 +2083,29 @@ namespace Ioex {
     m_decomposition.show_progress("\tCommunication 2 finished");
 
     // Iterate rcv_list and convert global ids to the global-implicit position...
+    int error_count = 0;
     for (auto &i : rcv_list) {
-      int64_t local_id     = node_map.global_to_local(i) - 1;
-      int64_t rcv_position = global_implicit_map[local_id];
-      i                    = rcv_position;
+      int64_t local_id = node_map.global_to_local(i, false, true) - 1;
+      if (local_id < 0) {
+        error_count++;
+      }
+      else {
+        SMART_ASSERT(local_id >= 0)(local_id)(i);
+        int64_t rcv_position = global_implicit_map[local_id];
+        SMART_ASSERT(rcv_position >= 0)(rcv_position)(local_id)(i);
+        i = rcv_position;
+      }
     }
-
+    {
+      Ioss::ParallelUtils pu(comm_);
+      int                 total_errors = pu.global_minmax(error_count, Ioss::ParallelUtils::DO_MAX);
+      if (total_errors > 0) {
+        IOSS_ERROR(fmt::format(
+            "ERROR: Ioss Mapping routines detected at least one error mapping global ids.\n"
+            "       This usually means the node ownership is incorrect for some reason. "
+            "This should not happen, please report.\n"));
+      }
+    }
     // Send the data back now...
     Ioss::MY_Alltoallv(rcv_list, rcv_count, rcv_offset, snd_list, snd_count, snd_offset, comm_);
     m_decomposition.show_progress("\tCommunication 3 finished");
@@ -2182,9 +2368,9 @@ namespace Ioex {
       load_field_data<INT>(filePtr, Data(fileData), blockSubsetIndex, step, blockFieldData,
                            blockComponentCount, fileConnOffset);
 
-      (void)decompData->m_decomposition.communicate_entity_data(Data(fileData), data,
-                                                          decompData->el_blocks, blockSubsetIndex,
-                                                          fileConnOffset, blockComponentCount);
+      (void)decompData->m_decomposition.communicate_entity_data(
+          Data(fileData), data, decompData->el_blocks, blockSubsetIndex, fileConnOffset,
+          blockComponentCount);
     }
   }
 

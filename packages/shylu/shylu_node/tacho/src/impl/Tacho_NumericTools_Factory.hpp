@@ -1,20 +1,12 @@
 // clang-format off
-/* =====================================================================================
-Copyright 2022 National Technology & Engineering Solutions of Sandia, LLC (NTESS).
-Under the terms of Contract DE-NA0003525 with NTESS, the U.S. Government retains
-certain rights in this software.
-
-SCR#:2790.0
-
-This file is part of Tacho. Tacho is open source software: you can redistribute it
-and/or modify it under the terms of BSD 2-Clause License
-(https://opensource.org/licenses/BSD-2-Clause). A copy of the licese is also
-provided under the main directory
-
-Questions? Kyungjoo Kim at <kyukim@sandia.gov,https://github.com/kyungjoo-kim>
-
-Sandia National Laboratories, Albuquerque, NM, USA
-===================================================================================== */
+// @HEADER
+// *****************************************************************************
+//                            Tacho package
+//
+// Copyright 2022 NTESS and the Tacho contributors.
+// SPDX-License-Identifier: BSD-2-Clause
+// *****************************************************************************
+// @HEADER
 // clang-format on
 #ifndef __TACHO_NUMERIC_TOOLS_FACTORY_HPP__
 #define __TACHO_NUMERIC_TOOLS_FACTORY_HPP__
@@ -85,19 +77,23 @@ template <typename ValueType, typename DeviceType> class NumericToolsFactory;
   } while (false)
 
 #define TACHO_NUMERIC_TOOLS_FACTORY_LEVELSET_MEMBER                                                                    \
+  bool _store_transpose;                                                                                               \
   ordinal_type _variant;                                                                                               \
   ordinal_type _device_level_cut;                                                                                      \
   ordinal_type _device_factor_thres;                                                                                   \
   ordinal_type _device_solve_thres;                                                                                    \
-  ordinal_type _nstreams
+  ordinal_type _nstreams;                                                                                              \
+  bool _team_on_user_stream
 
 #define TACHO_NUMERIC_TOOLS_FACTORY_SET_LEVELSET_MEMBER                                                                \
   do {                                                                                                                 \
     _variant = variant;                                                                                                \
+    _store_transpose = store_transpose;                                                                                \
     _device_level_cut = device_level_cut;                                                                              \
     _device_factor_thres = device_factor_thres;                                                                        \
     _device_solve_thres = device_solve_thres;                                                                          \
     _nstreams = nstreams;                                                                                              \
+    _team_on_user_stream = team_on_user_stream;                                                                        \
   } while (false)
 
 #define TACHO_NUMERIC_TOOLS_FACTORY_SERIAL_BODY                                                                        \
@@ -110,16 +106,15 @@ template <typename ValueType, typename DeviceType> class NumericToolsFactory;
                                            _stree_children, _stree_level, _stree_roots);                               \
   } while (false)
 
-#define TACHO_NUMERIC_TOOLS_FACTORY_LEVELSET_BODY(numeric_tools_levelset_name)                                         \
-  do {                                                                                                                 \
-    if (object == nullptr)                                                                                             \
-      object = (numeric_tools_base_type *)::operator new(sizeof(numeric_tools_levelset_name));                         \
-    new (object) numeric_tools_levelset_name(_method, _m, _ap, _aj, _perm, _peri, _nsupernodes, _supernodes, _gid_ptr, \
-                                             _gid_colidx, _sid_ptr, _sid_colidx, _blk_colidx, _stree_parent,           \
-                                             _stree_ptr, _stree_children, _stree_level, _stree_roots);                 \
-    numeric_tools_levelset_name *N = dynamic_cast<numeric_tools_levelset_name *>(object);                              \
-    N->initialize(_device_level_cut, _device_factor_thres, _device_solve_thres, _verbose);                             \
-    N->createStream(_nstreams, _verbose);                                                                              \
+#define TACHO_NUMERIC_TOOLS_FACTORY_LEVELSET_BODY(numeric_tools_levelset_name)                                          \
+  do {                                                                                                                  \
+    if (object == nullptr)                                                                                              \
+      object = (numeric_tools_base_type *)::operator new(sizeof(numeric_tools_levelset_name));                          \
+    new (object) numeric_tools_levelset_name(_method, _m, _ap, _aj, _perm, _peri, _nsupernodes, _supernodes, _gid_ptr,  \
+                                             _gid_colidx, _sid_ptr, _sid_colidx, _blk_colidx, _stree_parent,            \
+                                             _stree_ptr, _stree_children, _stree_level, _stree_roots);                  \
+    numeric_tools_levelset_name *N = dynamic_cast<numeric_tools_levelset_name *>(object);                               \
+    N->initialize(_device_level_cut, _device_factor_thres, _device_solve_thres, _nstreams, _team_on_user_stream, _store_transpose, _verbose); \
   } while (false)
 
 ///
@@ -135,10 +130,11 @@ public:
   using numeric_tools_levelset_var0_type = NumericToolsLevelSet<value_type, device_type, 0>;
   using numeric_tools_levelset_var1_type = NumericToolsLevelSet<value_type, device_type, 1>;
   using numeric_tools_levelset_var2_type = NumericToolsLevelSet<value_type, device_type, 2>;
+  using numeric_tools_levelset_var3_type = NumericToolsLevelSet<value_type, device_type, 3>;
 
   TACHO_NUMERIC_TOOLS_FACTORY_BASE_USING;
   TACHO_NUMERIC_TOOLS_FACTORY_BASE_MEMBER;
-  // TACHO_NUMERIC_TOOLS_FACTORY_LEVELSET_MEMBER;
+  TACHO_NUMERIC_TOOLS_FACTORY_LEVELSET_MEMBER;
 
   void setBaseMember(const ordinal_type method,
                      // input matrix A
@@ -158,12 +154,38 @@ public:
 
   void setLevelSetMember(const ordinal_type variant, const ordinal_type device_level_cut,
                          const ordinal_type device_factor_thres, const ordinal_type device_solve_thres,
-                         const ordinal_type nstreams) {
-    // TACHO_NUMERIC_TOOLS_FACTORY_SET_LEVELSET_MEMBER;
+                         const bool store_transpose, const ordinal_type nstreams, const bool team_on_user_stream) {
+    TACHO_NUMERIC_TOOLS_FACTORY_SET_LEVELSET_MEMBER;
   }
 
   void createObject(numeric_tools_base_type *&object) {
-    KOKKOS_IF_ON_HOST((TACHO_NUMERIC_TOOLS_FACTORY_SERIAL_BODY;))
+    KOKKOS_IF_ON_HOST((
+    switch (_variant) {
+    case -1: {
+      // sequential code
+      TACHO_NUMERIC_TOOLS_FACTORY_SERIAL_BODY;
+      break;
+    }
+    case 0: {
+      TACHO_NUMERIC_TOOLS_FACTORY_LEVELSET_BODY(numeric_tools_levelset_var0_type);
+      break;
+    }
+    case 1: {
+      TACHO_NUMERIC_TOOLS_FACTORY_LEVELSET_BODY(numeric_tools_levelset_var1_type);
+      break;
+    }
+    case 2: {
+      TACHO_NUMERIC_TOOLS_FACTORY_LEVELSET_BODY(numeric_tools_levelset_var2_type);
+      break;
+    }
+    case 3: {
+      TACHO_NUMERIC_TOOLS_FACTORY_LEVELSET_BODY(numeric_tools_levelset_var3_type);
+      break;
+    }
+    default: {
+      TACHO_TEST_FOR_EXCEPTION(true, std::logic_error, "Invalid variant input");
+    }
+    }))
   }
 };
 #endif
@@ -178,13 +200,11 @@ public:
   using numeric_tools_levelset_var0_type = NumericToolsLevelSet<value_type, device_type, 0>;
   using numeric_tools_levelset_var1_type = NumericToolsLevelSet<value_type, device_type, 1>;
   using numeric_tools_levelset_var2_type = NumericToolsLevelSet<value_type, device_type, 2>;
+  using numeric_tools_levelset_var3_type = NumericToolsLevelSet<value_type, device_type, 3>;
 
   TACHO_NUMERIC_TOOLS_FACTORY_BASE_USING;
   TACHO_NUMERIC_TOOLS_FACTORY_BASE_MEMBER;
-  #define TACHO_LEVELSET_ON_HOST
-  #if defined TACHO_LEVELSET_ON_HOST
   TACHO_NUMERIC_TOOLS_FACTORY_LEVELSET_MEMBER;
-  #endif
 
   void setBaseMember(const ordinal_type method,
                      // input matrix A
@@ -204,16 +224,18 @@ public:
 
   void setLevelSetMember(const ordinal_type variant, const ordinal_type device_level_cut,
                          const ordinal_type device_factor_thres, const ordinal_type device_solve_thres,
-                         const ordinal_type nstreams) {
-    #if defined TACHO_LEVELSET_ON_HOST
+                         const bool store_transpose, const ordinal_type nstreams, const bool team_on_user_stream) {
     TACHO_NUMERIC_TOOLS_FACTORY_SET_LEVELSET_MEMBER;
-    #endif
   }
 
   void createObject(numeric_tools_base_type *&object) {
-#if defined TACHO_LEVELSET_ON_HOST
     KOKKOS_IF_ON_HOST((
     switch (_variant) {
+    case -1: {
+      // sequential code
+      TACHO_NUMERIC_TOOLS_FACTORY_SERIAL_BODY;
+      break;
+    }
     case 0: {
       TACHO_NUMERIC_TOOLS_FACTORY_LEVELSET_BODY(numeric_tools_levelset_var0_type);
       break;
@@ -226,13 +248,14 @@ public:
       TACHO_NUMERIC_TOOLS_FACTORY_LEVELSET_BODY(numeric_tools_levelset_var2_type);
       break;
     }
+    case 3: {
+      TACHO_NUMERIC_TOOLS_FACTORY_LEVELSET_BODY(numeric_tools_levelset_var3_type);
+      break;
+    }
     default: {
       TACHO_TEST_FOR_EXCEPTION(true, std::logic_error, "Invalid variant input");
     }
     }))
-#else
-    KOKKOS_IF_ON_HOST((TACHO_NUMERIC_TOOLS_FACTORY_SERIAL_BODY;))
-#endif
   }
 };
 #endif
@@ -247,6 +270,7 @@ public:
   using numeric_tools_levelset_var0_type = NumericToolsLevelSet<value_type, device_type, 0>;
   using numeric_tools_levelset_var1_type = NumericToolsLevelSet<value_type, device_type, 1>;
   using numeric_tools_levelset_var2_type = NumericToolsLevelSet<value_type, device_type, 2>;
+  using numeric_tools_levelset_var3_type = NumericToolsLevelSet<value_type, device_type, 3>;
 
   TACHO_NUMERIC_TOOLS_FACTORY_BASE_USING;
   TACHO_NUMERIC_TOOLS_FACTORY_BASE_MEMBER;
@@ -270,7 +294,7 @@ public:
 
   void setLevelSetMember(const ordinal_type variant, const ordinal_type device_level_cut,
                          const ordinal_type device_factor_thres, const ordinal_type device_solve_thres,
-                         const ordinal_type nstreams) {
+                         const bool store_transpose, const ordinal_type nstreams, const bool team_on_user_stream) {
     TACHO_NUMERIC_TOOLS_FACTORY_SET_LEVELSET_MEMBER;
   }
 
@@ -286,6 +310,10 @@ public:
     }
     case 2: {
       TACHO_NUMERIC_TOOLS_FACTORY_LEVELSET_BODY(numeric_tools_levelset_var2_type);
+      break;
+    }
+    case 3: {
+      TACHO_NUMERIC_TOOLS_FACTORY_LEVELSET_BODY(numeric_tools_levelset_var3_type);
       break;
     }
     default: {
@@ -307,6 +335,7 @@ public:
   using numeric_tools_levelset_var0_type = NumericToolsLevelSet<value_type, device_type, 0>;
   using numeric_tools_levelset_var1_type = NumericToolsLevelSet<value_type, device_type, 1>;
   using numeric_tools_levelset_var2_type = NumericToolsLevelSet<value_type, device_type, 2>;
+  using numeric_tools_levelset_var3_type = NumericToolsLevelSet<value_type, device_type, 3>;
 
   TACHO_NUMERIC_TOOLS_FACTORY_BASE_USING;
   TACHO_NUMERIC_TOOLS_FACTORY_BASE_MEMBER;
@@ -330,7 +359,7 @@ public:
 
   void setLevelSetMember(const ordinal_type variant, const ordinal_type device_level_cut,
                          const ordinal_type device_factor_thres, const ordinal_type device_solve_thres,
-                         const ordinal_type nstreams) {
+                         const bool store_transpose, const ordinal_type nstreams, const bool team_on_user_stream) {
     TACHO_NUMERIC_TOOLS_FACTORY_SET_LEVELSET_MEMBER;
   }
 
@@ -348,6 +377,10 @@ public:
       TACHO_NUMERIC_TOOLS_FACTORY_LEVELSET_BODY(numeric_tools_levelset_var2_type);
       break;
     }
+    case 3: {
+      TACHO_NUMERIC_TOOLS_FACTORY_LEVELSET_BODY(numeric_tools_levelset_var3_type);
+      break;
+    }
     default: {
       TACHO_TEST_FOR_EXCEPTION(true, std::logic_error, "Invalid variant input");
       break;
@@ -359,15 +392,16 @@ public:
 
 #if defined(KOKKOS_ENABLE_SYCL)
 template <typename ValueType>
-class NumericToolsFactory<ValueType, typename UseThisDevice<Kokkos::Experimental::SYCL>::type> {
+class NumericToolsFactory<ValueType, typename UseThisDevice<Kokkos::SYCL>::type> {
 public:
   using value_type = ValueType;
-  using device_type = typename UseThisDevice<Kokkos::Experimental::SYCL>::type;
+  using device_type = typename UseThisDevice<Kokkos::SYCL>::type;
   using numeric_tools_base_type = NumericToolsBase<value_type, device_type>;
   using numeric_tools_serial_type = NumericToolsSerial<value_type, device_type>;
   using numeric_tools_levelset_var0_type = NumericToolsLevelSet<value_type, device_type, 0>;
   using numeric_tools_levelset_var1_type = NumericToolsLevelSet<value_type, device_type, 1>;
   using numeric_tools_levelset_var2_type = NumericToolsLevelSet<value_type, device_type, 2>;
+  using numeric_tools_levelset_var3_type = NumericToolsLevelSet<value_type, device_type, 3>;
 
   TACHO_NUMERIC_TOOLS_FACTORY_BASE_USING;
   TACHO_NUMERIC_TOOLS_FACTORY_BASE_MEMBER;
@@ -391,7 +425,7 @@ public:
 
   void setLevelSetMember(const ordinal_type variant, const ordinal_type device_level_cut,
                          const ordinal_type device_factor_thres, const ordinal_type device_solve_thres,
-                         const ordinal_type nstreams) {
+                         const bool store_transpose, const ordinal_type nstreams, const bool team_on_user_stream) {
     TACHO_NUMERIC_TOOLS_FACTORY_SET_LEVELSET_MEMBER;
   }
 

@@ -1,30 +1,10 @@
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //                           Sacado Package
-//                 Copyright (2006) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// This library is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as
-// published by the Free Software Foundation; either version 2.1 of the
-// License, or (at your option) any later version.
-//
-// This library is distributed in the hope that it will be useful, but
-// WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-// Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public
-// License along with this library; if not, write to the Free Software
-// Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301
-// USA
-// Questions? Contact David M. Gay (dmgay@sandia.gov) or Eric T. Phipps
-// (etphipp@sandia.gov).
-//
-// ***********************************************************************
+// Copyright 2006 NTESS and the Sacado contributors.
+// SPDX-License-Identifier: LGPL-2.1-or-later
+// *****************************************************************************
 // @HEADER
 
 // This test requires C++11 (for static_assert), so why not use the
@@ -37,7 +17,6 @@
 #include "Teuchos_TestingHelpers.hpp"
 
 #include "Sacado_No_Kokkos.hpp"
-#include "Sacado_Fad_SimpleFad.hpp"
 #include "Sacado_Tay_CacheTaylor.hpp"
 #include "Sacado_mpl_apply.hpp"
 
@@ -361,9 +340,7 @@ TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( Promote, Fad, ELRCacheFad_DFadType )
 TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( Promote, Fad, ELRCacheFad_SFadType )
 TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( Promote, Fad, ELRCacheFad_SLFadType )
 
-typedef Sacado::Fad::SimpleFad<double> SimpleFadType;
 typedef Sacado::LFad::LogicalSparse<double,bool> LFadType;
-TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( Promote, Other, SimpleFadType )
 TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( Promote, Other, LFadType )
 
 typedef Sacado::FlopCounterPack::ScalarFlopCounter<double> SFCType;

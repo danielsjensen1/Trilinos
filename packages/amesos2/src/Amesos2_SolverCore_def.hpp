@@ -1,44 +1,10 @@
 // @HEADER
-//
-// ***********************************************************************
-//
+// *****************************************************************************
 //           Amesos2: Templated Direct Sparse Solver Package
-//                  Copyright 2011 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
-//
-// ***********************************************************************
-//
+// Copyright 2011 NTESS and the Amesos2 contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 /**
@@ -53,7 +19,7 @@
 #ifndef AMESOS2_SOLVERCORE_DEF_HPP
 #define AMESOS2_SOLVERCORE_DEF_HPP
 
-#include "Kokkos_ArithTraits.hpp"
+#include "KokkosKernels_ArithTraits.hpp"
 
 #include "Amesos2_MatrixAdapter_def.hpp"
 #include "Amesos2_MultiVecAdapter_def.hpp"
@@ -126,19 +92,23 @@ SolverCore<ConcreteSolver,Matrix,Vector>::symbolicFactorization()
   Teuchos::TimeMonitor LocalTimer1(timers_.totalTime_);
 #endif
 
-  if( !status_.preOrderingDone() ){
-    preOrdering();
-    if( !matrix_loaded_ ) loadA(SYMBFACT);
-  } else {
-    loadA(SYMBFACT);
-  }
+  {
+#ifdef HAVE_AMESOS2_TIMERS
+    Teuchos::TimeMonitor LocalTimer2(timers_.coreSymFactTime_);
+#endif
+    if( !status_.preOrderingDone() ){
+      preOrdering();
+      if( !matrix_loaded_ ) loadA(SYMBFACT);
+    } else {
+      loadA(SYMBFACT);
+    }
 
-  int error_code = static_cast<solver_type*>(this)->symbolicFactorization_impl();
-  if (error_code == EXIT_SUCCESS){
-    ++status_.numSymbolicFact_;
-    status_.last_phase_ = SYMBFACT;
+    int error_code = static_cast<solver_type*>(this)->symbolicFactorization_impl();
+    if (error_code == EXIT_SUCCESS){
+      ++status_.numSymbolicFact_;
+      status_.last_phase_ = SYMBFACT;
+    }
   }
-
   return *this;
 }
 
@@ -150,18 +120,22 @@ SolverCore<ConcreteSolver,Matrix,Vector>::numericFactorization()
 #ifdef HAVE_AMESOS2_TIMERS
   Teuchos::TimeMonitor LocalTimer1(timers_.totalTime_);
 #endif
+  {
+#ifdef HAVE_AMESOS2_TIMERS
+    Teuchos::TimeMonitor LocalTimer2(timers_.coreNumFactTime_);
+#endif
+    if( !status_.symbolicFactorizationDone() ){
+      symbolicFactorization();
+      if( !matrix_loaded_ ) loadA(NUMFACT);
+    } else {
+      loadA(NUMFACT);
+    }
 
-  if( !status_.symbolicFactorizationDone() ){
-    symbolicFactorization();
-    if( !matrix_loaded_ ) loadA(NUMFACT);
-  } else {
-    loadA(NUMFACT);
-  }
-
-  int error_code = static_cast<solver_type*>(this)->numericFactorization_impl();
-  if (error_code == EXIT_SUCCESS){
-    ++status_.numNumericFact_;
-    status_.last_phase_ = NUMFACT;
+    int error_code = static_cast<solver_type*>(this)->numericFactorization_impl();
+    if (error_code == EXIT_SUCCESS){
+      ++status_.numNumericFact_;
+      status_.last_phase_ = NUMFACT;
+    }
   }
 
   return *this;
@@ -223,10 +197,15 @@ SolverCore<ConcreteSolver,Matrix,Vector>::solve(const Teuchos::Ptr<Vector> X,
     const_cast<type&>(*this).numericFactorization();
   }
 
-  int error_code = static_cast<const solver_type*>(this)->solve_impl(Teuchos::outArg(*x), Teuchos::ptrInArg(*b));
-  if (error_code == EXIT_SUCCESS){
-    ++status_.numSolve_;
-    status_.last_phase_ = SOLVE;
+  {
+#ifdef HAVE_AMESOS2_TIMERS
+    Teuchos::TimeMonitor LocalTimer2(timers_.coreSolveTime_);
+#endif
+    int error_code = static_cast<const solver_type*>(this)->solve_impl(Teuchos::outArg(*x), Teuchos::ptrInArg(*b));
+    if (error_code == EXIT_SUCCESS){
+      ++status_.numSolve_;
+      status_.last_phase_ = SOLVE;
+    }
   }
 }
 
@@ -259,7 +238,7 @@ SolverCore<ConcreteSolver,Matrix,Vector>::solve_ir(const Teuchos::Ptr<      Vect
                                                    const int maxNumIters,
                                                    const bool verbose) const
 {
-  using KAT              = Kokkos::ArithTraits<scalar_type>;
+  using KAT              = KokkosKernels::ArithTraits<scalar_type>;
   using impl_scalar_type = typename KAT::val_type;
   using magni_type       = typename KAT::mag_type;
   using host_execution_space = Kokkos::DefaultHostExecutionSpace;
@@ -529,24 +508,27 @@ SolverCore<ConcreteSolver,Matrix,Vector>::setParameters(
 #ifdef HAVE_AMESOS2_TIMERS
   Teuchos::TimeMonitor LocalTimer1(timers_.totalTime_);
 #endif
+  Teuchos::RCP<Teuchos::ParameterList> pl;
+  if (parameterList->name() == "Amesos2")
+    pl = parameterList;
+  else
+    pl = Teuchos::rcp(new Teuchos::ParameterList());
 
-  if( parameterList->name() == "Amesos2" ){
-    // First, validate the parameterList
-    Teuchos::RCP<const Teuchos::ParameterList> valid_params = getValidParameters();
-    parameterList->validateParameters(*valid_params);
+  // First, validate the parameterList
+  Teuchos::RCP<const Teuchos::ParameterList> valid_params = getValidParameters();
+  pl->validateParameters(*valid_params);
 
-    // Do everything here that is for generic status and control parameters
-    control_.setControlParameters(parameterList);
+  // Do everything here that is for generic status and control parameters
+  control_.setControlParameters(pl);
 
-    // Finally, hook to the implementation's parameter list parser
-    // First check if there is a dedicated sublist for this solver and use that if there is
-    if( parameterList->isSublist(name()) ){
-      // Have control look through the solver's parameter list to see if
-      // there is anything it recognizes (mostly the "Transpose" parameter)
-      control_.setControlParameters(Teuchos::sublist(parameterList, name()));
+  // Finally, hook to the implementation's parameter list parser
+  // First check if there is a dedicated sublist for this solver and use that if there is
+  if( pl->isSublist(name()) ){
+    // Have control look through the solver's parameter list to see if
+    // there is anything it recognizes (mostly the "Transpose" parameter)
+    control_.setControlParameters(Teuchos::sublist(pl, name()));
 
-      static_cast<solver_type*>(this)->setParameters_impl(Teuchos::sublist(parameterList, name()));
-    }
+    static_cast<solver_type*>(this)->setParameters_impl(Teuchos::sublist(parameterList, name()));
   }
 
   return *this;
@@ -636,6 +618,7 @@ SolverCore<ConcreteSolver,Matrix,Vector>::describe(
     std::string p = name();
     Util::printLine(out);
     out << this->description() << std::endl << std::endl;
+    static_cast<const solver_type*>(this)->describe_impl(out, verbLevel);
 
     out << p << "Matrix has " << globalNumRows_ << " rows"
         << " and " << globalNumNonZeros_ << " nonzeros"
@@ -701,7 +684,7 @@ SolverCore<ConcreteSolver,Matrix,Vector>::printTiming(
           << std::endl;
       out << p << "Time for pre-ordering = "
           << preTime << " (s), avg = "
-          << preTime / status_.getNumPreOrder() << " (s)"
+          << preTime / std::max(1, status_.getNumPreOrder())<< " (s)"
           << std::endl;
 
       out << p << "Number of symbolic factorizations = "
@@ -709,7 +692,7 @@ SolverCore<ConcreteSolver,Matrix,Vector>::printTiming(
           << std::endl;
       out << p << "Time for sym fact = "
           << symTime << " (s), avg = "
-          << symTime / status_.getNumSymbolicFact() << " (s)"
+          << symTime / std::max(1, status_.getNumSymbolicFact()) << " (s)"
           << std::endl;
 
       out << p << "Number of numeric factorizations = "
@@ -717,7 +700,7 @@ SolverCore<ConcreteSolver,Matrix,Vector>::printTiming(
           << std::endl;
       out << p << "Time for num fact = "
           << numTime << " (s), avg = "
-          << numTime / status_.getNumNumericFact() << " (s)"
+          << numTime / std::max(1, status_.getNumNumericFact()) << " (s)"
           << std::endl;
 
       out << p << "Number of solve phases = "
@@ -725,7 +708,7 @@ SolverCore<ConcreteSolver,Matrix,Vector>::printTiming(
           << std::endl;
       out << p << "Time for solve = "
           << solTime << " (s), avg = "
-          << solTime / status_.getNumSolve() << " (s)"
+          << solTime / std::max(1, status_.getNumSolve()) << " (s)"
           << std::endl;
 
       out << p << "Total time spent in Amesos2 = "

@@ -1,48 +1,12 @@
 // @HEADER
-//
-// ***********************************************************************
-//
+// *****************************************************************************
 //        MueLu: A package for multigrid based preconditioning
-//                  Copyright 2012 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact
-//                    Jonathan Hu       (jhu@sandia.gov)
-//                    Andrey Prokopenko (aprokop@sandia.gov)
-//                    Ray Tuminaro      (rstumin@sandia.gov)
-//
-// ***********************************************************************
-//
+// Copyright 2012 NTESS and the MueLu contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
+
 #include <cstdio>
 #include <iomanip>
 #include <iostream>
@@ -51,6 +15,7 @@
 #include <Teuchos_XMLParameterListHelpers.hpp>
 #include <Teuchos_YamlParameterListHelpers.hpp>
 #include <Teuchos_StandardCatchMacros.hpp>
+#include <Teuchos_StackedTimer.hpp>
 
 // Xpetra
 #include <Xpetra_MultiVectorFactory.hpp>
@@ -73,7 +38,6 @@
 #include <MueLu_ExplicitInstantiation.hpp>
 #endif
 #include <MueLu_Level.hpp>
-#include <MueLu_MutuallyExclusiveTime.hpp>
 #include <MueLu_ParameterListInterpreter.hpp>
 #include <MueLu_Utilities.hpp>
 
@@ -103,10 +67,6 @@
 #include <KokkosBlas1_abs.hpp>
 #include <Tpetra_leftAndOrRightScaleCrsMatrix.hpp>
 #include <Tpetra_computeRowAndColumnOneNorms.hpp>
-
-#ifdef HAVE_MUELU_EPETRA
-#include "Xpetra_EpetraMultiVector.hpp"
-#endif
 
 #include <MueLu_CreateXpetraPreconditioner.hpp>
 
@@ -212,9 +172,10 @@ int main_(Teuchos::CommandLineProcessor& clp, Xpetra::UnderlyingLib& lib, int ar
 #endif
 
   comm->barrier();
-  Teuchos::TimeMonitor::setStackedTimer(Teuchos::null);
-  RCP<TimeMonitor> globalTimeMonitor = rcp(new TimeMonitor(*TimeMonitor::getNewTimer("Driver: S - Global Time")));
-  RCP<TimeMonitor> tm                = rcp(new TimeMonitor(*TimeMonitor::getNewTimer("Driver: 1 - Matrix Build")));
+  RCP<Teuchos::StackedTimer> stackedTimer =
+      rcp(new Teuchos::StackedTimer("MueLu_Structured"));
+  Teuchos::TimeMonitor::setStackedTimer(stackedTimer);
+  RCP<TimeMonitor> tm = rcp(new TimeMonitor(*TimeMonitor::getNewTimer("Driver: 1 - Matrix Build")));
 
   RCP<Matrix> A;
   RCP<const Map> map;
@@ -236,7 +197,8 @@ int main_(Teuchos::CommandLineProcessor& clp, Xpetra::UnderlyingLib& lib, int ar
   // size. For example, np=14 will give a 7-by-2 distribution.
   // If you don't want Galeri to do this, specify mx or my on the galeriList.
   std::string matrixType = galeriParameters.GetMatrixType();
-  int numDimensions      = 0;
+
+  int numDimensions = 0;
   Teuchos::Array<LO> lNodesPerDim(3);
 
   // Create map and coordinates
@@ -343,6 +305,7 @@ int main_(Teuchos::CommandLineProcessor& clp, Xpetra::UnderlyingLib& lib, int ar
     userParamList.set<double>("double cfl", 1.0);
     userParamList.set<double>("double deltaT", 1.0);
     userParamList.set("Mdiag", Mdiag);
+    userParamList.set<std::string>("string matrixType", matrixType);
 
     H = MueLu::CreateXpetraPreconditioner(A, paramList);
 
@@ -423,14 +386,15 @@ int main_(Teuchos::CommandLineProcessor& clp, Xpetra::UnderlyingLib& lib, int ar
     tm = Teuchos::null;
   }  // Rerun loop
 
-  globalTimeMonitor = Teuchos::null;
-
-  RCP<ParameterList> reportParams = rcp(new ParameterList);
-  const std::string filter        = "";
   std::ios_base::fmtflags ff(out.flags());
-  TimeMonitor::report(comm.ptr(), out, filter, reportParams);
+  stackedTimer->stopBaseTimer();
+  Teuchos::StackedTimer::OutputOptions timerOptions;
+  timerOptions.output_fraction = true;
+  timerOptions.output_minmax   = true;
+  stackedTimer->report(out, comm, timerOptions);
   out << std::setiosflags(ff);
 
+  Teuchos::TimeMonitor::setStackedTimer(Teuchos::null);
   TimeMonitor::clearCounters();
 
   return EXIT_SUCCESS;

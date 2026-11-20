@@ -1,31 +1,12 @@
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //                           Sacado Package
-//                 Copyright (2006) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// This library is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as
-// published by the Free Software Foundation; either version 2.1 of the
-// License, or (at your option) any later version.
-//
-// This library is distributed in the hope that it will be useful, but
-// WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-// Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public
-// License along with this library; if not, write to the Free Software
-// Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301
-// USA
-// Questions? Contact David M. Gay (dmgay@sandia.gov) or Eric T. Phipps
-// (etphipp@sandia.gov).
-//
-// ***********************************************************************
+// Copyright 2006 NTESS and the Sacado contributors.
+// SPDX-License-Identifier: LGPL-2.1-or-later
+// *****************************************************************************
 // @HEADER
+
 #include "Teuchos_TestingHelpers.hpp"
 
 #include "Sacado.hpp"
@@ -36,7 +17,7 @@ struct is_dfad {
 };
 
 template <typename T>
-struct is_dfad< Sacado::Fad::Exp::DFad<T> > {
+struct is_dfad< Sacado::Fad::DFad<T> > {
   static const bool value = true;
 };
 
@@ -142,8 +123,8 @@ struct AtomicKernel {
   typedef typename ViewType::execution_space execution_space;
   typedef typename ViewType::size_type size_type;
   typedef typename Kokkos::TeamPolicy< execution_space>::member_type team_handle;
-  typedef typename Kokkos::ThreadLocalScalarType<ViewType>::type local_scalar_type;
-  static const size_type stride = Kokkos::ViewScalarStride<ViewType>::stride;
+  typedef typename Sacado::ThreadLocalScalarType<ViewType>::type local_scalar_type;
+  static const size_type stride = Sacado::ViewScalarStride<ViewType>::stride;
 
   const ViewType m_v;
   const ScalarViewType m_s;
@@ -219,25 +200,35 @@ struct AtomicKernel {
   static void apply(Tag tag, const ViewType& v, const ScalarViewType& s) {
     const size_type nrow = v.extent(0);
 
-#if defined (KOKKOS_ENABLE_CUDA) && defined (SACADO_VIEW_CUDA_HIERARCHICAL)
+#if defined (KOKKOS_ENABLE_CUDA) && defined (SACADO_GPU_HIERARCHICAL)
     const bool use_team =
       std::is_same<execution_space, Kokkos::Cuda>::value &&
-      Kokkos::is_view_fad_contiguous<ViewType>::value &&
+      Sacado::is_view_fad_contiguous<ViewType>::value &&
       ( stride > 1 );
-#elif defined (KOKKOS_ENABLE_CUDA) && defined (SACADO_VIEW_CUDA_HIERARCHICAL_DFAD)
+#elif defined (KOKKOS_ENABLE_CUDA) && defined (SACADO_GPU_HIERARCHICAL_DFAD)
     const bool use_team =
       std::is_same<execution_space, Kokkos::Cuda>::value &&
-      Kokkos::is_view_fad_contiguous<ViewType>::value &&
+      Sacado::is_view_fad_contiguous<ViewType>::value &&
       is_dfad<typename ViewType::non_const_value_type>::value;
-#elif defined (KOKKOS_ENABLE_HIP) && defined (SACADO_VIEW_CUDA_HIERARCHICAL)
+#elif defined (KOKKOS_ENABLE_HIP) && defined (SACADO_GPU_HIERARCHICAL)
     const bool use_team =
       std::is_same<execution_space, Kokkos::HIP>::value &&
-      Kokkos::is_view_fad_contiguous<ViewType>::value &&
+      Sacado::is_view_fad_contiguous<ViewType>::value &&
       ( stride > 1 );
-#elif defined (KOKKOS_ENABLE_HIP) && defined (SACADO_VIEW_CUDA_HIERARCHICAL_DFAD)
+#elif defined (KOKKOS_ENABLE_HIP) && defined (SACADO_GPU_HIERARCHICAL_DFAD)
     const bool use_team =
       std::is_same<execution_space, Kokkos::HIP>::value &&
-      Kokkos::is_view_fad_contiguous<ViewType>::value &&
+      Sacado::is_view_fad_contiguous<ViewType>::value &&
+      is_dfad<typename ViewType::non_const_value_type>::value;
+#elif defined (KOKKOS_ENABLE_SYCL) && defined (SACADO_GPU_HIERARCHICAL)
+    const bool use_team =
+      std::is_same<execution_space, Kokkos::SYCL>::value &&
+      Sacado::is_view_fad_contiguous<ViewType>::value &&
+      ( stride > 1 );
+#elif defined (KOKKOS_ENABLE_SYCL) && defined (SACADO_GPU_HIERARCHICAL_DFAD)
+    const bool use_team =
+      std::is_same<execution_space, Kokkos::SYCL>::value &&
+      Sacado::is_view_fad_contiguous<ViewType>::value &&
       is_dfad<typename ViewType::non_const_value_type>::value;
 #else
     const bool use_team = false;
@@ -263,8 +254,8 @@ bool testAtomic(const TagType& tag, Teuchos::FancyOStream& out)
   typedef Kokkos::View<FadType*,Layout,Device> ViewType;
   typedef Kokkos::View<FadType,Layout,Device> ScalarViewType;
   typedef typename ViewType::size_type size_type;
-  typedef typename ViewType::HostMirror host_view_type;
-  typedef typename ScalarViewType::HostMirror host_scalar_view_type;
+  typedef typename ViewType::host_mirror_type host_view_type;
+  typedef typename ScalarViewType::host_mirror_type host_scalar_view_type;
 
   const size_type num_rows = global_num_rows;
   const size_type fad_size = global_fad_size;
@@ -408,20 +399,26 @@ TEUCHOS_UNIT_TEST_TEMPLATE_3_DECL(
 
 using Kokkos::LayoutLeft;
 using Kokkos::LayoutRight;
-typedef Kokkos::LayoutContiguous<Kokkos::LayoutLeft> LeftContiguous;
-typedef Kokkos::LayoutContiguous<Kokkos::LayoutRight> RightContiguous;
+
+#ifndef SACADO_DISABLE_FAD_VIEW_SPEC
+typedef Sacado::LayoutContiguous<Kokkos::LayoutLeft> LeftContiguous;
+typedef Sacado::LayoutContiguous<Kokkos::LayoutRight> RightContiguous;
 
 #define VIEW_FAD_TESTS_FD( F, D )                                       \
   VIEW_FAD_TESTS_FLD( F, LayoutLeft, D )                                \
   VIEW_FAD_TESTS_FLD( F, LayoutRight, D )                               \
   VIEW_FAD_TESTS_FLD( F, LeftContiguous, D )                            \
   VIEW_FAD_TESTS_FLD( F, RightContiguous, D )
+#else
+#define VIEW_FAD_TESTS_FD( F, D )                                       \
+  VIEW_FAD_TESTS_FLD( F, LayoutLeft, D )                                \
+  VIEW_FAD_TESTS_FLD( F, LayoutRight, D )
+#endif
 
 // Full set of atomics only implemented for new design
-#if SACADO_ENABLE_NEW_DESIGN
-typedef Sacado::Fad::Exp::DFad<double> DFadType;
-typedef Sacado::Fad::Exp::SLFad<double,2*global_fad_size> SLFadType;
-typedef Sacado::Fad::Exp::SFad<double,global_fad_size> SFadType;
+typedef Sacado::Fad::DFad<double> DFadType;
+typedef Sacado::Fad::SLFad<double,2*global_fad_size> SLFadType;
+typedef Sacado::Fad::SFad<double,global_fad_size> SFadType;
 
 #if SACADO_TEST_DFAD
 #define VIEW_FAD_TESTS_D( D )                            \
@@ -432,10 +429,4 @@ typedef Sacado::Fad::Exp::SFad<double,global_fad_size> SFadType;
 #define VIEW_FAD_TESTS_D( D )                            \
   VIEW_FAD_TESTS_FD( SFadType, D )                       \
   VIEW_FAD_TESTS_FD( SLFadType, D )
-#endif
-
-#else
-
-#define VIEW_FAD_TESTS_D( D ) /* */
-
 #endif

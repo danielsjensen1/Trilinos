@@ -15,16 +15,16 @@ IF (${CMAKE_PROJECT_NAME}_ENABLE_SEACASExodus)
   ADD_DEFINITIONS(-DEXODUS_SUPPORT)
 ENDIF()
 
-#IF (${TPL_ENABLE_fmt})
-  ADD_DEFINITIONS(-DFMT_SUPPORT)
-#ENDIF()
-
 TRIBITS_INCLUDE_DIRECTORIES(
   ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
 option(GENERATE_FLEX_FILES "Generate source files using flex" OFF)
 option(GENERATE_BISON_FILES "Generate source files using bison" OFF)
+
+if(TPL_ENABLE_CUDA)
+SET_SOURCE_FILES_PROPERTIES(apr_getline.cc PROPERTIES COMPILE_DEFINITIONS NO_TERMIOS=1)
+endif()
 
 if(GENERATE_BISON_FILES)
   set(BISON_LIB_SOURCE ${CMAKE_CURRENT_BINARY_DIR}/apr_parser.cc)
@@ -82,7 +82,7 @@ if(GENERATE_BISON_FILES)
 
   add_custom_command(OUTPUT  apr_parser.cc
                      COMMAND ${BISON_EXE}
-                     ARGS --defines=aprepro_parser.h --output apr_parser.cc
+                     ARGS --no-lines --defines=aprepro_parser.h --output apr_parser.cc
                         ${CMAKE_CURRENT_SOURCE_DIR}/aprepro.yy
                      MAIN_DEPENDENCY aprepro.yy
                      WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
@@ -117,7 +117,7 @@ if (${PACKAGE_NAME}_ENABLE_TESTS)
 TRIBITS_ADD_ADVANCED_TEST(
  aprepro_lib_unit_test
  TEST_0 EXEC aprepro_lib_test
-        ARGS -o test.output ${CMAKE_CURRENT_SOURCE_DIR}/test.inp_app 
+        ARGS --legacy_output_format -o test.output ${CMAKE_CURRENT_SOURCE_DIR}/test.inp_app
   NOEXEPREFIX NOEXESUFFIX
   PASS_ANY
  TEST_1 CMND diff ARGS -w
@@ -132,7 +132,7 @@ TRIBITS_ADD_ADVANCED_TEST(
 TRIBITS_ADD_ADVANCED_TEST(
  aprepro_lib_array_test
  TEST_0 EXEC aprepro_lib_test
-	ARGS --info=test-array.dump --include=${CMAKE_CURRENT_SOURCE_DIR} -o test-array.out test-array.i
+	ARGS --legacy_output_format --info=test-array.dump --include=${CMAKE_CURRENT_SOURCE_DIR} -o test-array.out test-array.i
   NOEXEPREFIX NOEXESUFFIX
   PASS_ANY
  TEST_1 CMND diff ARGS -w
@@ -150,7 +150,7 @@ TRIBITS_ADD_ADVANCED_TEST(
 TRIBITS_ADD_ADVANCED_TEST(
  aprepro_lib_array_test_short_opt
  TEST_0 EXEC aprepro_lib_test
-	ARGS --info=test-short-array.dump -I=${CMAKE_CURRENT_SOURCE_DIR} -o test-short-array.out
+	ARGS --legacy_output_format --info=test-short-array.dump -I=${CMAKE_CURRENT_SOURCE_DIR} -o test-short-array.out
 	     test-array.i
   NOEXEPREFIX NOEXESUFFIX
   PASS_ANY

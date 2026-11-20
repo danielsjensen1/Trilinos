@@ -14,6 +14,15 @@ banner("START configure step")
 message(">>> CTEST_SOURCE_DIRECTORY: ${CTEST_SOURCE_DIRECTORY}")
 message(">>> CTEST_BINARY_DIRECTORY: ${CTEST_BINARY_DIRECTORY}")
 
+if(CTEST_BUILD_NAME MATCHES ".*coverage.*")
+    message("Disabling CCache for coverage build")
+    set(ENV{CCACHE_NODISABLE})
+endif()
+
+# Remove CMakeFiles/ and CMakeCache.txt before configuring
+file(REMOVE_RECURSE "${CTEST_BINARY_DIRECTORY}/CMakeFiles")
+file(REMOVE "${CTEST_BINARY_DIRECTORY}/CMakeCache.txt")
+
 ctest_configure(SOURCE ${CTEST_SOURCE_DIRECTORY}
                 BUILD  ${CTEST_BINARY_DIRECTORY}
                 RETURN_VALUE configure_error
@@ -36,11 +45,6 @@ else()
 endif()
 
 submit_by_parts("Configure")
-
-if((NOT ${configure_error} EQUAL 0) OR (NOT ${tmp_cmake_error} EQUAL 0))
-    submit_single_submit()
-    message(WARNING "Configure failed with error ${configure_error}")
-endif()
 
 message("+--------------------------------------+")
 message("| ctest-stage-configure.cmake FINISH   |")

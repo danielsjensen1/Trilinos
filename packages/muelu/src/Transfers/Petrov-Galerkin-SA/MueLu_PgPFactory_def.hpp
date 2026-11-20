@@ -1,48 +1,12 @@
 // @HEADER
-//
-// ***********************************************************************
-//
+// *****************************************************************************
 //        MueLu: A package for multigrid based preconditioning
-//                  Copyright 2012 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact
-//                    Jonathan Hu       (jhu@sandia.gov)
-//                    Andrey Prokopenko (aprokop@sandia.gov)
-//                    Ray Tuminaro      (rstumin@sandia.gov)
-//
-// ***********************************************************************
-//
+// Copyright 2012 NTESS and the MueLu contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
+
 #ifndef MUELU_PGPFACTORY_DEF_HPP
 #define MUELU_PGPFACTORY_DEF_HPP
 
@@ -150,10 +114,11 @@ void PgPFactory<Scalar, LocalOrdinal, GlobalOrdinal, Node>::Build(Level& fineLev
   bool optimizeStorage = true;
   RCP<Matrix> DinvAP0  = Xpetra::MatrixMatrix<Scalar, LocalOrdinal, GlobalOrdinal, Node>::Multiply(*A, false, *Ptent, false, GetOStream(Statistics2), doFillComplete, optimizeStorage);
 
-  doFillComplete                 = true;
-  optimizeStorage                = false;
-  Teuchos::ArrayRCP<Scalar> diag = Utilities::GetMatrixDiagonal_arcp(*A);
-  Utilities::MyOldScaleMatrix(*DinvAP0, diag, true, doFillComplete, optimizeStorage);  // scale matrix with reciprocal of diag
+  const auto rowMap = A->getRowMap();
+  auto diag         = Xpetra::VectorFactory<Scalar, LocalOrdinal, GlobalOrdinal, Node>::Build(rowMap, true);
+  A->getLocalDiagCopy(*diag);
+  diag->reciprocal(*diag);
+  DinvAP0->leftScale(*diag);
 
   /////////////////// calculate local damping factors omega
 
@@ -194,11 +159,9 @@ void PgPFactory<Scalar, LocalOrdinal, GlobalOrdinal, Node>::Build(Level& fineLev
     RowBasedOmega->doImport(*noRowBasedOmega, *importer, Xpetra::INSERT);
   }
 
-  Teuchos::ArrayRCP<Scalar> RowBasedOmega_local = RowBasedOmega->getDataNonConst(0);
+  DinvAP0->leftScale(*RowBasedOmega);
 
-  /////////////////// prolongator smoothing using local damping parameters omega
   RCP<Matrix> P_smoothed = Teuchos::null;
-  Utilities::MyOldScaleMatrix(*DinvAP0, RowBasedOmega_local, false, doFillComplete, optimizeStorage);  // scale matrix with reciprocal of diag
 
   Xpetra::MatrixMatrix<Scalar, LocalOrdinal, GlobalOrdinal, Node>::TwoMatrixAdd(*Ptent, false, Teuchos::ScalarTraits<Scalar>::one(),
                                                                                 *DinvAP0, false, -Teuchos::ScalarTraits<Scalar>::one(),
@@ -310,8 +273,12 @@ void PgPFactory<Scalar, LocalOrdinal, GlobalOrdinal, Node>::ComputeRowBasedOmega
       bool optimizeStorage            = true;
       Teuchos::ArrayRCP<Scalar> diagA = Utilities::GetMatrixDiagonal_arcp(*A);
       RCP<Matrix> DinvADinvAP0        = Xpetra::MatrixMatrix<Scalar, LocalOrdinal, GlobalOrdinal, Node>::Multiply(*A, false, *DinvAP0, false, GetOStream(Statistics2), doFillComplete, optimizeStorage);
-      Utilities::MyOldScaleMatrix(*DinvADinvAP0, diagA, true, doFillComplete, optimizeStorage);  // scale matrix with reciprocal of diag
-      diagA = Teuchos::ArrayRCP<Scalar>();
+
+      const auto rowMap = A->getRowMap();
+      auto diag         = Xpetra::VectorFactory<Scalar, LocalOrdinal, GlobalOrdinal, Node>::Build(rowMap, true);
+      A->getLocalDiagCopy(*diag);
+      diag->reciprocal(*diag);
+      DinvADinvAP0->leftScale(*diag);
 
       Numerator   = VectorFactory::Build(DinvADinvAP0->getColMap(), true);
       Denominator = VectorFactory::Build(DinvADinvAP0->getColMap(), true);

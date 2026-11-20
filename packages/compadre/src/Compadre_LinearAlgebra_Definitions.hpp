@@ -1,3 +1,11 @@
+// @HEADER
+// *****************************************************************************
+//     Compadre: COMpatible PArticle Discretization and REmap Toolkit
+//
+// Copyright 2018 NTESS and the Compadre contributors.
+// SPDX-License-Identifier: BSD-2-Clause
+// *****************************************************************************
+// @HEADER
 #ifndef _COMPADRE_LINEAR_ALGEBRA_DEFINITIONS_HPP_
 #define _COMPADRE_LINEAR_ALGEBRA_DEFINITIONS_HPP_
 
@@ -7,7 +15,7 @@ namespace Compadre {
 namespace GMLS_LinearAlgebra {
 
 KOKKOS_INLINE_FUNCTION
-void largestTwoEigenvectorsThreeByThreeSymmetric(const member_type& teamMember, scratch_matrix_right_type V, scratch_matrix_right_type PtP, const int dimensions, pool_type& random_number_pool) {
+void largestTwoEigenvectorsThreeByThreeSymmetric(const member_type& teamMember, device_unmanaged_matrix_right_type V, scratch_matrix_right_type PtP, const int dimensions, pool_type& random_number_pool) {
 
     Kokkos::single(Kokkos::PerTeam(teamMember), [&] () {
 

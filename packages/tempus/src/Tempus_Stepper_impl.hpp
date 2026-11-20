@@ -1,10 +1,11 @@
-// @HEADER
-// ****************************************************************************
-//                Tempus: Copyright (2017) Sandia Corporation
+//@HEADER
+// *****************************************************************************
+//          Tempus: Time Integration and Sensitivity Analysis Package
 //
-// Distributed under BSD 3-clause license (See accompanying file Copyright.txt)
-// ****************************************************************************
-// @HEADER
+// Copyright 2017 NTESS and the Tempus contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+//@HEADER
 
 #ifndef Tempus_Stepper_impl_hpp
 #define Tempus_Stepper_impl_hpp
@@ -116,7 +117,7 @@ Teuchos::RCP<Thyra::VectorBase<Scalar> > Stepper<Scalar>::getStepperXDotDot(
 
 template <class Scalar>
 void Stepper<Scalar>::describe(Teuchos::FancyOStream& out,
-                               const Teuchos::EVerbosityLevel verbLevel) const
+                               const Teuchos::EVerbosityLevel /*verbLevel*/) const
 {
   auto l_out = Teuchos::fancyOStream(out.getOStream());
   Teuchos::OSTab ostab(*l_out, 2, this->description());

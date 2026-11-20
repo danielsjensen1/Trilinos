@@ -1,10 +1,11 @@
-// @HEADER
-// ****************************************************************************
-//                Tempus: Copyright (2017) Sandia Corporation
+//@HEADER
+// *****************************************************************************
+//          Tempus: Time Integration and Sensitivity Analysis Package
 //
-// Distributed under BSD 3-clause license (See accompanying file Copyright.txt)
-// ****************************************************************************
-// @HEADER
+// Copyright 2017 NTESS and the Tempus contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+//@HEADER
 
 #ifndef TEMPUS_TEST_HARMONIC_OSCILLATOR_MODEL_IMPL_HPP
 #define TEMPUS_TEST_HARMONIC_OSCILLATOR_MODEL_IMPL_HPP
@@ -293,7 +294,7 @@ void HarmonicOscillatorModel<Scalar>::evalModelImpl(
 
 template <class Scalar>
 Teuchos::RCP<const Thyra::VectorSpaceBase<Scalar> >
-HarmonicOscillatorModel<Scalar>::get_p_space(int l) const
+HarmonicOscillatorModel<Scalar>::get_p_space(int /*l*/) const
 {
   TEUCHOS_TEST_FOR_EXCEPTION(
       true, std::logic_error,
@@ -303,7 +304,7 @@ HarmonicOscillatorModel<Scalar>::get_p_space(int l) const
 
 template <class Scalar>
 Teuchos::RCP<const Teuchos::Array<std::string> >
-HarmonicOscillatorModel<Scalar>::get_p_names(int l) const
+HarmonicOscillatorModel<Scalar>::get_p_names(int /*l*/) const
 {
   TEUCHOS_TEST_FOR_EXCEPTION(
       true, std::logic_error,

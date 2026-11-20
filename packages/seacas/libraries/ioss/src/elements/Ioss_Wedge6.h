@@ -12,17 +12,14 @@
 #include "Ioss_CodeTypes.h"       // for IntVector
 #include "Ioss_ElementTopology.h" // for ElementTopology
 
-// STL Includes
-
 namespace Ioss {
-  class IOSS_EXPORT Wedge6 : public Ioss::ElementTopology
+  class IOSS_EXPORT Wedge6 final : public Ioss::ElementTopology
   {
 
   public:
     static const char *name;
 
     static void factory();
-    Wedge6(const Wedge6 &) = delete;
 
     IOSS_NODISCARD int          spatial_dimension() const override;
     IOSS_NODISCARD int          parametric_dimension() const override;

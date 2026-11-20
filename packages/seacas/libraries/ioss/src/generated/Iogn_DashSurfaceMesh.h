@@ -1,4 +1,4 @@
-// Copyright(C) 1999-2024 National Technology & Engineering Solutions
+// Copyright(C) 1999-2025 National Technology & Engineering Solutions
 // of Sandia, LLC (NTESS).  Under the terms of Contract DE-NA0003525 with
 // NTESS, the U.S. Government retains certain rights in this software.
 //
@@ -63,17 +63,16 @@ namespace Iogn {
     // element side (1-based) The side id is: side_id =
     // 10*element_id + local_side_number This assumes that all
     // sides in a sideset are boundary sides.
-    std::vector<std::vector<int>>         sidesetConnectivity;
-    std::vector<std::vector<std::string>> sidesetTouchingBlocks;
+    std::vector<std::vector<int>> sidesetConnectivity;
+    std::vector<Ioss::NameList>   sidesetTouchingBlocks;
 
     ExodusData() = delete;
     ExodusData(std::vector<double> coords, std::vector<std::vector<int>> elemBlockConnectivity,
                std::vector<int> globalNumOfElemsInBlock, std::vector<int> localNumOfElemsInBlock,
                std::vector<Topology> blockTopoData, int globalNumNodes,
                std::vector<int> globalIdsOfLocalElems, std::vector<int> globalIdsLocalNodes,
-               std::vector<std::vector<int>>         sidesetConn = std::vector<std::vector<int>>(),
-               std::vector<std::vector<std::string>> sidesetBlocks =
-                   std::vector<std::vector<std::string>>())
+               std::vector<std::vector<int>> sidesetConn   = std::vector<std::vector<int>>(),
+               std::vector<Ioss::NameList>   sidesetBlocks = std::vector<Ioss::NameList>())
         : coordinates(std::move(coords)),
           elementBlockConnectivity(std::move(elemBlockConnectivity)),
           globalNumberOfElementsInBlock(std::move(globalNumOfElemsInBlock)),
@@ -185,7 +184,7 @@ namespace Iogn {
     void element_map(std::vector<int> &map) const override;
 
   private:
-    std::string get_sideset_topology() const override;
+    IOSS_NODISCARD std::string get_sideset_topology() const override;
 
     DashSurfaceData mDashSurfaceData;
   };
@@ -226,7 +225,7 @@ namespace Iogn {
 
     void sideset_elem_sides(int64_t setId, std::vector<int64_t> &elem_sides) const override;
 
-    std::vector<std::string> sideset_touching_blocks(int64_t setId) const override;
+    IOSS_NODISCARD Ioss::NameList sideset_touching_blocks(int64_t setId) const override;
 
     void nodeset_nodes(int64_t nset_id, std::vector<int64_t> &nodes) const override;
 
@@ -241,7 +240,7 @@ namespace Iogn {
     void element_map(std::vector<int> &map) const override;
 
   private:
-    std::string get_sideset_topology() const override;
+    IOSS_NODISCARD std::string get_sideset_topology() const override;
 
     int64_t mGlobalNumberOfElements;
     int64_t mLocalNumberOfElements;

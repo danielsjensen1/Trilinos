@@ -5,4 +5,16 @@ updates:
     schedule:
       interval: weekly
     target-branch: develop
-    
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+  - package-ecosystem: pip
+    directory: /commonTools/
+    schedule:
+      interval: weekly
+    target-branch: develop
+    groups:
+      pip:
+        patterns:
+          - "*"

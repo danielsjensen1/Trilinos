@@ -33,7 +33,6 @@
 //
 
 #include "DisconnectBlocksMeshConstruction.hpp"
-#include <stk_mesh/baseImpl/elementGraph/ElemElemGraph.hpp>
 #include "stk_unit_test_utils/getOption.h"
 #include <stk_util/parallel/ParallelReduce.hpp>
 #include <stk_util/util/SortAndUnique.hpp>
@@ -42,10 +41,11 @@
 #include <stk_io/WriteMesh.hpp>
 #include <stk_mesh/base/BulkData.hpp>
 #include <stk_mesh/base/GetEntities.hpp>
-#include <stk_mesh/base/MetaData.hpp>   // for MetaData
+#include <stk_mesh/base/MetaData.hpp>
 #include <stk_mesh/base/SkinBoundary.hpp>
 #include <stk_mesh/base/Comm.hpp>
-#include <stk_tools/mesh_tools/DetectHingesImpl.hpp>
+#include <stk_mesh/base/ExodusTranslator.hpp>
+#include <stk_tools/mesh_tools/DetectHinges.hpp>
 #include <stk_tools/mesh_tools/DisconnectBlocks.hpp>
 #include <stk_tools/mesh_tools/DisconnectBlocksImpl.hpp>
 #include <stk_tools/mesh_tools/DisconnectUtils.hpp>
@@ -116,7 +116,7 @@ stk::mesh::PartVector setup_mesh_1block_1quad(stk::mesh::BulkData& bulk)
   stk::mesh::Part & block1 = create_part(bulk.mesh_meta_data(), stk::topology::QUAD_4_2D, "block_1", 1);
   std::string meshDesc = "0,1,QUAD_4_2D,1,2,4,3,block_1";
   std::vector<double> coordinates = { 0,0, 1,0, 0,1, 1,1 };
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1};
 }
@@ -127,7 +127,7 @@ stk::mesh::PartVector setup_mesh_1block_2quad(stk::mesh::BulkData& bulk)
   std::string meshDesc = "0,1,QUAD_4_2D,1,2,4,3,block_1\n"
                          "0,2,QUAD_4_2D,2,5,6,4,block_1";
   std::vector<double> coordinates = { 0,0, 1,0, 0,1, 1,1, 2,0, 2,1 };
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1};
 }
@@ -138,7 +138,7 @@ stk::mesh::PartVector setup_mesh_1block_2quad_1node_hinge(stk::mesh::BulkData& b
   std::string meshDesc = "0,1,QUAD_4_2D,1,2,4,3,block_1\n"
                          "0,2,QUAD_4_2D,7,5,6,4,block_1";
   std::vector<double> coordinates = { 0,0, (1-EPS),0, 0,1, 1,1, 2,0, 2,1, (1+EPS),0 };
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1};
 }
@@ -150,7 +150,7 @@ stk::mesh::PartVector setup_mesh_2block_2quad_1node_hinge(stk::mesh::BulkData& b
   std::string meshDesc = "0,1,QUAD_4_2D,1,2,4,3,block_1\n"
                          "0,2,QUAD_4_2D,7,5,6,4,block_2";
   std::vector<double> coordinates = { 0,0, (1-EPS),0, 0,1, 1,1, 2,0, 2,1, (1+EPS),0 };
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1,&block2};
 }
@@ -161,7 +161,7 @@ stk::mesh::PartVector setup_mesh_1block_2quad_2hinge(stk::mesh::BulkData& bulk)
   std::string meshDesc = "0,1,QUAD_4_2D,3,4,1,2,block_1\n"
                          "0,2,QUAD_4_2D,2,6,4,5,block_1";
   std::vector<double> coordinates = { 0,2, 2,1, 1,2, 2,3, 3,2, 4,2 };
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1};
 }
@@ -173,7 +173,7 @@ stk::mesh::PartVector setup_mesh_2block_2quad_2hinge(stk::mesh::BulkData& bulk)
   std::string meshDesc = "0,1,QUAD_4_2D,3,4,1,2,block_1\n"
                          "0,2,QUAD_4_2D,2,6,4,5,block_2";
   std::vector<double> coordinates = { 0,2, 2,1, 1,2, 2,3, 3,2, 4,2 };
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1,&block2};
 }
@@ -185,7 +185,7 @@ stk::mesh::PartVector setup_mesh_1block_3quad_1hinge(stk::mesh::BulkData& bulk)
                          "0,2,QUAD_4_2D,2,5,6,4,block_1\n"
                          "0,3,QUAD_4_2D,4,7,8,9,block_1";
   std::vector<double> coordinates = { 0,0, 1,0, 0,1, 1,1, 2,0, 2,(1-EPS), 2,(1+EPS), 2,2, 1,2 };
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1};
 }
@@ -197,7 +197,7 @@ stk::mesh::PartVector setup_mesh_1block_3quad_1hinge_linear_stack(stk::mesh::Bul
                          "0,2,QUAD_4_2D,2,5,6,4,block_1\n"
                          "0,3,QUAD_4_2D,7,8,9,6,block_1";
   std::vector<double> coordinates = { 0,0, 1,0, 0,1, 1,1, (2-EPS),0, 2,1, (2+EPS),0, 3,0, 3,1 };
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1};
 }
@@ -211,7 +211,7 @@ stk::mesh::PartVector setup_mesh_3block_3quad_1hinge_linear_stack(stk::mesh::Bul
                          "0,2,QUAD_4_2D,2,5,6,4,block_2\n"
                          "0,3,QUAD_4_2D,7,8,9,6,block_3";
   std::vector<double> coordinates = { 0,0, 1,0, 0,1, 1,1, (2-EPS),0, 2,1, (2+EPS),0, 3,0, 3,1 };
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1,&block2,&block3};
 }
@@ -225,7 +225,7 @@ stk::mesh::PartVector setup_mesh_1block_4quad_bowtie_1hinge(stk::mesh::BulkData&
                          "0,4,QUAD_4_2D,4,11,12,13,block_1";
   std::vector<double> coordinates = { 0,0, (1-EPS),0, 0,(1-EPS), 1,1, (1+EPS),0,
                                       2,0, 2,(1-EPS), 2,(1+EPS), 2,2, (1+EPS),2, (1-EPS),2, 0,2, 0,(1+EPS) };
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1};
 }
@@ -238,7 +238,7 @@ stk::mesh::PartVector setup_mesh_1block_4quad_2hinge(stk::mesh::BulkData& bulk)
                          "0,3,QUAD_4_2D,6,7,8,9,block_1\n"
                          "0,4,QUAD_4_2D,3,9,8,10,block_1";
   std::vector<double> coordinates = { 0,0, 1,0, 0,1, 1,(1-EPS), 2,0, 2,1, 2,2, 1,2, 1,(1+EPS), 0,2 };
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1};
 }
@@ -254,7 +254,7 @@ stk::mesh::PartVector setup_mesh_4block_4quad_2hinge(stk::mesh::BulkData& bulk)
                          "0,3,QUAD_4_2D,6,7,8,9,block_3\n"
                          "0,4,QUAD_4_2D,3,9,8,10,block_4";
   std::vector<double> coordinates = { 0,0, 1,0, 0,1, 1,(1-EPS), 2,0, 2,1, 2,2, 1,2, 1,(1+EPS), 0,2 };
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1,&block2,&block3,&block4};
 }
@@ -267,7 +267,7 @@ stk::mesh::PartVector setup_mesh_1block_4quad_4hinge(stk::mesh::BulkData& bulk)
                          "0,3,QUAD_4_2D,6,9,10,8,block_1\n"
                          "0,4,QUAD_4_2D,3,11,10,12,block_1";
   std::vector<double> coordinates = { 0,0, 1,0, 0,1, 1,1, 2,0, 2,1, 1,1, 1,1, 2,2, 1,2, 1,1, 0,2 };
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1};
 }
@@ -283,7 +283,7 @@ stk::mesh::PartVector setup_mesh_4block_4quad_4hinge(stk::mesh::BulkData& bulk)
                          "0,3,QUAD_4_2D,6,9,10,8,block_3\n"
                          "0,4,QUAD_4_2D,3,11,10,12,block_4";
   std::vector<double> coordinates = { 0,0, 1,0, 0,1, 1,1, 2,0, 2,1, 1,1, 1,1, 2,2, 1,2, 1,1, 0,2 };
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1,&block2,&block3,&block4};
 }
@@ -296,7 +296,7 @@ stk::mesh::PartVector setup_mesh_1block_4quad_pacman(stk::mesh::BulkData& bulk)
                          "0,3,QUAD_4_2D,4,7,8,9,block_1\n"
                          "0,4,QUAD_4_2D,3,4,9,10,block_1";
   std::vector<double> coordinates = { 0,0, 1,0, 0,1, 1,1, 2,0, 2,(1-EPS), 2,(1+EPS), 2,2, 1,2, 0,2 };
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1};
 }
@@ -312,7 +312,7 @@ stk::mesh::PartVector setup_mesh_4block_4quad_pacman(stk::mesh::BulkData& bulk)
                          "0,3,QUAD_4_2D,4,7,8,9,block_3\n"
                          "0,4,QUAD_4_2D,3,4,9,10,block_4";
   std::vector<double> coordinates = { 0,0, 1,0, 0,1, 1,1, 2,0, 2,(1-EPS), 2,(1+EPS), 2,2, 1,2, 0,2 };
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1,&block2,&block3,&block4};
 }
@@ -325,7 +325,7 @@ stk::mesh::PartVector setup_mesh_1block_4quad_1hinge(stk::mesh::BulkData& bulk)
                          "0,3,QUAD_4_2D,7,8,9,4,block_1\n"
                          "0,4,QUAD_4_2D,4,9,10,11,block_1";
   std::vector<double> coordinates = { 0,0, (1-EPS),0, 0,(1-EPS), 1,1, (1+EPS),0, 2,0, 2,1, 2,2, 1,2, 0,2, 0,(1+EPS) };
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1};
 }
@@ -341,7 +341,7 @@ stk::mesh::PartVector setup_mesh_4block_4quad_1hinge(stk::mesh::BulkData& bulk)
                          "0,3,QUAD_4_2D,7,8,9,4,block_3\n"
                          "0,4,QUAD_4_2D,4,9,10,11,block_4";
   std::vector<double> coordinates = { 0,0, (1-EPS),0, 0,(1-EPS), 1,1, (1+EPS),0, 2,0, 2,1, 2,2, 1,2, 0,2, 0,(1+EPS) };
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1,&block2,&block3,&block4};
 }
@@ -356,7 +356,7 @@ stk::mesh::PartVector setup_mesh_2block_3quad_2tri_1hinge(stk::mesh::BulkData& b
                          "0,4,QUAD_4_2D,7,8,9,4,block_2\n"
                          "0,5,QUAD_4_2D,4,9,10,11,block_2";
   std::vector<double> coordinates = { 0,0, (1-EPS),0, 0,(1-EPS), 1,1, (1+EPS),0, 2,0, 2,1, 2,2, 1,2, 0,2, 0,(1+EPS) };
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1,&block2};
 }
@@ -374,7 +374,7 @@ stk::mesh::PartVector setup_mesh_5block_3quad_2tri_1hinge(stk::mesh::BulkData& b
                          "0,4,QUAD_4_2D,7,8,9,4,block_4\n"
                          "0,5,QUAD_4_2D,4,9,10,11,block_5";
   std::vector<double> coordinates = { 0,0, (1-EPS),0, 0,(1-EPS), 1,1, (1+EPS),0, 2,0, 2,1, 2,2, 1,2, 0,2, 0,(1+EPS) };
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1,&block2,&block3,&block4,&block5};
 }
@@ -385,7 +385,7 @@ stk::mesh::PartVector setup_mesh_1block_1hex(stk::mesh::BulkData& bulk)
   std::string meshDesc = "0,1,HEX_8,1,2,3,4,5,6,7,8,block_1";
   std::vector<double> coordinates = { 0,0,0, 1,0,0, 1,1,0, 0,1,0, 0,0,1, 1,0,1, 1,1,1, 0,1,1};
 
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1};
 }
@@ -401,7 +401,7 @@ stk::mesh::PartVector setup_mesh_1block_2hex(stk::mesh::BulkData& bulk)
     0,0,2, 1,0,2, 1,1,2, 0,1,2
   };
 
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1};
 }
@@ -418,7 +418,7 @@ stk::mesh::PartVector setup_mesh_1block_2hex_1node_hinge(stk::mesh::BulkData& bu
     1,0,2, 1,1,2, 0,1,2
   };
 
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1};
 }
@@ -434,7 +434,7 @@ stk::mesh::PartVector setup_mesh_1block_2hex_2node_hinge(stk::mesh::BulkData& bu
     1,1,0, (0.5+EPS),(0.5+EPS),0, 1,EPS,1, 1,1,1, 0,(1+EPS),1, (0.5+EPS),(0.5+EPS),1
   };
 
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1};
 }
@@ -452,7 +452,7 @@ stk::mesh::PartVector setup_mesh_1block_3hex_1node_hinge(stk::mesh::BulkData& bu
     (1+EPS),0,0, 2,0,0, 2,1,0, (1+EPS),1,0, 2,0,1, 2,1,1, (1+EPS),1,1
   };
 
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1};
 }
@@ -467,7 +467,7 @@ stk::mesh::PartVector setup_mesh_1block_2hex_face_test(stk::mesh::BulkData& bulk
     2,0,0, 2,1,0, 2,0,1, 2,1,1
   };
 
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1};
 }
@@ -495,7 +495,7 @@ stk::mesh::PartVector setup_mesh_1block_8hex_flower_1node_hinge(stk::mesh::BulkD
     0,(1+EPS),(1+EPS), (1-EPS),2,(1+EPS), 0,2,(1+EPS), 0,(1+EPS),2, (1-EPS),(1+EPS),2, (1-EPS),2,2, 0,2,2
   };
 
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1};
 }
@@ -511,7 +511,7 @@ stk::mesh::PartVector setup_mesh_1block_2tet_1node_hinge(stk::mesh::BulkData& bu
     1,1,0, 0,2,0, 0,1,1
   };
 
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1};
 }
@@ -526,7 +526,7 @@ stk::mesh::PartVector setup_mesh_1block_2hex_1edge_hinge(stk::mesh::BulkData& bu
     2,0,0, 2,0,-1, 1,0,-1, 2,1,0, 2,1,-1, 1,1,-1
   };
 
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1};
 }
@@ -542,7 +542,7 @@ stk::mesh::PartVector setup_mesh_2block_2hex_1edge_hinge(stk::mesh::BulkData& bu
     2,0,0, 2,0,-1, 1,0,-1, 2,1,0, 2,1,-1, 1,1,-1
   };
 
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1,&block2};
 }
@@ -559,7 +559,7 @@ stk::mesh::PartVector setup_mesh_1block_3hex_1edge_hinge(stk::mesh::BulkData& bu
     0,(1+EPS),0, 1,(1+EPS),0, 1,2,0, 0,2,0, 1,2,1, 0,2,1,
   };
 
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1};
 }
@@ -578,7 +578,7 @@ stk::mesh::PartVector setup_mesh_3block_3hex_1edge_hinge(stk::mesh::BulkData& bu
     0,(1+EPS),0, 1,(1+EPS),0, 1,2,0, 0,2,0, 1,2,1, 0,2,1,
   };
 
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1,&block2,&block3};
 }
@@ -595,7 +595,7 @@ stk::mesh::PartVector setup_mesh_1block_3hex_1node_hinge_1edge_hinge(stk::mesh::
     2,(1+EPS),0, 2,(1+EPS),-1, 1,(1+EPS),-1, 1,2,0, 2,2,0, 2,2,-1, 1,2,-1
   };
 
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1};
 }
@@ -614,7 +614,7 @@ stk::mesh::PartVector setup_mesh_3block_3hex_1node_hinge_1edge_hinge(stk::mesh::
     2,(1+EPS),0, 2,(1+EPS),-1, 1,(1+EPS),-1, 1,2,0, 2,2,0, 2,2,-1, 1,2,-1
   };
 
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1,&block2,&block3};
 }
@@ -631,7 +631,7 @@ stk::mesh::PartVector setup_mesh_1block_3hex_1node_hinge_1edge_hinge2(stk::mesh:
     1,(1+EPS),0, 2,(1+EPS),-1, 1,(1+EPS),-1, 1,2,0, 2,2,0, 2,2,-1, 1,2,-1
   };
 
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1};
 }
@@ -650,7 +650,7 @@ stk::mesh::PartVector setup_mesh_3block_3hex_1node_hinge_1edge_hinge2(stk::mesh:
     1,(1+EPS),0, 2,(1+EPS),-1, 1,(1+EPS),-1, 1,2,0, 2,2,0, 2,2,-1, 1,2,-1
   };
 
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1,&block2,&block3};
 }
@@ -667,7 +667,7 @@ stk::mesh::PartVector setup_mesh_1block_3hex_1node_hinge_1edge_hinge3(stk::mesh:
     1,(1+EPS),0, 2,(1+EPS),0, 1,(1+EPS),-1, 1,2,0, 2,2,0, 2,2,-1, 1,2,-1
   };
 
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1};
 }
@@ -686,7 +686,7 @@ stk::mesh::PartVector setup_mesh_3block_3hex_1node_hinge_1edge_hinge3(stk::mesh:
     1,(1+EPS),0, 2,(1+EPS),0, 1,(1+EPS),-1, 1,2,0, 2,2,0, 2,2,-1, 1,2,-1
   };
 
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1,&block2,&block3};
 }
@@ -705,7 +705,7 @@ stk::mesh::PartVector setup_mesh_1block_4hex_bowtie_1edge_hinge(stk::mesh::BulkD
     2,2,1, (1+EPS),2,1, (1-EPS),2,1, 0,2,1, 0,(1+EPS),1
   };
 
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1};
 }
@@ -727,7 +727,7 @@ stk::mesh::PartVector setup_mesh_4block_4hex_bowtie_1edge_hinge(stk::mesh::BulkD
     2,2,1, (1+EPS),2,1, (1-EPS),2,1, 0,2,1, 0,(1+EPS),1
   };
 
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1,&block2,&block3,&block4};
 }
@@ -746,7 +746,7 @@ stk::mesh::PartVector setup_mesh_1block_two_by_two_hex_2edge_hinge(stk::mesh::Bu
     2,2,0, 2,2,-1, 1,2,-1,
   };
 
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1};
 }
@@ -768,7 +768,7 @@ stk::mesh::PartVector setup_mesh_4block_two_by_two_hex_2edge_hinge(stk::mesh::Bu
     2,2,0, 2,2,-1, 1,2,-1,
   };
 
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1,&block2,&block3,&block4};
 }
@@ -786,7 +786,7 @@ stk::mesh::PartVector setup_mesh_1block_four_hex_one_edge_one_node_hinge(stk::me
     0,2,1, -1,2,1, -1,(1+EPS),1, 0,1,2, 0,2,2, -1,2,2, -1,1,2
   };
 
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1};
 }
@@ -807,7 +807,7 @@ stk::mesh::PartVector setup_mesh_4block_four_hex_one_edge_one_node_hinge(stk::me
     0,2,1, -1,2,1, -1,(1+EPS),1, 0,1,2, 0,2,2, -1,2,2, -1,1,2
   };
 
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1,&block2,&block3,&block4};
 }
@@ -826,7 +826,7 @@ stk::mesh::PartVector setup_mesh_1block_four_hex_2node_hinge(stk::mesh::BulkData
     1,3,1, 0,3,1, 0,(2+EPS),1, 1,2,2, 1,3,2, 0,3,2, 0,2,2
   };
 
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1};
 }
@@ -848,7 +848,7 @@ stk::mesh::PartVector setup_mesh_4block_four_hex_2node_hinge(stk::mesh::BulkData
     1,3,1, 0,3,1, 0,(2+EPS),1, 1,2,2, 1,3,2, 0,3,2, 0,2,2
   };
 
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1,&block2,&block3,&block4};
 }
@@ -868,7 +868,145 @@ stk::mesh::PartVector setup_mesh_1block_four_hex_2node_one_edge_hinge_manual(stk
     (1-EPS),1,0, (1-EPS),2,0
   };
 
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
+
+  return {&block1};
+}
+
+stk::mesh::PartVector setup_mesh_two_tet10_hinge_at_edge(stk::mesh::BulkData& bulk)
+{
+  // Create mesh with two tet10 elements which are connected along the edge 3----10----4
+  stk::mesh::Part & block1 = create_part(bulk.mesh_meta_data(), stk::topology::TET_10, "block_1", 1);
+
+  std::string meshDesc = "0,1,TET_10, 1, 2, 3, 4, 5, 6, 7, 8, 9,10,block_1\n"
+                         "0,2,TET_10,11,12, 3, 4,15,16,17,18,19,10,block_1";
+  std::vector<double> coordinates{ 2,0,0, 0, 2,0, 0,0,2, 0,0,0,  1, 1,0, 0, 1,1,  1,0,1,  1,0,0, 0, 1,0, 0,0,1,
+                                  -2,0,0, 0,-2,0,               -1,-1,0, 0,-1,1, -1,0,1, -1,0,0, 0,-1,0       };
+
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
+
+  return {&block1};
+}
+
+stk::mesh::PartVector setup_mesh_two_tet10_hinge_at_edge_mid_nodes(stk::mesh::BulkData& bulk)
+{
+  // Create mesh with two tet10 elements which are connected at mid-edge-node 5
+  stk::mesh::Part & block1 = create_part(bulk.mesh_meta_data(), stk::topology::TET_10, "block_1", 1);
+
+  std::string meshDesc = "0,1,TET_10, 1, 2, 3, 4, 5, 6, 7, 8, 9,10,block_1\n"
+                         "0,2,TET_10,11,12,13,14,15,16,17,18,19, 5,block_1";
+  std::vector<double> coordinates{2,0, 0, 0,2, 0, 0,0,2, 0,0, 0, 1,1, 0, 0,1,1, 1,0,1, 1,0, 0, 0,1, 0, 0,0,1,
+                                  3,1,-1, 1,3,-1, 1,1,1, 1,1,-1, 2,2,-1, 1,2,0, 2,1,0, 2,1,-1, 1,2,-1       };
+
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
+
+  return {&block1};
+}
+
+stk::mesh::PartVector setup_mesh_two_tet10_hinge_at_vertex_and_edge_mid_node(stk::mesh::BulkData& bulk)
+{
+  // Create mesh with two tet10 elements where mid-edge-node 5 on the first is a vertex on the other
+  stk::mesh::Part & block1 = create_part(bulk.mesh_meta_data(), stk::topology::TET_10, "block_1", 1);
+
+  std::string meshDesc = "0,1,TET_10, 1, 2, 3, 4, 5, 6, 7, 8, 9,10,block_1\n"
+                         "0,2,TET_10,11,12,13, 5,15,16,17,18,19,20,block_1";
+  std::vector<double> coordinates{2,0,0, 0,2,0, 0,0,2, 0,0,0, 1,1,0, 0,1,1, 1,0,1, 1,0,0, 0,1,0, 0,0,1,
+                                  3,1,0, 1,3,0, 1,1,2,        2,2,0, 1,2,1, 2,1,1, 2,1,0, 1,2,0, 1,1,1};
+
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
+
+  return {&block1};
+}
+
+stk::mesh::PartVector setup_mesh_tet10_use_case(stk::mesh::BulkData& bulk)
+{
+  // This is the reproducer for tet10 hinge detection from Kevin Manktelow
+  stk::mesh::Part & block1 = create_part(bulk.mesh_meta_data(), stk::topology::TET_10, "block_1", 1);
+  std::string meshDesc = "0,4,TET_10,239455,254003,247857,229039,305213,314051,344772,288609,540046,288610,block_1\n"
+                         "0,6,TET_10,239455,254003,228958,247857,305213,314052,344773,344772,314051,344774,block_1\n"
+                         "0,9,TET_10,261571,228958,247857,239455,344778,344774,344775,351107,344773,344772,block_1\n"
+                         "0,43,TET_10,247857,239368,239374,228958,344776,289587,314056,344774,344777,314055,block_1\n"
+                         "0,49,TET_10,247857,228958,256195,254003,344774,314053,314054,314051,314052,316880,block_1\n"
+                         "0,50,TET_10,256195,228958,247857,239374,314053,344774,314054,314138,314055,314056,block_1\n"
+                         "0,51,TET_10,247857,228958,261571,239368,344774,344778,344775,344776,344777,354827,block_1\n"
+                         "0,67,TET_10,247857,254003,228957,229039,314051,516844,314049,288610,540046,516846,block_1\n"
+                         "0,74,TET_10,228957,255156,229039,254003,516845,534530,516846,516844,534528,540046,block_1\n"
+                         "0,80,TET_10,229039,255156,228957,239460,534530,516845,516846,516848,516850,516847,block_1\n"
+                         "0,90,TET_10,239374,239368,247857,228957,289587,344776,314056,314134,289588,314049,block_1\n"
+                         "0,91,TET_10,256195,247857,228957,239374,314054,314049,314136,314138,314056,314134,block_1\n"
+                         "0,99,TET_10,239368,239374,228875,228957,289587,278853,278826,289588,314134,278854,block_1\n"
+                         "0,100,TET_10,239373,239374,228963,228957,278852,314137,278857,278856,314134,314135,block_1\n"
+                         "0,101,TET_10,239373,239374,228957,228875,278852,314134,278856,340657,278853,278854,block_1\n"
+                         "0,102,TET_10,239373,239460,228957,228963,344478,516847,278856,278857,308435,314135,block_1\n"
+                         "0,103,TET_10,239460,255156,228957,228963,516850,516845,516847,308435,314141,314135,block_1\n"
+                         "0,104,TET_10,228957,228963,256195,239374,314135,314140,314136,314134,314137,314138,block_1\n"
+                         "0,105,TET_10,256195,228963,228957,255156,314140,314135,314136,316878,314141,516845,block_1";
+  std::vector<double> coordinates{43.87145997753787, 10.5321452236797, 344.0436568434805,
+                                  43.818468259727, 10.5486990115, 345.10827391971,
+                                  44.75930753573112, 10.54153162899183, 344.9315039718736,
+                                  43.88084656664847, 11.41999259807449, 344.9315039718736,
+                                  43.85700070118821, 10.51768251219101, 345.7861157480965,
+                                  44.4187876188752, 10.20100982681208, 344.3935663664018,
+                                  43.28877194238039, 10.82791743011858, 344.6451163170171,
+                                  44.3200770511898, 10.98076211353316, 344.4922734873322,
+                                  44.54993700496586, 10.10230121752089, 345.3707384356732,
+                                  43.44161280661659, 10.74016618997771, 345.3707361593086,
+                                  44.2243743664808, 10.3143490115, 345.10827391971,
+                                  44.50762207110525, 10.80494842703687, 345.10827391971,
+                                  44.16138531281121, 11.14264877022361, 345.10827391971,
+                                  44.32007219086316, 10.98075689455368, 344.8749236154951,
+                                  44.7593089008606, 9.972975952455679, 344.9315034031451,
+                                  44.14767706123297, 10.37100187627512, 344.2186556044977,
+                                  43.80442449678509, 10.90433977182587, 344.5686949021747,
+                                  44.09576851436383, 10.75645366860643, 344.2679651654064,
+                                  43.84523323059051, 10.54090331042328, 344.5759715483167,
+                                  43.55411352590613, 10.68927405377896, 344.8767079867547,
+                                  43.58480925451443, 11.12395501409653, 344.7883101444453,
+                                  44.20766782666713, 10.31726793979698, 345.5785385917372,
+                                  44.0406875338345, 10.41601576184551, 345.4471948339033,
+                                  44.3694323350325, 10.59088597017262, 344.442919926867,
+                                  44.1186279393011, 10.37485441915604, 344.7509201430559,
+                                  44.52877953803555, 10.45362482227888, 345.2395061776916,
+                                  43.66122968663253, 11.0800793940261, 345.1511200655911,
+                                  44.0214213131039, 10.4315240115, 345.10827391971,
+                                  44.36599821879302, 10.55964871926843, 345.10827391971,
+                                  44.63346480341819, 10.67324002801435, 345.0198889457918,
+                                  44.53968986329714, 10.76114426177276, 344.9032137936844,
+                                  44.27222327867199, 10.64755295302684, 344.9915987676026,
+                                  44.53969229346046, 10.7611468712625, 344.7118887296029,
+                                  44.2722257088353, 10.64755556251658, 344.8002737035211,
+                                  44.0692726554584, 10.76473056251658, 344.8002737035211,
+                                  43.84965741318774, 10.98434580478724, 345.0198889457918,
+                                  44.06927022529509, 10.76472795302684, 344.9915987676026,
+                                  44.10046180891914, 11.20037735580382, 344.7118887296029,
+                                  44.32007462102648, 10.98075950404342, 344.6835985514136,
+                                  44.10045937875582, 11.20037474631408, 344.9032137936844,
+                                  44.02111593972984, 11.28132068414905, 345.0198889457918,
+                                  44.24072875183719, 11.06170283238865, 344.9915987676026,
+                                  44.41384713098421, 10.89285266079527, 344.9915987676026,
+                                  43.5813518857897, 10.68245053604385, 344.3444188128715,
+                                  43.36519237449849, 10.78404181004814, 345.0079262381629,
+                                  44.38770515324963, 10.20917393170593, 345.2395181747969,
+                                  44.65462227034849, 10.32191642325636, 345.1511212037734,
+                                  44.49184095110596, 10.42794032024592, 345.0198889457918,
+                                  44.49239110119695, 10.14451129917326, 345.0199006585328,
+                                  44.321580992678, 10.25767941915604, 344.7509201430559,
+                                  44.58904757730316, 10.37127072790196, 344.6625351691377,
+                                  44.75930821829586, 10.25725379072376, 344.9315036875093,
+                                  44.65462295291332, 10.03763858498843, 345.1511209194092,
+                                  44.58904825986785, 10.08699288963381, 344.6625348847735,
+                                  44.16304516541612, 10.67682371926843, 345.10827391971,
+                                  43.98992678626911, 10.84567389086181, 345.10827391971,
+                                  43.8377344804576, 10.53319076184551, 345.4471948339033,
+                                  43.63053395802424, 10.64539843370853, 345.2395179079005,
+                                  43.65026596969419, 10.63080192622508, 345.5784509697996,
+                                  43.8014990597139, 10.94140748010066, 345.2395050395093,
+                                  44.22811844204578, 11.03522015127872, 344.9098754924717,
+                                  44.00919300699971, 10.83016564120731, 345.4471948339033,
+                                  44.18231138614672, 10.66131546961394, 345.4471948339033,
+  };
+
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1};
 }
@@ -924,28 +1062,29 @@ void setup_mesh_with_hinge_ring(stk::mesh::BulkData& bulk)
   bulk.modification_end();
 
   const stk::mesh::FieldBase* coords = meta.coordinate_field();
-  double* coordNode22 = (double*)stk::mesh::field_data(*coords, node22);
-  double* coordNode23 = (double*)stk::mesh::field_data(*coords, node23);
-  double* coordNode26 = (double*)stk::mesh::field_data(*coords, node26);
-  double* coordNode27 = (double*)stk::mesh::field_data(*coords, node27);
+  auto coordsData = coords->data<double, stk::mesh::ReadWrite>();
+  auto coordNode22 = coordsData.entity_values(node22);
+  auto coordNode23 = coordsData.entity_values(node23);
+  auto coordNode26 = coordsData.entity_values(node26);
+  auto coordNode27 = coordsData.entity_values(node27);
 
-  double* coordNode122 = (double*)stk::mesh::field_data(*coords, newNode122);
-  double* coordNode123 = (double*)stk::mesh::field_data(*coords, newNode123);
-  double* coordNode126 = (double*)stk::mesh::field_data(*coords, newNode126);
-  double* coordNode127 = (double*)stk::mesh::field_data(*coords, newNode127);
+  auto coordNode122 = coordsData.entity_values(newNode122);
+  auto coordNode123 = coordsData.entity_values(newNode123);
+  auto coordNode126 = coordsData.entity_values(newNode126);
+  auto coordNode127 = coordsData.entity_values(newNode127);
 
-  coordNode122[0] = coordNode22[0] + EPS;
-  coordNode122[1] = coordNode22[1] + EPS;
-  coordNode122[2] = coordNode22[2];
-  coordNode123[0] = coordNode23[0] - EPS;
-  coordNode123[1] = coordNode23[1] + EPS;
-  coordNode123[2] = coordNode23[2];
-  coordNode126[0] = coordNode26[0] + EPS;
-  coordNode126[1] = coordNode26[1] - EPS;
-  coordNode126[2] = coordNode26[2];
-  coordNode127[0] = coordNode27[0] - EPS;
-  coordNode127[1] = coordNode27[1] - EPS;
-  coordNode127[2] = coordNode27[2];
+  coordNode122(0_comp) = coordNode22(0_comp) + EPS;
+  coordNode122(1_comp) = coordNode22(1_comp) + EPS;
+  coordNode122(2_comp) = coordNode22(2_comp);
+  coordNode123(0_comp) = coordNode23(0_comp) - EPS;
+  coordNode123(1_comp) = coordNode23(1_comp) + EPS;
+  coordNode123(2_comp) = coordNode23(2_comp);
+  coordNode126(0_comp) = coordNode26(0_comp) + EPS;
+  coordNode126(1_comp) = coordNode26(1_comp) - EPS;
+  coordNode126(2_comp) = coordNode26(2_comp);
+  coordNode127(0_comp) = coordNode27(0_comp) - EPS;
+  coordNode127(1_comp) = coordNode27(1_comp) - EPS;
+  coordNode127(2_comp) = coordNode27(2_comp);
 }
 
 stk::mesh::PartVector setup_mesh_1block_four_hex_2node_one_edge_hinge(stk::mesh::BulkData& bulk)
@@ -963,7 +1102,7 @@ stk::mesh::PartVector setup_mesh_1block_four_hex_2node_one_edge_hinge(stk::mesh:
     (1-EPS),1,0, (1-EPS),2,0
   };
 
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1};
 }
@@ -987,7 +1126,7 @@ stk::mesh::PartVector setup_mesh_1block_eight_tri_1node_hinge(stk::mesh::BulkDat
     2,(2-EPS)
   };
 
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1};
 }
@@ -1006,7 +1145,7 @@ stk::mesh::PartVector setup_mesh_4block_4quad_bowtie_1hinge(stk::mesh::BulkData&
     0,0, (1-EPS),0, 0,(1-EPS), 1,1, (1+EPS),0,
     2,0, 2,(1-EPS), 2,(1+EPS), 2,2, (1+EPS),2, (1-EPS),2, 0,2, 0,(1+EPS)
   };
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1,&block2,&block3,&block4};
 }
@@ -1020,28 +1159,41 @@ stk::mesh::PartVector setup_mesh_3block_3quad_1hinge(stk::mesh::BulkData& bulk)
                          "0,2,QUAD_4_2D,2,5,6,4,block_2\n"
                          "0,3,QUAD_4_2D,4,7,8,9,block_3";
   std::vector<double> coordinates = { 0,0, 1,0, 0,1, 1,1, 2,0, 2,(1-EPS), 2,(1+EPS), 2,2, 1,2 };
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1,&block2,&block3};
 }
 
 
 void print_hinge_info(const stk::mesh::BulkData& bulk,
-                      const stk::tools::impl::HingeNodeVector& hingeNodes,
-                      const stk::tools::impl::HingeEdgeVector& hingeEdges)
+                      const stk::tools::HingeNodeVector& hingeNodes,
+                      const stk::tools::HingeEdgeVector& hingeEdges)
 {
   std::ostringstream os;
   if(hingeNodes.size() > 0) {
     os << "PRINTING HINGE NODES on Proc " << bulk.parallel_rank() << " : " << std::endl;
-    for(const stk::tools::impl::HingeNode& node : hingeNodes) {
-      os << "\tHinge node id: " << bulk.identifier(node.get_node()) << std::endl;
+    for(const stk::tools::HingeNode& node : hingeNodes) {
+      os << "\tHinge node id: " << bulk.identifier(node.get_node()) << ": ";
+      auto elems = bulk.get_connected_entities(node.get_node(), stk::topology::ELEM_RANK);
+      for(stk::mesh::Entity elem : elems) {
+        stk::mesh::Part* blockPart = stk::mesh::get_element_block_part(bulk, elem);
+        os << "element " << bulk.identifier(elem) << ", block: " << blockPart->name() << "; ";
+      }
+
+      os << std::endl;
     }
   }
   if(hingeEdges.size() > 0) {
     os << "PRINTING HINGE EDGES on Proc " << bulk.parallel_rank() << " : " << std::endl;
-    for(const stk::tools::impl::HingeEdge& edge : hingeEdges) {
+    for(const stk::tools::HingeEdge& edge : hingeEdges) {
       os << "\tHinge edge ids: " << bulk.identifier(edge.first.get_node())
-         << ", " << bulk.identifier(edge.second.get_node()) << std::endl;
+         << ", " << bulk.identifier(edge.second.get_node()) << " ";
+      stk::mesh::EntityVector elems = stk::tools::get_common_elements(bulk, edge.first.get_node(), edge.second.get_node());
+      for(stk::mesh::Entity elem : elems) {
+        stk::mesh::Part* blockPart = stk::mesh::get_element_block_part(bulk, elem);
+        os << "element " << bulk.identifier(elem) << ", block: " << blockPart->name() << "; ";
+      }
+      os << std::endl;
     }
   }
 
@@ -1055,7 +1207,7 @@ void print_hinge_info(const stk::mesh::BulkData& bulk,
 
 bool is_debug()
 {
-  return stk::unit_test_util::simple_fields::has_option("--debug");
+  return stk::unit_test_util::has_option("--debug");
 }
 
 // Common Decompositions
@@ -1344,6 +1496,70 @@ unsigned get_num_total_sides(const stk::mesh::BulkData & bulk)
   return get_num_total_entities(bulk, bulk.mesh_meta_data().side_rank());
 }
 
+stk::mesh::EntityVector get_element_side_nodes(stk::mesh::BulkData & bulk,
+                                               stk::mesh::Entity elem,
+                                               stk::mesh::ConnectivityOrdinal sideOrdinal)
+{
+  auto elemTopology = bulk.bucket(elem).topology();
+  auto sideTopology = elemTopology.side_topology(sideOrdinal);
+
+  std::vector<stk::mesh::ConnectivityOrdinal> elementSideNodeOrdinalVector(sideTopology.num_nodes());
+  elemTopology.side_node_ordinals(sideOrdinal, elementSideNodeOrdinalVector.data());
+
+  stk::mesh::EntityVector elementSideNodeVector;
+  auto elemNodes = bulk.begin_nodes(elem);
+  for(auto nodeIndex : elementSideNodeOrdinalVector) {
+    elementSideNodeVector.push_back(elemNodes[nodeIndex]);
+  }
+
+  return elementSideNodeVector;
+}
+
+bool verify_attached_faces(stk::mesh::BulkData & bulk)
+{
+  for (stk::mesh::Bucket * bucket : bulk.buckets(bulk.mesh_meta_data().side_rank())) {
+    for (stk::mesh::Entity face : *bucket) {
+      auto numElems = bulk.num_elements(face);
+      auto elems = bulk.begin_elements(face);
+      auto ordinals = bulk.begin_ordinals(face, stk::topology::ELEM_RANK);
+      stk::mesh::EntityVector faceNodes(bulk.begin_nodes(face), bulk.begin_nodes(face)+bulk.num_nodes(face));
+      std::sort(faceNodes.begin(), faceNodes.end());
+
+      for (unsigned i = 0; i < numElems; ++i) {
+        auto elem = elems[i];
+        auto sideOrdinal = ordinals[i];
+
+        stk::mesh::EntityVector elementSideNodeVector = get_element_side_nodes(bulk, elem, sideOrdinal);
+        std::sort(elementSideNodeVector.begin(), elementSideNodeVector.end());
+
+        if(faceNodes != elementSideNodeVector) {
+          std::ostringstream oss;
+
+          oss << "P" << bulk.parallel_rank()
+              << ": Could not match nodes on face: " << bulk.entity_key(face)
+              << " with element: " << bulk.entity_rank(elem)
+              << " on ordinal: " << sideOrdinal << std::endl;
+
+          oss << "\tFace nodes\n";
+          for(auto node : faceNodes) {
+            oss << "\t\t" << bulk.entity_key(node) << std::endl;
+          }
+
+          oss << "\n\tElement side nodes\n";
+          for(auto node : elementSideNodeVector) {
+            oss << "\t\t" << bulk.entity_key(node) << std::endl;
+          }
+
+          std::cout << oss.str();
+          return false;
+        }
+      }
+    }
+  }
+
+  return true;
+}
+
 bool check_orphaned_nodes(stk::mesh::BulkData & bulk)
 {
   bool foundOrphanedNode = false;
@@ -1361,7 +1577,7 @@ bool check_orphaned_nodes(stk::mesh::BulkData & bulk)
 
 void output_mesh(stk::mesh::BulkData & bulk, const std::string & fileName)
 {
-  std::string writeOutput = stk::unit_test_util::simple_fields::get_option("--output", "off");
+  std::string writeOutput = stk::unit_test_util::get_option("--output", "off");
   if (writeOutput == "on") {
     stk::io::write_mesh(fileName, bulk);
   }
@@ -1375,7 +1591,7 @@ void output_mesh(stk::mesh::BulkData & bulk)
 
 int get_debug_level()
 {
-  int level = stk::unit_test_util::simple_fields::get_command_line_option("--debug", 0);
+  int level = stk::unit_test_util::get_command_line_option("--debug", 0);
   return std::max(level, 0);
 }
 
@@ -1386,7 +1602,7 @@ stk::mesh::PartVector setup_mesh_2block_1quad(stk::mesh::BulkData& bulk)
 
   std::string meshDesc = "0,1,QUAD_4_2D,1,2,4,3,block_1";
   std::vector<double> coordinates = { 0,0, 1,0, 0,1, 1,1 };
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   EXPECT_EQ(0u, get_num_intersecting_nodes(bulk, {&block1, &block2}));
   EXPECT_EQ(4u, get_num_total_nodes(bulk));
@@ -1401,7 +1617,7 @@ stk::mesh::PartVector setup_mesh_2block_2quad_only_on_proc_0(stk::mesh::BulkData
   std::string meshDesc = "0,1,QUAD_4_2D,1,2,4,3,block_1\n"
                          "0,2,QUAD_4_2D,2,5,6,4,block_2";
   std::vector<double> coordinates = { 0,0, 1,0, 0,1, 1,1, 2,0, 2,1 };
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   return {&block1,&block2};
 }
@@ -1421,7 +1637,7 @@ stk::mesh::PartVector setup_mesh_2block_2quad(stk::mesh::BulkData& bulk)
                "1,2,QUAD_4_2D,2,3,6,5,block_2";
   }
   std::vector<double> coordinates = { 0,0, 1,0, 2,0, 0,1, 1,1, 2,1 };
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   EXPECT_EQ(2u, get_num_intersecting_nodes(bulk, {&block1, &block2}));
   EXPECT_EQ(6u, get_num_total_nodes(bulk));
@@ -1444,7 +1660,7 @@ stk::mesh::PartVector setup_mesh_2block_2quad_reversed(stk::mesh::BulkData& bulk
                "1,2,QUAD_4_2D,2,3,6,5,block_1";
   }
   std::vector<double> coordinates = { 0,0, 1,0, 2,0, 0,1, 1,1, 2,1 };
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   EXPECT_EQ(2u, get_num_intersecting_nodes(bulk, {&block1, &block2}));
   EXPECT_EQ(6u, get_num_total_nodes(bulk));
@@ -1500,7 +1716,7 @@ stk::mesh::PartVector setup_mesh_2block_4quad_corner(stk::mesh::BulkData& bulk, 
   }
   std::vector<double> coordinates = { 0,0, 1,0, 2,0, 0,1, 1,1, 2,1, 0,2, 1,2, 2,2 };
 
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   EXPECT_EQ(3u, get_num_intersecting_nodes(bulk, {&block1, &block2}));
   EXPECT_EQ(9u, get_num_total_nodes(bulk));
@@ -1582,7 +1798,7 @@ stk::mesh::PartVector setup_mesh_2block_4quad_swappedCorner(stk::mesh::BulkData&
   }
   std::vector<double> coordinates = { 0,0, 1,0, 2,0, 0,1, 1,1, 2,1, 0,2, 1,2, 2,2 };
 
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   EXPECT_EQ(3u, get_num_intersecting_nodes(bulk, {&block1, &block2}));
   EXPECT_EQ(9u, get_num_total_nodes(bulk));
@@ -1714,7 +1930,7 @@ void setup_mesh_3block_4quad_base(stk::mesh::BulkData& bulk, stk::mesh::PartVect
   }
   std::vector<double> coordinates = { 0,0, 1,0, 2,0, 0,1, 1,1, 2,1, 0,2, 1,2, 2,2 };
 
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   EXPECT_EQ(4u, get_num_intersecting_nodes(bulk, blocks));
   EXPECT_EQ(9u, get_num_total_nodes(bulk));
@@ -1771,7 +1987,7 @@ stk::mesh::PartVector setup_mesh_3block_4quad_reverse_ordinal(stk::mesh::BulkDat
 
   std::vector<double> coordinates = { 0,0, 1,0, 2,0, 0,1, 1,1, 2,1, 0,2, 1,2, 2,2 };
 
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   EXPECT_EQ(4u, get_num_intersecting_nodes(bulk, {&vl, &radax, &lateral}));
   EXPECT_EQ(9u, get_num_total_nodes(bulk));
@@ -1842,7 +2058,7 @@ stk::mesh::PartVector setup_mesh_3block_4quad_keepLowerRight(stk::mesh::BulkData
   }
   std::vector<double> coordinates = { 0,0, 1,0, 2,0, 0,1, 1,1, 2,1, 0,2, 1,2, 2,2 };
 
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   EXPECT_EQ(4u, get_num_intersecting_nodes(bulk, {&block1, &block2, &block3}));
   EXPECT_EQ(9u, get_num_total_nodes(bulk));
@@ -1888,7 +2104,7 @@ stk::mesh::PartVector setup_mesh_2block_4quad_checkerboard(stk::mesh::BulkData& 
   }
   std::vector<double> coordinates = { 0,0, 1,0, 2,0, 0,1, 1,1, 2,1, 0,2, 1,2, 2,2 };
 
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   EXPECT_EQ(5u, get_num_intersecting_nodes(bulk, {&block1, &block2}));
   EXPECT_EQ(9u, get_num_total_nodes(bulk));
@@ -1935,7 +2151,7 @@ stk::mesh::PartVector setup_mesh_3block_4quad_checkerboard(stk::mesh::BulkData& 
   }
   std::vector<double> coordinates = { 0,0, 1,0, 2,0, 0,1, 1,1, 2,1, 0,2, 1,2, 2,2 };
 
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   EXPECT_EQ(5u, get_num_intersecting_nodes(bulk, {&block1, &block2, &block3}));
   EXPECT_EQ(9u, get_num_total_nodes(bulk));
@@ -1959,7 +2175,7 @@ stk::mesh::PartVector setup_mesh_2block_2quad_diagonal(stk::mesh::BulkData& bulk
   }
   std::vector<double> coordinates = { 0,0, 1,0, 0,1, 1,1, 2,1, 1,2, 2,2 };
 
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   EXPECT_EQ(1u, get_num_intersecting_nodes(bulk, {&block1, &block2}));
   EXPECT_EQ(7u, get_num_total_nodes(bulk));
@@ -1978,7 +2194,7 @@ stk::mesh::PartVector setup_mesh_3block_4quad_bowtie(stk::mesh::BulkData& bulk)
                          "0,3,QUAD_4_2D,8,6,11,10,block_3\n"
                          "0,4,QUAD_4_2D,6,9,13,12,block_1";
   std::vector<double> coordinates = { 0,0, 0.9,0, 1.1,0, 2,0, 0,0.9, 1,1, 2,0.9, 0,1.1, 2,1.1, 0,2, 0.9,2, 1.1,2, 2,2 };
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   EXPECT_EQ( 1u, get_num_intersecting_nodes(bulk, {&block1, &block2, &block3}));
   EXPECT_EQ(13u, get_num_total_nodes(bulk));
@@ -2127,7 +2343,7 @@ stk::mesh::PartVector setup_mesh_4block_4quad(stk::mesh::BulkData& bulk, unsigne
     break;
   }
 
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   EXPECT_EQ(5u, get_num_intersecting_nodes(bulk, {&block1, &block2, &block3, &block4}));
   EXPECT_EQ(9u, get_num_total_nodes(bulk));
@@ -2171,7 +2387,7 @@ stk::mesh::PartVector setup_mesh_6block_6quad(stk::mesh::BulkData& bulk)
     break;
   }
 
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   EXPECT_EQ(8u, get_num_intersecting_nodes(bulk, {&block1, &block2, &block3, &block4, &block5, &block6}));
   EXPECT_EQ(12u, get_num_total_nodes(bulk));
@@ -2224,7 +2440,7 @@ stk::mesh::PartVector setup_mesh_9block_9quad(stk::mesh::BulkData& bulk)
     break;
   }
 
-  stk::unit_test_util::simple_fields::setup_text_mesh(bulk, stk::unit_test_util::simple_fields::get_full_text_mesh_desc(meshDesc, coordinates));
+  stk::unit_test_util::setup_text_mesh(bulk, stk::unit_test_util::get_full_text_mesh_desc(meshDesc, coordinates));
 
   EXPECT_EQ(12u, get_num_intersecting_nodes(bulk, {&block1, &block2, &block3, &block4, &block5, &block6, &block7, &block8, &block9}));
   EXPECT_EQ(16u, get_num_total_nodes(bulk));
@@ -2262,14 +2478,23 @@ stk::mesh::PartVector setup_mesh_2block_2hex(stk::mesh::BulkData& bulk)
   return {block1, block2};
 }
 
-stk::mesh::PartVector setup_mesh_2block_2hex_with_internal_sides(stk::mesh::BulkData& bulk)
+stk::mesh::PartVector setup_mesh_2block_2hex_with_internal_sides(stk::mesh::BulkData& bulk, bool loadMeshFirst)
 {
-  stk::mesh::Part * block2 = &create_part(bulk.mesh_meta_data(), stk::topology::HEX_8, "block_2", 2);
-  create_part(bulk.mesh_meta_data(), stk::topology::QUAD_4, "surface_1", 1);
+  stk::mesh::Part * block2 = nullptr;
+
+  if(!loadMeshFirst) {
+    block2 = &create_part(bulk.mesh_meta_data(), stk::topology::HEX_8, "block_2", 2);
+    create_part(bulk.mesh_meta_data(), stk::topology::QUAD_4, "surface_1", 1);
+  }
 
   stk::io::fill_mesh("generated:1x1x2", bulk);
-  stk::mesh::Part * block1 = bulk.mesh_meta_data().get_part("block_1");
 
+  if(loadMeshFirst) {
+    block2 = &create_part(bulk.mesh_meta_data(), stk::topology::HEX_8, "block_2", 2);
+    create_part(bulk.mesh_meta_data(), stk::topology::QUAD_4, "surface_1", 1);
+  }
+
+  stk::mesh::Part * block1 = bulk.mesh_meta_data().get_part("block_1");
   move_elems_from_block_to_block(bulk, std::vector<stk::mesh::EntityId>{2}, "block_1", "block_2");
 
   create_sideset(bulk, "surface_1", {"block_1"});
@@ -2279,6 +2504,54 @@ stk::mesh::PartVector setup_mesh_2block_2hex_with_internal_sides(stk::mesh::Bulk
   EXPECT_EQ( 1u, get_num_common_sides(bulk, {block1, block2}));
   EXPECT_EQ(12u, get_num_total_nodes(bulk));
   EXPECT_EQ( 1u, get_num_total_sides(bulk));
+  EXPECT_FALSE(check_orphaned_nodes(bulk));
+
+  return {block1, block2};
+}
+
+stk::mesh::PartVector setup_mesh_2block_2hex_with_internal_and_external_sides(stk::mesh::BulkData& bulk)
+{
+  stk::mesh::Part * block2 = &create_part(bulk.mesh_meta_data(), stk::topology::HEX_8, "block_2", 2);
+  create_part(bulk.mesh_meta_data(), stk::topology::QUAD_4, "surface_1", 1);
+  create_part(bulk.mesh_meta_data(), stk::topology::QUAD_4, "surface_2", 2);
+
+  stk::io::fill_mesh("generated:1x1x2", bulk);
+  stk::mesh::Part * block1 = bulk.mesh_meta_data().get_part("block_1");
+
+  move_elems_from_block_to_block(bulk, std::vector<stk::mesh::EntityId>{2}, "block_1", "block_2");
+
+  create_sideset(bulk, "surface_1", {"block_1"});
+  create_sides_between_blocks(bulk, "block_1", "block_2", "surface_1");
+  create_all_boundary_sides(bulk, "surface_2");
+
+  EXPECT_EQ( 4u, get_num_intersecting_nodes(bulk, {block1, block2}));
+  EXPECT_EQ( 1u, get_num_common_sides(bulk, {block1, block2}));
+  EXPECT_EQ(12u, get_num_total_nodes(bulk));
+  EXPECT_EQ(11u, get_num_total_sides(bulk));
+  EXPECT_FALSE(check_orphaned_nodes(bulk));
+
+  return {block1, block2};
+}
+
+stk::mesh::PartVector setup_mesh_2block_2hex_with_dual_internal_and_external_sides(stk::mesh::BulkData& bulk)
+{
+  stk::mesh::Part * block2 = &create_part(bulk.mesh_meta_data(), stk::topology::HEX_8, "block_2", 2);
+  create_part(bulk.mesh_meta_data(), stk::topology::QUAD_4, "surface_1", 1);
+  create_part(bulk.mesh_meta_data(), stk::topology::QUAD_4, "surface_2", 2);
+
+  stk::io::fill_mesh("generated:1x1x2", bulk);
+  stk::mesh::Part * block1 = bulk.mesh_meta_data().get_part("block_1");
+
+  move_elems_from_block_to_block(bulk, std::vector<stk::mesh::EntityId>{2}, "block_1", "block_2");
+
+  create_sideset(bulk, "surface_1", {"block_1", "block_2"});
+  create_sides_between_blocks(bulk, "block_1", "block_2", "surface_1");
+  create_all_boundary_sides(bulk, "surface_2");
+
+  EXPECT_EQ( 4u, get_num_intersecting_nodes(bulk, {block1, block2}));
+  EXPECT_EQ( 1u, get_num_common_sides(bulk, {block1, block2}));
+  EXPECT_EQ(12u, get_num_total_nodes(bulk));
+  EXPECT_EQ(11u, get_num_total_sides(bulk));
   EXPECT_FALSE(check_orphaned_nodes(bulk));
 
   return {block1, block2};

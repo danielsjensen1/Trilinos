@@ -1,44 +1,10 @@
 // @HEADER
-// ************************************************************************
-//
+// *****************************************************************************
 //                           Intrepid2 Package
-//                 Copyright (2007) Sandia Corporation
 //
-// Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
-// license for use of this work by or on behalf of the U.S. Government.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Kyungjoo Kim  (kyukim@sandia.gov), or
-//                    Mauro Perego  (mperego@sandia.gov), or
-//                    Nathan Roberts  (nvrober@sandia.gov)
-//
-// ************************************************************************
+// Copyright 2007 NTESS and the Intrepid2 contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 /** \file   Intrepid2_CellData.hpp
@@ -173,7 +139,7 @@ private:
 
   //! static views containing the parametrization maps, allocated on DeviceType::memory_space
   using ViewType = Kokkos::DynRankView<double,DeviceType>;
-  static ViewType lineEdgesParam;  // edge maps for 2d non-standard cells; shell line and beam
+  static ViewType beamEdgeParam, shellLineEdgesParam;  // edge maps for 2d non-standard cells; shell line and beam
   static ViewType triEdgesParam, quadEdgesParam; // edge maps for 2d standard cells
   static ViewType shellTriEdgesParam, shellQuadEdgesParam; // edge maps for 3d non-standard cells; shell tri and quad
   static ViewType tetEdgesParam, hexEdgesParam, pyrEdgesParam, wedgeEdgesParam; // edge maps for 3d standard cells
@@ -256,7 +222,7 @@ private:
     double line[2][3], line_3[3][3];
     double triangle[3][3], triangle_4[4][3], triangle_6[6][3];
     double quadrilateral[4][3], quadrilateral_8[8][3], quadrilateral_9[9][3];
-    double tetrahedron[4][3], tetrahedron_8[8][3], tetrahedron_10[10][3], tetrahedron_11[10][3];
+    double tetrahedron[4][3], tetrahedron_8[8][3], tetrahedron_10[10][3], tetrahedron_11[11][3];
     double hexahedron[8][3], hexahedron_20[20][3], hexahedron_27[27][3];
     double pyramid[5][3], pyramid_13[13][3], pyramid_14[14][3];
     double wedge[6][3], wedge_15[15][3], wedge_18[18][3];
@@ -349,6 +315,154 @@ private:
   //! whether the center coordinates have been already set using the method set()
   static bool isReferenceCellCenterDataSet_;
 };
+
+//============================================================================================//
+//                                                                                            //
+//                                       ParametricDistance                                   //
+//                                                                                            //
+//============================================================================================//
+
+
+/** \class  Intrepid2::ParametricDistance
+    \brief  This class implements a <var>distance</var> function that computes the parametric distance of a point in a reference cell.
+     A parametric distance is a continuous piecewise linear function that it is
+    (a) 0 at the centroid of the reference cell
+    (b) less than 1 for points inside the cell
+    (c) 1 on the cell boundary
+    (d) greater than 1 for points outside the cell
+  
+    The parametric distance is defined as the maximum of the linear functions associated with each cell side, where each function evaluates to 0.0 at the centroid and 1.0 on its respective side.
+
+    The function distance can be used to determine whether a point is inside or outside an element.
+ */
+
+template<unsigned CellTopologyKey>
+struct ParametricDistance;
+
+
+/**
+ \brief Line topology
+*/
+template<>
+struct ParametricDistance<shards::Line<>::key> {    
+  template<typename PointViewType>
+  KOKKOS_INLINE_FUNCTION
+  static typename ScalarTraits<typename PointViewType::value_type>::scalar_type
+  distance(const PointViewType &point); 
+};
+
+/** 
+ \brief Beam topology
+*/
+template<>
+struct ParametricDistance<shards::Beam<>::key> {    
+  template<typename PointViewType>
+  KOKKOS_INLINE_FUNCTION
+  static typename ScalarTraits<typename PointViewType::value_type>::scalar_type
+  distance(const PointViewType &point); 
+};
+
+/** 
+ \brief ShellLine topology
+*/
+template<>
+struct ParametricDistance<shards::ShellLine<>::key> {    
+  template<typename PointViewType>
+  KOKKOS_INLINE_FUNCTION
+  static typename ScalarTraits<typename PointViewType::value_type>::scalar_type
+  distance(const PointViewType &point); 
+};
+
+/** 
+ \brief Triangle topology
+*/
+template<>
+struct ParametricDistance<shards::Triangle<>::key> {
+  template<typename PointViewType>
+  KOKKOS_INLINE_FUNCTION
+  static typename ScalarTraits<typename PointViewType::value_type>::scalar_type
+  distance(const PointViewType &point); 
+};
+
+/** 
+ \brief ShellTriangle topology
+*/
+template<>
+struct ParametricDistance<shards::ShellTriangle<>::key> {    
+  template<typename PointViewType>
+  KOKKOS_INLINE_FUNCTION
+  static typename ScalarTraits<typename PointViewType::value_type>::scalar_type
+  distance(const PointViewType &point); 
+};
+
+/** 
+ \brief Quadrilateral topology
+*/
+template<>
+struct ParametricDistance<shards::Quadrilateral<>::key> {
+  template<typename PointViewType>
+  KOKKOS_INLINE_FUNCTION
+  static typename ScalarTraits<typename PointViewType::value_type>::scalar_type
+  distance(const PointViewType &point); 
+};
+
+/** 
+ \brief ShellQuadrilateral topology
+*/
+template<>
+struct ParametricDistance<shards::ShellQuadrilateral<>::key> {    
+  template<typename PointViewType>
+  KOKKOS_INLINE_FUNCTION
+  static typename ScalarTraits<typename PointViewType::value_type>::scalar_type
+  distance(const PointViewType &point); 
+};
+  
+/** 
+ \brief Tetrahedron topology
+*/
+template<>
+struct ParametricDistance<shards::Tetrahedron<>::key> {
+  template<typename PointViewType>
+  KOKKOS_INLINE_FUNCTION
+  static typename ScalarTraits<typename PointViewType::value_type>::scalar_type
+  distance(const PointViewType &point); 
+};
+
+/** 
+ \brief Hexahedron topology
+*/
+template<>
+struct ParametricDistance<shards::Hexahedron<>::key> {
+  template<typename PointViewType>
+  KOKKOS_INLINE_FUNCTION
+  static typename ScalarTraits<typename PointViewType::value_type>::scalar_type
+  distance(const PointViewType &point); 
+};
+
+/** 
+ \brief Pyramid topology
+*/
+template<>
+struct ParametricDistance<shards::Pyramid<>::key> {
+  template<typename PointViewType>
+  KOKKOS_INLINE_FUNCTION
+  static typename ScalarTraits<typename PointViewType::value_type>::scalar_type
+  distance(const PointViewType &point); 
+};
+
+/** 
+ \brief Wedge topology
+*/
+template<>
+struct ParametricDistance<shards::Wedge<>::key> {
+  template<typename PointViewType>
+  KOKKOS_INLINE_FUNCTION
+  static typename ScalarTraits<typename PointViewType::value_type>::scalar_type
+  distance(const PointViewType &point); 
+};
+
+const CellTopologyData* getCellTopologyData(const unsigned& cellTopologyKey);
+  
 }
 
 #include "Intrepid2_CellDataDef.hpp"

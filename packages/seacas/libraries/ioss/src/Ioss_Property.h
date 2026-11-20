@@ -1,4 +1,4 @@
-// Copyright(C) 1999-2024 National Technology & Engineering Solutions
+// Copyright(C) 1999-2025 National Technology & Engineering Solutions
 // of Sandia, LLC (NTESS).  Under the terms of Contract DE-NA0003525 with
 // NTESS, the U.S. Government retains certain rights in this software.
 //
@@ -6,8 +6,8 @@
 
 #pragma once
 
-#include "ioss_export.h"
 #include "Ioss_CodeTypes.h"
+#include "ioss_export.h"
 
 #include <cstdint> // for int64_t
 #include <string>  // for string
@@ -27,7 +27,7 @@ namespace Ioss {
   {
   public:
     enum BasicType { INVALID = -1, REAL, INTEGER, POINTER, STRING, VEC_INTEGER, VEC_DOUBLE };
-    enum Origin {
+    enum class Origin {
       INTERNAL = -1, ///< Property is for internal use
       IMPLICIT, ///< Property is calculated on the fly based on current state of entity containing
                 // property
@@ -35,39 +35,39 @@ namespace Ioss {
       ATTRIBUTE ///< Property created from an Exodus or Database Attribute
     };
 
-    Property(std::string name, int64_t value, Origin origin = INTERNAL);
-    Property(std::string name, int value, Origin origin = INTERNAL);
-    Property(std::string name, double value, Origin origin = INTERNAL);
-    Property(std::string name, const std::string &value, Origin origin = INTERNAL);
-    Property(std::string name, const char *value, Origin origin = INTERNAL);
-    Property(std::string name, void *value, Origin origin = INTERNAL);
-    Property(std::string name, const std::vector<int> &value, Origin origin = INTERNAL);
-    Property(std::string name, const std::vector<double> &value, Origin origin = INTERNAL);
+    Property(std::string name, int64_t value, Origin origin = Origin::INTERNAL);
+    Property(std::string name, int value, Origin origin = Origin::INTERNAL);
+    Property(std::string name, double value, Origin origin = Origin::INTERNAL);
+    Property(std::string name, const std::string &value, Origin origin = Origin::INTERNAL);
+    Property(std::string name, const char *value, Origin origin = Origin::INTERNAL);
+    Property(std::string name, void *value, Origin origin = Origin::INTERNAL);
+    Property(std::string name, const std::vector<int> &value, Origin origin = Origin::INTERNAL);
+    Property(std::string name, const std::vector<double> &value, Origin origin = Origin::INTERNAL);
 
     // To set implicit property
     Property(const GroupingEntity *ge, std::string name, BasicType type);
 
-    IOSS_NODISCARD std::string         get_string() const;
-    IOSS_NODISCARD int64_t             get_int() const;
-    IOSS_NODISCARD double              get_real() const;
-    IOSS_NODISCARD void               *get_pointer() const;
+    IOSS_NODISCARD std::string get_string() const;
+    IOSS_NODISCARD int64_t     get_int() const;
+    IOSS_NODISCARD double      get_real() const;
+    IOSS_NODISCARD void       *get_pointer() const;
     IOSS_NODISCARD std::vector<double> get_vec_double() const;
-    IOSS_NODISCARD std::vector<int>    get_vec_int() const;
+    IOSS_NODISCARD std::vector<int> get_vec_int() const;
 
-    void   set_origin(Origin origin) { origin_ = origin; }
+    void                  set_origin(Origin origin) { origin_ = origin; }
     IOSS_NODISCARD Origin get_origin() const { return origin_; }
 
     /** \brief Tells whether the property is calculated, rather than stored.
      *
      * \returns True if property is calculated; False if it is stored directly.
      */
-    IOSS_NODISCARD bool is_implicit() const { return origin_ == IMPLICIT; }
+    IOSS_NODISCARD bool is_implicit() const { return origin_ == Origin::IMPLICIT; }
 
     /** \brief Tells whether the property is stored, rather than calculated.
      *
      * \returns True if property is stored directly; False if it is calculated.
      */
-    IOSS_NODISCARD bool is_explicit() const { return origin_ != IMPLICIT; }
+    IOSS_NODISCARD bool is_explicit() const { return origin_ != Origin::IMPLICIT; }
 
     /** Tells whether the property has a valid type (currently REAL, INTEGER, POINTER, or STRING)
      *
@@ -98,8 +98,7 @@ namespace Ioss {
     IOSS_NODISCARD bool operator==(const Ioss::Property &rhs) const;
 
 #if 0
-    // Trilinos nvidia build doesn't like this...
-    friend void swap(Ioss::Property &first, Ioss::Property &second) // nothrow
+    friend void swap(Ioss::Property &first, Ioss::Property &second) noexcept
     {
       using std::swap;
       swap(first.name_, second.name_);
@@ -108,14 +107,13 @@ namespace Ioss {
       swap(first.data_, second.data_);
     }
 #endif
-
   private:
     std::string name_{};
     BasicType   type_{INVALID};
 
     /// True if property is calculated rather than stored.
     /// False if property is stored in 'data_'
-    Origin origin_{INTERNAL};
+    Origin origin_{Origin::INTERNAL};
 
     bool get_value(int64_t *value) const;
     bool get_value(double *value) const;

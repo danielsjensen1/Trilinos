@@ -1,43 +1,11 @@
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //           Panzer: A partial differential equation assembly
 //       engine for strongly coupled complex multiphysics systems
-//                 Copyright (2011) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Roger P. Pawlowski (rppawlo@sandia.gov) and
-// Eric C. Cyr (eccyr@sandia.gov)
-// ***********************************************************************
+// Copyright 2011 NTESS and the Panzer contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #ifndef   __Panzer_ModelEvaluator_impl_hpp__
@@ -78,6 +46,8 @@
 #include "Thyra_TpetraVector.hpp"
 #include "Thyra_TpetraLinearOp.hpp"
 #include "Tpetra_CrsMatrix.hpp"
+#include "lof/Panzer_LinearObjContainer.hpp"
+#include <Teuchos_RCPDecl.hpp>
 
 // Constructors/Initializers/Accessors
 
@@ -576,6 +546,7 @@ setupAssemblyInArgs(const Thyra::ModelEvaluatorBase::InArgs<Scalar> & inArgs,
   }
 
   ae_inargs.addGlobalEvaluationData(distrParamGlobalEvaluationData_);
+  ae_inargs.addGlobalEvaluationData(assemblyGlobalEvaluationData_);
 
   // here we are building a container, this operation is fast, simply allocating a struct
   const RCP<panzer::ThyraObjContainer<Scalar> > thGlobalContainer =
@@ -632,6 +603,7 @@ setupAssemblyInArgs(const Thyra::ModelEvaluatorBase::InArgs<Scalar> & inArgs,
         {
           RCP<ROVGED> dxdpContainer = lof_->buildReadOnlyDomainContainer();
           dxdpContainer->setOwnedVector(dxdpBlock->getNonconstVectorBlock(j));
+
           string name("X TANGENT GATHER CONTAINER: " +
             (*parameters_[i]->names)[j]);
           ae_inargs.addGlobalEvaluationData(name, dxdpContainer);
@@ -682,24 +654,40 @@ panzer::ModelEvaluator<Scalar>::createOutArgsImpl() const
 
     // add in dg/dx (if appropriate)
     for(std::size_t i=0;i<responses_.size();i++) {
-      typedef panzer::Traits::Jacobian RespEvalT;
+      {
+        typedef panzer::Traits::Jacobian RespEvalT;
 
-      // check dg/dx and add it in if appropriate
-      Teuchos::RCP<panzer::ResponseBase> respJacBase
-          = responseLibrary_->getResponse<RespEvalT>(responses_[i]->name);
-      if(respJacBase!=Teuchos::null) {
-        // cast is guranteed to succeed because of check in addResponse
-        Teuchos::RCP<panzer::ResponseMESupportBase<RespEvalT> > resp
-           = Teuchos::rcp_dynamic_cast<panzer::ResponseMESupportBase<RespEvalT> >(respJacBase);
+        // check dg/dx and add it in if appropriate
+        Teuchos::RCP<panzer::ResponseBase> respJacBase
+            = responseLibrary_->getResponse<RespEvalT>(responses_[i]->name);
+        if(respJacBase!=Teuchos::null) {
+          // cast is guranteed to succeed because of check in addResponse
+          Teuchos::RCP<panzer::ResponseMESupportBase<RespEvalT> > resp
+             = Teuchos::rcp_dynamic_cast<panzer::ResponseMESupportBase<RespEvalT> >(respJacBase);
 
-        // class must supppot a derivative
-        if(resp->supportsDerivative()) {
-          outArgs.setSupports(MEB::OUT_ARG_DgDx,i,MEB::DerivativeSupport(MEB::DERIV_MV_GRADIENT_FORM));
+          // class must supppot a derivative
+          if(resp->supportsDerivative()) {
+            outArgs.setSupports(MEB::OUT_ARG_DgDx,i,MEB::DerivativeSupport(MEB::DERIV_MV_GRADIENT_FORM));
 
+            // dg/dp for a distributed parameter is evaluated through that
+            // parameter's own response library, which fills the Jacobian type
+            // response, so it needs the same derivative support as dg/dx.
+            for(std::size_t p=0;p<parameters_.size();p++) {
+              if(parameters_[p]->is_distributed && parameters_[p]->global_indexer!=Teuchos::null)
+                outArgs.setSupports(MEB::OUT_ARG_DgDp,i,p,MEB::DerivativeSupport(MEB::DERIV_MV_GRADIENT_FORM));
+            }
+          }
+        }
+      }
+      {
+        typedef panzer::Traits::Tangent RespEvalT;
 
+        // dg/dp for a scalar parameter is evaluated from the Tangent response,
+        // so it only requires that the response has a Tangent type.
+        Teuchos::RCP<panzer::ResponseBase> respTanBase
+            = responseLibrary_->getResponse<RespEvalT>(responses_[i]->name);
+        if(respTanBase!=Teuchos::null) {
           for(std::size_t p=0;p<parameters_.size();p++) {
-            if(parameters_[p]->is_distributed && parameters_[p]->global_indexer!=Teuchos::null)
-              outArgs.setSupports(MEB::OUT_ARG_DgDp,i,p,MEB::DerivativeSupport(MEB::DERIV_MV_GRADIENT_FORM));
             if(!parameters_[p]->is_distributed)
               outArgs.setSupports(MEB::OUT_ARG_DgDp,i,p,MEB::DerivativeSupport(MEB::DERIV_MV_JACOBIAN_FORM));
           }
@@ -873,6 +861,14 @@ addNonParameterGlobalEvaluationData(const std::string & key,
                                     const Teuchos::RCP<GlobalEvaluationData> & ged)
 {
    nonParamGlobalEvaluationData_.addDataObject(key,ged);
+}
+
+template <typename Scalar>
+void panzer::ModelEvaluator<Scalar>::
+addGlobalEvaluationDataToAssemblyInArgs(const std::string & key,
+                                        const Teuchos::RCP<GlobalEvaluationData> & ged)
+{
+   assemblyGlobalEvaluationData_.addDataObject(key, ged);
 }
 
 template <typename Scalar>
@@ -1679,6 +1675,7 @@ void panzer::ModelEvaluator<Scalar>::
 evalModelImpl_basic_g(const Thyra::ModelEvaluatorBase::InArgs<Scalar> &inArgs,
                       const Thyra::ModelEvaluatorBase::OutArgs<Scalar> &outArgs) const
 {
+  PANZER_FUNC_TIME_MONITOR("panzer::ModelEvaluator::evalModelImpl_basic_g()");
   // optional sanity check
   // TEUCHOS_ASSERT(required_basic_g(outArgs));
 
@@ -1716,6 +1713,7 @@ panzer::ModelEvaluator<Scalar>::
 evalModelImpl_basic_dgdx(const Thyra::ModelEvaluatorBase::InArgs<Scalar> &inArgs,
                          const Thyra::ModelEvaluatorBase::OutArgs<Scalar> &outArgs) const
 {
+  PANZER_FUNC_TIME_MONITOR("panzer::ModelEvaluator::evalModelImpl_basic_dgdx()");
   typedef Thyra::ModelEvaluatorBase MEB;
 
   // optional sanity check
@@ -1726,6 +1724,8 @@ evalModelImpl_basic_dgdx(const Thyra::ModelEvaluatorBase::InArgs<Scalar> &inArgs
 
   for(std::size_t i=0;i<responses_.size();i++) {
     // get "Vector" out of derivative, if its something else, throw an exception
+    if (outArgs.supports(MEB::OUT_ARG_DgDx,i).none())
+      continue;
     MEB::Derivative<Scalar> deriv = outArgs.get_DgDx(i);
     if(deriv.isEmpty())
       continue;
@@ -1762,6 +1762,7 @@ panzer::ModelEvaluator<Scalar>::
 evalModelImpl_basic_dgdp_scalar(const Thyra::ModelEvaluatorBase::InArgs<Scalar> &inArgs,
                                 const Thyra::ModelEvaluatorBase::OutArgs<Scalar> &outArgs) const
 {
+  PANZER_FUNC_TIME_MONITOR("panzer::ModelEvaluator::evalModelImpl_basic_dgdp_scalar()");
   using Teuchos::RCP;
   using Teuchos::rcp;
   using Teuchos::rcp_dynamic_cast;
@@ -1784,6 +1785,8 @@ evalModelImpl_basic_dgdp_scalar(const Thyra::ModelEvaluatorBase::InArgs<Scalar> 
     bool is_active = false;
     for(std::size_t i=0;i<responses_.size(); i++) {
 
+      if (outArgs.supports(MEB::OUT_ARG_DgDp,i,j).none())
+        continue;
       MEB::Derivative<Scalar> deriv = outArgs.get_DgDp(i,j);
       if(deriv.isEmpty())
         continue;
@@ -1795,8 +1798,11 @@ evalModelImpl_basic_dgdp_scalar(const Thyra::ModelEvaluatorBase::InArgs<Scalar> 
         RCP<panzer::ResponseMESupportBase<panzer::Traits::Tangent> > resp =
           rcp_dynamic_cast<panzer::ResponseMESupportBase<panzer::Traits::Tangent> >(
             responseLibrary_->getResponse<panzer::Traits::Tangent>(responseName));
-        resp->setVector(vec);
-        is_active = true;
+
+        if (nonnull(resp)) {
+          resp->setVector(vec);
+          is_active = true;
+        }
       }
     }
 
@@ -1847,6 +1853,7 @@ panzer::ModelEvaluator<Scalar>::
 evalModelImpl_basic_dgdp_distro(const Thyra::ModelEvaluatorBase::InArgs<Scalar> &inArgs,
                                 const Thyra::ModelEvaluatorBase::OutArgs<Scalar> &outArgs) const
 {
+  PANZER_FUNC_TIME_MONITOR("panzer::ModelEvaluator::evalModelImpl_basic_dgdp_distro()");
   typedef Thyra::ModelEvaluatorBase MEB;
 
   // optional sanity check
@@ -1906,6 +1913,7 @@ panzer::ModelEvaluator<Scalar>::
 evalModelImpl_basic_dfdp_scalar(const Thyra::ModelEvaluatorBase::InArgs<Scalar> &inArgs,
                                 const Thyra::ModelEvaluatorBase::OutArgs<Scalar> &outArgs) const
 {
+  PANZER_FUNC_TIME_MONITOR("panzer::ModelEvaluator::evalModelImpl_basic_dfdp_scalar()");
    using Teuchos::RCP;
    using Teuchos::rcp_dynamic_cast;
 
@@ -2011,7 +2019,7 @@ evalModelImpl_basic_dfdp_scalar(const Thyra::ModelEvaluatorBase::InArgs<Scalar> 
    ///////////////////////////////////////////////////////////////////////////////////////
 
    if(totalParameterCount>0) {
-     PANZER_FUNC_TIME_MONITOR("panzer::ModelEvaluator::evalModel(df/dp)");
+     PANZER_FUNC_TIME_MONITOR_DIFF("panzer::ModelEvaluator::evalModel(df/dp)",dfdp_eval);
      ae_tm_.getAsObject<panzer::Traits::Tangent>()->evaluate(ae_inargs);
    }
 }
@@ -2022,7 +2030,7 @@ panzer::ModelEvaluator<Scalar>::
 evalModelImpl_basic_dfdp_scalar_fd(const Thyra::ModelEvaluatorBase::InArgs<Scalar> &inArgs,
                                    const Thyra::ModelEvaluatorBase::OutArgs<Scalar> &outArgs) const
 {
-   PANZER_FUNC_TIME_MONITOR("panzer::ModelEvaluator::evalModel(df/dp)");
+  PANZER_FUNC_TIME_MONITOR("panzer::ModelEvaluator::evalModelImpl_basic_dfdp_scalar_fd()");
 
    using Teuchos::RCP;
    using Teuchos::rcp_dynamic_cast;
@@ -2126,6 +2134,7 @@ panzer::ModelEvaluator<Scalar>::
 evalModelImpl_basic_dfdp_distro(const Thyra::ModelEvaluatorBase::InArgs<Scalar> &inArgs,
                                 const Thyra::ModelEvaluatorBase::OutArgs<Scalar> &outArgs) const
 {
+  PANZER_FUNC_TIME_MONITOR("panzer::ModelEvaluator::evalModelImpl_basic_dfdp_distro()");
   using Teuchos::RCP;
   using Teuchos::rcp_dynamic_cast;
   using Teuchos::null;

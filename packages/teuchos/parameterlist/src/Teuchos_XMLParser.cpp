@@ -1,42 +1,10 @@
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //                    Teuchos: Common Tools Package
-//                 Copyright (2004) Sandia Corporation
 //
-// Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
-// license for use of this work by or on behalf of the U.S. Government.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
-//
-// ***********************************************************************
+// Copyright 2004 NTESS and the Teuchos contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 // BUGS: There is a bug in Teuchos_XMLObjectImplem.cpp, line 82
@@ -409,6 +377,12 @@ void XMLParser::getSTag(unsigned char lookahead, std::string &tag, Teuchos::map<
           getReference(refstr);
           attval += refstr;
         }
+        else if ( c == '\r' ) {
+          // \link https://www.w3.org/TR/xml/#sec-line-ends
+          // XML spec p2.11: normalize \r\n and standalone \r to \n.
+          // Skip \r here; the \n that follows (in \r\n) will be appended normally,
+          // and a standalone \r at end-of-line is not encountered in well-formed XML.
+        }
         else if ( c!='<' ) {
           // valid character for attval
           attval.push_back(c);
@@ -500,16 +474,31 @@ void XMLParser::getReference(std::string &refstr) {
     else {
       XMLPARSER_TFE(1,  "invalid character in character reference: expected 'x' or [0-9]");
     }
+    bool haveDigit = (base == 10);
 
     do {
       XMLPARSER_TFE(_is->readBytes(&c,1) < 1,  "EOF before reference was terminated");
-      XMLPARSER_TFE( c != ';' && !('0' <= c && c <= '9') ,  "invalid character in character reference: expected [0-9] or ';'");
       if (c == ';') {
+        XMLPARSER_TFE(!haveDigit, "invalid character reference: expected at least one hex digit after '&#x'");
         break;
       }
-      num = num*base + (c-'0');
+      haveDigit = true;
+      int digit;
+      if (base == 10) {
+        XMLPARSER_TFE(!('0' <= c && c <= '9'), "invalid character in character reference: expected [0-9] or ';'");
+        digit = c - '0';
+      }
+      else {
+        XMLPARSER_TFE(!('0' <= c && c <= '9') && !('a' <= c && c <= 'f') && !('A' <= c && c <= 'F'), "invalid character in character reference: expected [0-9a-fA-F] or ';'");
+        if ('0' <= c && c <= '9') digit = c - '0';
+        else if ('a' <= c && c <= 'f') digit = 10 + c - 'a';
+        else digit = 10 + c - 'A';
+      }
+      XMLPARSER_TFE(num > (0xFF - digit) / base, "character reference value out of range");
+      num = num*base + digit;
     } while (1);
     XMLPARSER_TFE(num > 0xFF,  "character reference value out of range");
+    XMLPARSER_TFE(num == 0,  "character reference value 0 is not a legal XML character");
     refstr.push_back( (unsigned char)num );
   }
   else if (isLetter(c) || c=='_' || c==':') {

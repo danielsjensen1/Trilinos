@@ -1,44 +1,10 @@
 // @HEADER
-//
-// ***********************************************************************
-//
+// *****************************************************************************
 //           Amesos2: Templated Direct Sparse Solver Package
-//                  Copyright 2011 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
-//
-// ***********************************************************************
-//
+// Copyright 2011 NTESS and the Amesos2 contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #include <string>
@@ -617,6 +583,126 @@ namespace {
     TEST_COMPARE_FLOATING_ARRAYS( xhatnorms, xnorms, 0.005 );
   }
 
+  TEUCHOS_UNIT_TEST_TEMPLATE_3_DECL( MUMPS, Partial, SCALAR, LO, GO )
+  {
+    typedef ScalarTraits<SCALAR> ST;
+    typedef CrsMatrix<SCALAR,LO,GO,Node> MAT;
+    typedef MultiVector<SCALAR,LO,GO,Node> MV;
+
+    const SCALAR zero = ST::zero();
+    const SCALAR one  = ST::one();
+    const SCALAR mone = -one;
+    const SCALAR two  = one + one;
+    const SCALAR half = one / two;
+    const global_size_t INVALID = OrdinalTraits<global_size_t>::invalid();
+    const size_t numVecs = 1;
+
+    for (int test = 1; test < 2; test++) {
+      // test-0 with default-comm, matrix will be gather to mpi-0 and only mpi-0 computes Schur complement
+      // test-1 with serial-comm, all processes calls pardiso and computes schur complement independently
+      RCP<const Comm<int> > comm = (test == 0 ? Tpetra::getDefaultComm() :
+                                                Teuchos::rcp_dynamic_cast<const Comm<int>>(rcp(
+                                                  #ifdef HAVE_MPI
+                                                  new Teuchos::MpiComm<int> (MPI_COMM_SELF)
+                                                  #else
+                                                  new Teuchos::SerialComm<int>()
+                                                  #endif
+                                                )));
+      const size_t myRank = comm->getRank();
+      const size_t numRanks = comm->getSize();
+
+      RCP<const Comm<int> > global_comm = Tpetra::getDefaultComm(); // just for printing
+      if (global_comm->getRank()==0) {
+        std::cout << std::endl
+                  << " >> UnitTest for MUMPS::PartialFacto with Scalar = " << ST::name()
+                  << " with " << (test == 0 ? " default " : " serial ") << "comm"
+                  << " <<" << std::endl << std::endl;
+      }
+
+      // Construct matrix
+      // NOTE: with serial-comm, every process construct its own 10-by-10 matrix, independently
+      //       with global-comm, all the process construct a (10*numRanks)-by-(10*numRanks) matrix, jointly
+      // Schur complement will half of the global matrix
+      const size_t numLocal = 10;
+      const size_t numGlobal = numLocal*numRanks;
+      RCP<Map<LO,GO,Node> > map = rcp( new Map<LO,GO,Node>(INVALID,numLocal,0,comm) );
+      RCP<MAT> A = rcp( new MAT(map, 3) );
+      GO base = numLocal*myRank;
+      for( size_t i = 0; i < numLocal; ++i ){
+        if (base+i > 0) {
+          A->insertGlobalValues(base+i,tuple<GO>(base+i-1),tuple<SCALAR>(mone));
+        }
+        A->insertGlobalValues(base+i,tuple<GO>(base+i),tuple<SCALAR>(two));
+        if (base+i < numGlobal-1) {
+          A->insertGlobalValues(base+i,tuple<GO>(base+i+1),tuple<SCALAR>(mone));
+        }
+      }
+      A->fillComplete();
+
+      {
+        // Create MUMPS solver
+        RCP<Amesos2::Solver<MAT,MV> > solver
+          = Amesos2::create<MAT,MV>("MUMPS", A );
+
+        // Parameters
+        Teuchos::ParameterList amesos2_paramlist;
+        amesos2_paramlist.setName("Amesos2");
+        Teuchos::ParameterList & mumps_paramlist = amesos2_paramlist.sublist("MUMPS");
+        mumps_paramlist.set("PartialFacto", 2, "Partial Factorization");
+        // Schur part has odd row IDs
+        Teuchos::Array<LO> schurPart(numGlobal);
+        for( size_t i = 0; i < numGlobal; i++) {
+          if (i%2 == 0) schurPart[i] = 0;
+          if (i%2 == 1) schurPart[i] = 1;
+        }
+        const size_t numSchur = numGlobal/2;
+        Teuchos::Array<SCALAR> schurOut(numSchur*numSchur);
+        mumps_paramlist.set("SchurPart", (const LO*)schurPart.getRawPtr());
+        mumps_paramlist.set("SchurOut", (SCALAR*)schurOut.getRawPtr());
+        mumps_paramlist.set("verbose", true);
+        solver->setParameters(Teuchos::rcpFromRef(amesos2_paramlist));
+
+        // Perform Partial Facto to form Schur complement
+        solver->symbolicFactorization();
+        solver->numericFactorization();
+
+        // Check Schur complement
+        // MPI-0 on comm (either serial or default) will compute Schur complement
+        // NOTE: with serial comm, every one has myRank == 0, and compute Schur complement independently
+        Teuchos::Array<SCALAR> schur(numSchur*numSchur, zero);
+        if (myRank == 0) {
+          for( size_t i = 0; i < numSchur; ++i ){
+            if (i > 0) {
+              schur[i-1 + i*numSchur] = -half;
+            }
+            if (i == numSchur-1) {
+              schur[i + i*numSchur] = one+half;
+            } else {
+              schur[i + i*numSchur] = one;
+            }
+            if (base+i < numSchur-1) {
+              schur[i+1 + i*numSchur] = -half;
+            }
+          }
+        }
+        if (global_comm->getRank() == 0) {
+          printf("[\n");
+          for( size_t i = 0; i < numSchur; ++i ){
+            for( size_t j = 0; j < numSchur; ++j ) printf("%e ",schurOut[i+j*numSchur]);
+            printf("\n");
+          }
+          printf("];\n");
+          printf("[\n");
+          for( size_t i = 0; i < numSchur; ++i ){
+            for( size_t j = 0; j < numSchur; ++j ) printf("%e ",schur[i+j*numSchur]);
+            printf("\n");
+          }
+          printf("];\n");
+        }
+        TEST_COMPARE_FLOATING_ARRAYS( schurOut, schur, 0.005 );
+      }
+    }
+  }
 
   /*
    * Instantiations
@@ -672,7 +758,8 @@ namespace {
   TEUCHOS_UNIT_TEST_TEMPLATE_3_INSTANT( MUMPS, SymbolicFactorization, SCALAR, LO, GO ) \
   TEUCHOS_UNIT_TEST_TEMPLATE_3_INSTANT( MUMPS, NumericFactorization, SCALAR, LO, GO ) \
   TEUCHOS_UNIT_TEST_TEMPLATE_3_INSTANT( MUMPS, Solve, SCALAR, LO, GO ) \
-  TEUCHOS_UNIT_TEST_TEMPLATE_3_INSTANT( MUMPS, SolveTwice, SCALAR, LO, GO )
+  TEUCHOS_UNIT_TEST_TEMPLATE_3_INSTANT( MUMPS, SolveTwice, SCALAR, LO, GO ) \
+  TEUCHOS_UNIT_TEST_TEMPLATE_3_INSTANT( MUMPS, Partial, SCALAR, LO, GO )
 
 
 #define UNIT_TEST_GROUP_ORDINAL( ORDINAL )              \

@@ -1,42 +1,10 @@
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //                           Stokhos Package
-//                 Copyright (2009) Sandia Corporation
 //
-// Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
-// license for use of this work by or on behalf of the U.S. Government.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Eric T. Phipps (etphipp@sandia.gov).
-//
-// ***********************************************************************
+// Copyright 2009 NTESS and the Stokhos contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #ifndef KOKKOS_CRSMATRIX_MP_VECTOR_HPP
@@ -47,7 +15,7 @@
 #include "Sacado_MP_Vector.hpp"
 #include "Kokkos_View_MP_Vector.hpp"
 #include "KokkosSparse_CrsMatrix.hpp"
-#include "Kokkos_ArithTraits_MP_Vector.hpp"
+#include "KokkosKernels_ArithTraits_MP_Vector.hpp"
 #include "KokkosSparse_spmv.hpp"
 #include "Kokkos_Blas1_MP_Vector.hpp" // for some utilities
 
@@ -530,12 +498,8 @@ public:
 namespace KokkosSparse {
 
 template <
-#if KOKKOSKERNELS_VERSION >= 40199
           typename ExecutionSpace,
-#endif
-#if KOKKOSKERNELS_VERSION >= 40299
           typename Handle,
-#endif
           typename AlphaType,
           typename BetaType,
           typename MatrixType,
@@ -546,42 +510,33 @@ template <
 typename std::enable_if<
   Kokkos::is_view_mp_vector< Kokkos::View< InputType, InputP... > >::value &&
   Kokkos::is_view_mp_vector< Kokkos::View< OutputType, OutputP... > >::value
-#if KOKKOSKERNELS_VERSION >= 40299
   && KokkosSparse::is_crs_matrix_v<MatrixType>
   && (Kokkos::View< OutputType, OutputP... >::rank() == 1)
-#endif
   >::type
 spmv(
-#if KOKKOSKERNELS_VERSION >= 40199
   const ExecutionSpace& space,
-#endif
-#if KOKKOSKERNELS_VERSION < 40299
-  KokkosKernels::Experimental::Controls,
-#else
   Handle* handle,
-#endif
   const char mode[],
   const AlphaType& a,
   const MatrixType& A,
   const Kokkos::View< InputType, InputP... >& x,
   const BetaType& b,
   const Kokkos::View< OutputType, OutputP... >& y
-#if KOKKOSKERNELS_VERSION < 40299
-  , const RANK_ONE
-#endif
 )
 {
   typedef Kokkos::View< OutputType, OutputP... > OutputVectorType;
   typedef Kokkos::View< InputType, InputP... > InputVectorType;
   using input_vector_type = const_type_t<InputVectorType>;
+#ifdef KOKKOS_ENABLE_IMPL_VIEW_LEGACY
   typedef typename InputVectorType::array_type::non_const_value_type value_type;
+#else
+  typedef std::remove_const_t<typename InputVectorType::element_type::value_type> value_type;
+#endif
 
-#if KOKKOSKERNELS_VERSION >= 40199
   if(space != ExecutionSpace()) {
     Kokkos::Impl::raise_error(
       "Stokhos spmv not implemented for non-default execution space instance");
   }
-#endif
   if(mode[0]!='N') {
     Kokkos::Impl::raise_error(
       "Stokhos spmv not implemented for transposed or conjugated matrix-vector multiplies");
@@ -641,12 +596,8 @@ spmv(
 }
 
 template <
-#if KOKKOSKERNELS_VERSION >= 40199
           typename ExecutionSpace,
-#endif
-#if KOKKOSKERNELS_VERSION >= 40299
           typename Handle,
-#endif
           typename AlphaType,
           typename BetaType,
           typename MatrixType,
@@ -657,37 +608,23 @@ template <
 typename std::enable_if<
   Kokkos::is_view_mp_vector< Kokkos::View< InputType, InputP... > >::value &&
   Kokkos::is_view_mp_vector< Kokkos::View< OutputType, OutputP... > >::value
-#if KOKKOSKERNELS_VERSION >= 40299
   && KokkosSparse::is_crs_matrix_v<MatrixType>
   && (Kokkos::View< OutputType, OutputP... >::rank() == 2)
-#endif
   >::type
 spmv(
-#if KOKKOSKERNELS_VERSION >= 40199
   const ExecutionSpace& space,
-#endif
-#if KOKKOSKERNELS_VERSION < 40299
-  KokkosKernels::Experimental::Controls,
-#else
   Handle* handle,
-#endif
   const char mode[],
   const AlphaType& a,
   const MatrixType& A,
   const Kokkos::View< InputType, InputP... >& x,
   const BetaType& b,
-  const Kokkos::View< OutputType, OutputP... >& y
-#if KOKKOSKERNELS_VERSION < 40299
-  , const RANK_TWO
-#endif
-  )
+  const Kokkos::View< OutputType, OutputP... >& y)
 {
-#if KOKKOSKERNELS_VERSION >= 40199
   if(space != ExecutionSpace()) {
     Kokkos::Impl::raise_error(
       "Stokhos spmv not implemented for non-default execution space instance");
   }
-#endif
   if(mode[0]!='N') {
     Kokkos::Impl::raise_error(
       "Stokhos spmv not implemented for transposed or conjugated matrix-vector multiplies");
@@ -695,19 +632,17 @@ spmv(
   if (y.extent(1) == 1) {
     auto y_1D = subview(y, Kokkos::ALL(), 0);
     auto x_1D = subview(x, Kokkos::ALL(), 0);
-#if KOKKOSKERNELS_VERSION >= 40299
     spmv(space, handle, mode, a, A, x_1D, b, y_1D);
-#elif (KOKKOSKERNELS_VERSION < 40299) && (KOKKOSKERNELS_VERSION >= 40199)
-    spmv(space, KokkosKernels::Experimental::Controls(), mode, a, A, x_1D, b, y_1D, RANK_ONE());
-#else
-    spmv(KokkosKernels::Experimental::Controls(), mode, a, A, x_1D, b, y_1D, RANK_ONE());
-#endif
   }
   else {
     typedef Kokkos::View< OutputType, OutputP... > OutputVectorType;
     typedef Kokkos::View< InputType, InputP... > InputVectorType;
     using input_vector_type = const_type_t<InputVectorType>;
+#ifdef KOKKOS_ENABLE_IMPL_VIEW_LEGACY
     typedef typename InputVectorType::array_type::non_const_value_type value_type;
+#else
+    typedef std::remove_const_t<typename InputVectorType::element_type::value_type> value_type;
+#endif
 
     if (!Sacado::is_constant(a) || !Sacado::is_constant(b)) {
       Kokkos::Impl::raise_error(

@@ -55,25 +55,25 @@ void runBoxOverlappingEightSurroundingBoxes(stk::search::SearchMethod searchMeth
   int numProc = stk::parallel_machine_size(comm);
   int procId = stk::parallel_machine_rank(comm);
 
-  std::vector<std::pair<OuterBoundingBoxType, Ident>> boxVector1;
+  std::vector<std::pair<OuterBoundingBoxType, IdentProc>> boxVector1;
   if (procId == 0) {
-    boxVector1.push_back(stk::unit_test_util::simple_fields::generateBoundingVolume<OuterBoundingBoxType>(0, 0, 0, radius, 1, procId));
-    boxVector1.push_back(stk::unit_test_util::simple_fields::generateBoundingVolume<OuterBoundingBoxType>(1, 0, 0, radius, 2, procId));
-    boxVector1.push_back(stk::unit_test_util::simple_fields::generateBoundingVolume<OuterBoundingBoxType>(2, 0, 0, radius, 3, procId));
-    boxVector1.push_back(stk::unit_test_util::simple_fields::generateBoundingVolume<OuterBoundingBoxType>(0, 1, 0, radius, 4, procId));
+    boxVector1.push_back(stk::unit_test_util::generateBoundingVolume<OuterBoundingBoxType>(0, 0, 0, radius, 1, procId));
+    boxVector1.push_back(stk::unit_test_util::generateBoundingVolume<OuterBoundingBoxType>(1, 0, 0, radius, 2, procId));
+    boxVector1.push_back(stk::unit_test_util::generateBoundingVolume<OuterBoundingBoxType>(2, 0, 0, radius, 3, procId));
+    boxVector1.push_back(stk::unit_test_util::generateBoundingVolume<OuterBoundingBoxType>(0, 1, 0, radius, 4, procId));
     //skip middle one
-    boxVector1.push_back(stk::unit_test_util::simple_fields::generateBoundingVolume<OuterBoundingBoxType>(2, 1, 0, radius, 6, procId));
-    boxVector1.push_back(stk::unit_test_util::simple_fields::generateBoundingVolume<OuterBoundingBoxType>(0, 2, 0, radius, 7, procId));
-    boxVector1.push_back(stk::unit_test_util::simple_fields::generateBoundingVolume<OuterBoundingBoxType>(1, 2, 0, radius, 8, procId));
-    boxVector1.push_back(stk::unit_test_util::simple_fields::generateBoundingVolume<OuterBoundingBoxType>(2, 2, 0, radius, 9, procId));
+    boxVector1.push_back(stk::unit_test_util::generateBoundingVolume<OuterBoundingBoxType>(2, 1, 0, radius, 6, procId));
+    boxVector1.push_back(stk::unit_test_util::generateBoundingVolume<OuterBoundingBoxType>(0, 2, 0, radius, 7, procId));
+    boxVector1.push_back(stk::unit_test_util::generateBoundingVolume<OuterBoundingBoxType>(1, 2, 0, radius, 8, procId));
+    boxVector1.push_back(stk::unit_test_util::generateBoundingVolume<OuterBoundingBoxType>(2, 2, 0, radius, 9, procId));
   }
 
-  std::vector<std::pair<InnerBoundingBoxType, Ident>> boxVector2;
+  std::vector<std::pair<InnerBoundingBoxType, IdentProc>> boxVector2;
   if (procId == numProc-1) {
-    boxVector2.push_back(stk::unit_test_util::simple_fields::generateBoundingVolume<InnerBoundingBoxType>(1, 1, 0, radius, 5, procId));
+    boxVector2.push_back(stk::unit_test_util::generateBoundingVolume<InnerBoundingBoxType>(1, 1, 0, radius, 5, procId));
   }
 
-  std::vector< std::pair<Ident, Ident> > boxIdPairResults;
+  std::vector< std::pair<IdentProc, IdentProc> > boxIdPairResults;
   stk::search::coarse_search(boxVector1, boxVector2, searchMethod, comm, boxIdPairResults);
 
   if (procId == 0 || procId == numProc-1) {
@@ -91,14 +91,12 @@ void device_runBoxOverlappingEightSurroundingBoxes(stk::search::SearchMethod sea
                                                          const unsigned numExpectedResults)
 {
 
-  MPI_Comm comm = MPI_COMM_WORLD;
+  MPI_Comm comm = stk::parallel_machine_world();
   int numProc = stk::parallel_machine_size(comm);
   int procId = stk::parallel_machine_rank(comm);
 
-  using IdentProcType = stk::search::IdentProc<int,int>;
-  using InnerBoxIdentProcType = stk::search::BoxIdentProc<InnerBoxType, IdentProcType>;
-  using OuterBoxIdentProcType = stk::search::BoxIdentProc<OuterBoxType, IdentProcType>;
-  using IntersectionType = stk::search::IdentProcIntersection<IdentProcType, IdentProcType>;
+  using InnerBoxIdentProcType = stk::search::BoxIdentProc<InnerBoxType, IdentProc>;
+  using OuterBoxIdentProcType = stk::search::BoxIdentProc<OuterBoxType, IdentProc>;
 
   auto domain = Kokkos::View<OuterBoxIdentProcType*, stk::ngp::ExecSpace>("domain box-ident", 0);
   auto range = Kokkos::View<InnerBoxIdentProcType*, stk::ngp::ExecSpace>("range box-ident", 0);
@@ -106,16 +104,16 @@ void device_runBoxOverlappingEightSurroundingBoxes(stk::search::SearchMethod sea
   if (procId == 0) {
     Kokkos::resize(Kokkos::WithoutInitializing, domain, 8);
     Kokkos::parallel_for(stk::ngp::DeviceRangePolicy(0, 1),
-      KOKKOS_LAMBDA(const unsigned & i) {
-        domain[0] = stk::unit_test_util::simple_fields::device_generateBoxIdentProc<OuterBoxType, IdentProcType>(0, 0, 0, radius, 1, procId);
-        domain[1] = stk::unit_test_util::simple_fields::device_generateBoxIdentProc<OuterBoxType, IdentProcType>(1, 0, 0, radius, 2, procId);
-        domain[2] = stk::unit_test_util::simple_fields::device_generateBoxIdentProc<OuterBoxType, IdentProcType>(2, 0, 0, radius, 3, procId);
-        domain[3] = stk::unit_test_util::simple_fields::device_generateBoxIdentProc<OuterBoxType, IdentProcType>(0, 1, 0, radius, 4, procId);
+      KOKKOS_LAMBDA(const unsigned & /*i*/) {
+        domain[0] = stk::unit_test_util::device_generateBoxIdentProc<OuterBoxType, IdentProc>(0, 0, 0, radius, 1, procId);
+        domain[1] = stk::unit_test_util::device_generateBoxIdentProc<OuterBoxType, IdentProc>(1, 0, 0, radius, 2, procId);
+        domain[2] = stk::unit_test_util::device_generateBoxIdentProc<OuterBoxType, IdentProc>(2, 0, 0, radius, 3, procId);
+        domain[3] = stk::unit_test_util::device_generateBoxIdentProc<OuterBoxType, IdentProc>(0, 1, 0, radius, 4, procId);
         // Skip middle box
-        domain[4] = stk::unit_test_util::simple_fields::device_generateBoxIdentProc<OuterBoxType, IdentProcType>(2, 1, 0, radius, 6, procId);
-        domain[5] = stk::unit_test_util::simple_fields::device_generateBoxIdentProc<OuterBoxType, IdentProcType>(1, 2, 0, radius, 7, procId);
-        domain[6] = stk::unit_test_util::simple_fields::device_generateBoxIdentProc<OuterBoxType, IdentProcType>(2, 2, 0, radius, 8, procId);
-        domain[7] = stk::unit_test_util::simple_fields::device_generateBoxIdentProc<OuterBoxType, IdentProcType>(0, 2, 0, radius, 9, procId);
+        domain[4] = stk::unit_test_util::device_generateBoxIdentProc<OuterBoxType, IdentProc>(2, 1, 0, radius, 6, procId);
+        domain[5] = stk::unit_test_util::device_generateBoxIdentProc<OuterBoxType, IdentProc>(1, 2, 0, radius, 7, procId);
+        domain[6] = stk::unit_test_util::device_generateBoxIdentProc<OuterBoxType, IdentProc>(2, 2, 0, radius, 8, procId);
+        domain[7] = stk::unit_test_util::device_generateBoxIdentProc<OuterBoxType, IdentProc>(0, 2, 0, radius, 9, procId);
 
       });
   }
@@ -123,16 +121,16 @@ void device_runBoxOverlappingEightSurroundingBoxes(stk::search::SearchMethod sea
   if (procId == numProc-1) {
     Kokkos::resize(Kokkos::WithoutInitializing, range, 1);
     Kokkos::parallel_for(stk::ngp::DeviceRangePolicy(0, 1),
-      KOKKOS_LAMBDA(const unsigned & i) {
-        range[0] = stk::unit_test_util::simple_fields::device_generateBoxIdentProc<InnerBoxType, IdentProcType>(1, 1, 0, radius, 5, procId);
+      KOKKOS_LAMBDA(const unsigned & /*i*/) {
+        range[0] = stk::unit_test_util::device_generateBoxIdentProc<InnerBoxType, IdentProc>(1, 1, 0, radius, 5, procId);
       });
   }
-  
-  auto intersections = Kokkos::View<IntersectionType*, stk::ngp::ExecSpace>("intersections", 0);
+
+  auto intersections = Kokkos::View<IdentProcIntersection*, stk::ngp::ExecSpace>("intersections", 0);
 
   stk::search::coarse_search(domain, range, searchMethod, comm, intersections);
 
-  Kokkos::View<IntersectionType*>::HostMirror hostIntersections = Kokkos::create_mirror_view(intersections);
+  Kokkos::View<IdentProcIntersection*>::host_mirror_type hostIntersections = Kokkos::create_mirror_view(intersections);
   Kokkos::deep_copy(hostIntersections, intersections);
 
   if (procId == 0 || procId == numProc - 1) {
@@ -321,6 +319,7 @@ TEST(CoarseSearchCorrectness, SphereOverlappingEightSurroundingSpheres_ARBORX)
   const double radius = 0.708;
   const unsigned numExpectedResults = 8;
   runBoxOverlappingEightSurroundingBoxes<Sphere,Sphere>(stk::search::ARBORX, radius, numExpectedResults);
+  if (!stk::unit_test_util::can_run_device_tests(stk::parallel_machine_world())) GTEST_SKIP();
   device_runBoxOverlappingEightSurroundingBoxes<Sphere,Sphere>(stk::search::ARBORX, radius, numExpectedResults);
 }
 
@@ -332,6 +331,7 @@ TEST(CoarseSearchCorrectness, SphereOverlappingNoSurroundingPoints_ARBORX)
   const double radius = 0.99;
   const unsigned numExpectedResults = 0;
   runBoxOverlappingEightSurroundingBoxes<Sphere,Point>(stk::search::ARBORX, radius, numExpectedResults);
+  if (!stk::unit_test_util::can_run_device_tests(stk::parallel_machine_world())) GTEST_SKIP();
   device_runBoxOverlappingEightSurroundingBoxes<Sphere,Point>(stk::search::ARBORX, radius, numExpectedResults);
 }
 
@@ -343,6 +343,7 @@ TEST(CoarseSearchCorrectness, SphereOverlappingFourSurroundingPoints_ARBORX)
   const double radius = 1.41;
   const unsigned numExpectedResults = 4;
   runBoxOverlappingEightSurroundingBoxes<Sphere,Point>(stk::search::ARBORX, radius, numExpectedResults);
+  if (!stk::unit_test_util::can_run_device_tests(stk::parallel_machine_world())) GTEST_SKIP();
   device_runBoxOverlappingEightSurroundingBoxes<Sphere,Point>(stk::search::ARBORX, radius, numExpectedResults);
 }
 
@@ -354,6 +355,7 @@ TEST(CoarseSearchCorrectness, SphereOverlappingEightSurroundingPoints_ARBORX)
   const double radius = 1.42;
   const unsigned numExpectedResults = 8;
   runBoxOverlappingEightSurroundingBoxes<Sphere,Point>(stk::search::ARBORX, radius, numExpectedResults);
+  if (!stk::unit_test_util::can_run_device_tests(stk::parallel_machine_world())) GTEST_SKIP();
   device_runBoxOverlappingEightSurroundingBoxes<Sphere,Point>(stk::search::ARBORX, radius, numExpectedResults);
 }
 
@@ -365,6 +367,7 @@ TEST(CoarseSearchCorrectness, SphereOverlappingFourOfEightSurroundingSpheres_ARB
   const double radius = 0.706;
   const unsigned numExpectedResults = 4;
   runBoxOverlappingEightSurroundingBoxes<Sphere,Sphere>(stk::search::ARBORX, radius, numExpectedResults);
+  if (!stk::unit_test_util::can_run_device_tests(stk::parallel_machine_world())) GTEST_SKIP();
   device_runBoxOverlappingEightSurroundingBoxes<Sphere,Sphere>(stk::search::ARBORX, radius, numExpectedResults);
 }
 
@@ -376,6 +379,7 @@ TEST(CoarseSearchCorrectness, BoxOverlappingNoSurroundingPoints_ARBORX)
   const double radius = 0.99;
   const unsigned numExpectedResults = 0;
   runBoxOverlappingEightSurroundingBoxes<StkBox,Point>(stk::search::ARBORX, radius, numExpectedResults);
+  if (!stk::unit_test_util::can_run_device_tests(stk::parallel_machine_world())) GTEST_SKIP();
   device_runBoxOverlappingEightSurroundingBoxes<StkBox,Point>(stk::search::ARBORX, radius, numExpectedResults);
 }
 
@@ -387,6 +391,7 @@ TEST(CoarseSearchCorrectness, BoxOverlappingEightSurroundingPoints_ARBORX)
   const double radius = 1.01;
   const unsigned numExpectedResults = 8;
   runBoxOverlappingEightSurroundingBoxes<StkBox,Point>(stk::search::ARBORX, radius, numExpectedResults);
+  if (!stk::unit_test_util::can_run_device_tests(stk::parallel_machine_world())) GTEST_SKIP();
   device_runBoxOverlappingEightSurroundingBoxes<StkBox,Point>(stk::search::ARBORX, radius, numExpectedResults);
 }
 
@@ -398,6 +403,7 @@ TEST(CoarseSearchCorrectness, PointOverlappingNoSurroundingBoxes_ARBORX)
   const double radius = 0.99;
   const unsigned numExpectedResults = 0;
   runBoxOverlappingEightSurroundingBoxes<Point,StkBox>(stk::search::ARBORX, radius, numExpectedResults);
+  if (!stk::unit_test_util::can_run_device_tests(stk::parallel_machine_world())) GTEST_SKIP();
   device_runBoxOverlappingEightSurroundingBoxes<Point,StkBox>(stk::search::ARBORX, radius, numExpectedResults);
 }
 
@@ -409,6 +415,7 @@ TEST(CoarseSearchCorrectness, PointOverlappingEightSurroundingBoxes_ARBORX)
   const double radius = 1.01;
   const unsigned numExpectedResults = 8;
   runBoxOverlappingEightSurroundingBoxes<Point,StkBox>(stk::search::ARBORX, radius, numExpectedResults);
+  if (!stk::unit_test_util::can_run_device_tests(stk::parallel_machine_world())) GTEST_SKIP();
   device_runBoxOverlappingEightSurroundingBoxes<Point,StkBox>(stk::search::ARBORX, radius, numExpectedResults);
 }
 
@@ -420,6 +427,7 @@ TEST(CoarseSearchCorrectness, BoxOverlappingNoSurroundingBoxes_ARBORX)
   const double radius = 0.49;
   const unsigned numExpectedResults = 0;
   runBoxOverlappingEightSurroundingBoxes<StkBox,StkBox>(stk::search::ARBORX, radius, numExpectedResults);
+  if (!stk::unit_test_util::can_run_device_tests(stk::parallel_machine_world())) GTEST_SKIP();
   device_runBoxOverlappingEightSurroundingBoxes<StkBox,StkBox>(stk::search::ARBORX, radius, numExpectedResults);
 }
 
@@ -431,6 +439,7 @@ TEST(CoarseSearchCorrectness, BoxOverlappingEightSurroundingBoxes_ARBORX)
   const double radius = 0.51;
   const unsigned numExpectedResults = 8;
   runBoxOverlappingEightSurroundingBoxes<StkBox,StkBox>(stk::search::ARBORX, radius, numExpectedResults);
+  if (!stk::unit_test_util::can_run_device_tests(stk::parallel_machine_world())) GTEST_SKIP();
   device_runBoxOverlappingEightSurroundingBoxes<StkBox,StkBox>(stk::search::ARBORX, radius, numExpectedResults);
 }
 
@@ -438,36 +447,34 @@ template <class InnerBoxType, class OuterBoxType>
 void host_local_runBoxOverlappingEightSurroundingBoxes(
     stk::search::SearchMethod searchMethod, const double radius, const unsigned numExpectedResults)
 {
-  using IdentType = int;
-  using InnerBoxIdentType = std::pair<InnerBoxType, IdentType>;
-  using OuterBoxIdentType = std::pair<OuterBoxType, IdentType>;
-  using IntersectionType = std::pair<IdentType, IdentType>;
+  using InnerBoxIdentType = std::pair<InnerBoxType, Ident>;
+  using OuterBoxIdentType = std::pair<OuterBoxType, Ident>;
 
   std::vector<OuterBoxIdentType> domain;
   std::vector<InnerBoxIdentType> range;
 
-  domain.push_back(stk::unit_test_util::simple_fields::box_ident_to_pair(
-      stk::unit_test_util::simple_fields::device_generateBoxIdent<OuterBoxType, IdentType>(0, 0, 0, radius, 1)));
-  domain.push_back(stk::unit_test_util::simple_fields::box_ident_to_pair(
-      stk::unit_test_util::simple_fields::device_generateBoxIdent<OuterBoxType, IdentType>(1, 0, 0, radius, 2)));
-  domain.push_back(stk::unit_test_util::simple_fields::box_ident_to_pair(
-      stk::unit_test_util::simple_fields::device_generateBoxIdent<OuterBoxType, IdentType>(2, 0, 0, radius, 3)));
-  domain.push_back(stk::unit_test_util::simple_fields::box_ident_to_pair(
-      stk::unit_test_util::simple_fields::device_generateBoxIdent<OuterBoxType, IdentType>(0, 1, 0, radius, 4)));
+  domain.push_back(stk::unit_test_util::box_ident_to_pair(
+      stk::unit_test_util::device_generateBoxIdent<OuterBoxType, Ident>(0, 0, 0, radius, 1)));
+  domain.push_back(stk::unit_test_util::box_ident_to_pair(
+      stk::unit_test_util::device_generateBoxIdent<OuterBoxType, Ident>(1, 0, 0, radius, 2)));
+  domain.push_back(stk::unit_test_util::box_ident_to_pair(
+      stk::unit_test_util::device_generateBoxIdent<OuterBoxType, Ident>(2, 0, 0, radius, 3)));
+  domain.push_back(stk::unit_test_util::box_ident_to_pair(
+      stk::unit_test_util::device_generateBoxIdent<OuterBoxType, Ident>(0, 1, 0, radius, 4)));
   // Skip middle box
-  domain.push_back(stk::unit_test_util::simple_fields::box_ident_to_pair(
-      stk::unit_test_util::simple_fields::device_generateBoxIdent<OuterBoxType, IdentType>(2, 1, 0, radius, 6)));
-  domain.push_back(stk::unit_test_util::simple_fields::box_ident_to_pair(
-      stk::unit_test_util::simple_fields::device_generateBoxIdent<OuterBoxType, IdentType>(1, 2, 0, radius, 7)));
-  domain.push_back(stk::unit_test_util::simple_fields::box_ident_to_pair(
-      stk::unit_test_util::simple_fields::device_generateBoxIdent<OuterBoxType, IdentType>(2, 2, 0, radius, 8)));
-  domain.push_back(stk::unit_test_util::simple_fields::box_ident_to_pair(
-      stk::unit_test_util::simple_fields::device_generateBoxIdent<OuterBoxType, IdentType>(0, 2, 0, radius, 9)));
+  domain.push_back(stk::unit_test_util::box_ident_to_pair(
+      stk::unit_test_util::device_generateBoxIdent<OuterBoxType, Ident>(2, 1, 0, radius, 6)));
+  domain.push_back(stk::unit_test_util::box_ident_to_pair(
+      stk::unit_test_util::device_generateBoxIdent<OuterBoxType, Ident>(1, 2, 0, radius, 7)));
+  domain.push_back(stk::unit_test_util::box_ident_to_pair(
+      stk::unit_test_util::device_generateBoxIdent<OuterBoxType, Ident>(2, 2, 0, radius, 8)));
+  domain.push_back(stk::unit_test_util::box_ident_to_pair(
+      stk::unit_test_util::device_generateBoxIdent<OuterBoxType, Ident>(0, 2, 0, radius, 9)));
 
-  range.push_back(stk::unit_test_util::simple_fields::box_ident_to_pair(
-      stk::unit_test_util::simple_fields::device_generateBoxIdent<InnerBoxType, IdentType>(1, 1, 0, radius, 5)));
+  range.push_back(stk::unit_test_util::box_ident_to_pair(
+      stk::unit_test_util::device_generateBoxIdent<InnerBoxType, Ident>(1, 1, 0, radius, 5)));
 
-  std::vector<IntersectionType> intersections;
+  LocalSearchResults intersections;
 
   stk::search::local_coarse_search(domain, range, searchMethod, intersections);
 
@@ -478,34 +485,32 @@ template<class InnerBoxType, class OuterBoxType>
 void device_local_runBoxOverlappingEightSurroundingBoxes(stk::search::SearchMethod searchMethod, const double radius,
                                                          const unsigned numExpectedResults)
 {
-  using IdentType = int;
-  using InnerBoxIdentType = stk::search::BoxIdent<InnerBoxType, IdentType>;
-  using OuterBoxIdentType = stk::search::BoxIdent<OuterBoxType, IdentType>;
-  using IntersectionType = stk::search::IdentIntersection<IdentType, IdentType>;
+  using InnerBoxIdentType = stk::search::BoxIdent<InnerBoxType, Ident>;
+  using OuterBoxIdentType = stk::search::BoxIdent<OuterBoxType, Ident>;
 
   auto domain = Kokkos::View<OuterBoxIdentType*, stk::ngp::ExecSpace>("domain box-ident", 8);
   auto range = Kokkos::View<InnerBoxIdentType*, stk::ngp::ExecSpace>("range box-ident", 1);
 
   Kokkos::parallel_for(stk::ngp::DeviceRangePolicy(0, 1),
-    KOKKOS_LAMBDA(const unsigned & i) {
-      domain[0] = stk::unit_test_util::simple_fields::device_generateBoxIdent<OuterBoxType, IdentType>(0, 0, 0, radius, 1);
-      domain[1] = stk::unit_test_util::simple_fields::device_generateBoxIdent<OuterBoxType, IdentType>(1, 0, 0, radius, 2);
-      domain[2] = stk::unit_test_util::simple_fields::device_generateBoxIdent<OuterBoxType, IdentType>(2, 0, 0, radius, 3);
-      domain[3] = stk::unit_test_util::simple_fields::device_generateBoxIdent<OuterBoxType, IdentType>(0, 1, 0, radius, 4);
+    KOKKOS_LAMBDA(const unsigned & /*i*/) {
+      domain[0] = stk::unit_test_util::device_generateBoxIdent<OuterBoxType, Ident>(0, 0, 0, radius, 1);
+      domain[1] = stk::unit_test_util::device_generateBoxIdent<OuterBoxType, Ident>(1, 0, 0, radius, 2);
+      domain[2] = stk::unit_test_util::device_generateBoxIdent<OuterBoxType, Ident>(2, 0, 0, radius, 3);
+      domain[3] = stk::unit_test_util::device_generateBoxIdent<OuterBoxType, Ident>(0, 1, 0, radius, 4);
       // Skip middle box
-      domain[4] = stk::unit_test_util::simple_fields::device_generateBoxIdent<OuterBoxType, IdentType>(2, 1, 0, radius, 6);
-      domain[5] = stk::unit_test_util::simple_fields::device_generateBoxIdent<OuterBoxType, IdentType>(1, 2, 0, radius, 7);
-      domain[6] = stk::unit_test_util::simple_fields::device_generateBoxIdent<OuterBoxType, IdentType>(2, 2, 0, radius, 8);
-      domain[7] = stk::unit_test_util::simple_fields::device_generateBoxIdent<OuterBoxType, IdentType>(0, 2, 0, radius, 9);
+      domain[4] = stk::unit_test_util::device_generateBoxIdent<OuterBoxType, Ident>(2, 1, 0, radius, 6);
+      domain[5] = stk::unit_test_util::device_generateBoxIdent<OuterBoxType, Ident>(1, 2, 0, radius, 7);
+      domain[6] = stk::unit_test_util::device_generateBoxIdent<OuterBoxType, Ident>(2, 2, 0, radius, 8);
+      domain[7] = stk::unit_test_util::device_generateBoxIdent<OuterBoxType, Ident>(0, 2, 0, radius, 9);
 
-      range[0] = stk::unit_test_util::simple_fields::device_generateBoxIdent<InnerBoxType, IdentType>(1, 1, 0, radius, 5);
+      range[0] = stk::unit_test_util::device_generateBoxIdent<InnerBoxType, Ident>(1, 1, 0, radius, 5);
     });
 
-  auto intersections = Kokkos::View<IntersectionType*, stk::ngp::ExecSpace>("intersections", 0);
+  auto intersections = Kokkos::View<IdentIntersection*, stk::ngp::ExecSpace>("intersections", 0);
 
   stk::search::local_coarse_search(domain, range, searchMethod, intersections);
 
-  Kokkos::View<IntersectionType*>::HostMirror hostIntersections = Kokkos::create_mirror_view(intersections);
+  Kokkos::View<IdentIntersection*>::host_mirror_type hostIntersections = Kokkos::create_mirror_view(intersections);
   Kokkos::deep_copy(hostIntersections, intersections);
 
   ASSERT_EQ(intersections.extent(0), numExpectedResults);

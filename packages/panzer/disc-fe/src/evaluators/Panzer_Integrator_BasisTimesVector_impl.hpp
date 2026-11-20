@@ -1,43 +1,11 @@
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //           Panzer: A partial differential equation assembly
 //       engine for strongly coupled complex multiphysics systems
-//                 Copyright (2011) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Roger P. Pawlowski (rppawlo@sandia.gov) and
-// Eric C. Cyr (eccyr@sandia.gov)
-// ***********************************************************************
+// Copyright 2011 NTESS and the Panzer contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #ifndef   __Panzer_Integerator_BasisTimesVector_impl_hpp__
@@ -288,7 +256,7 @@ namespace panzer
   Integrator_BasisTimesVector<EvalT, Traits>::
   operator()(
     const FieldMultTag<NUM_FIELD_MULT>& /* tag */,
-    const typename Kokkos::TeamPolicy<FieldMultTag<NUM_FIELD_MULT>,PHX::exec_space>::member_type& team) const
+    const typename Kokkos::TeamPolicy<FieldMultTag<NUM_FIELD_MULT>,PHX::ExecutionSpace>::member_type& team) const
   {
     using panzer::EvaluatorStyle;
     const int cell = team.league_rank();
@@ -301,63 +269,36 @@ namespace panzer
       });
     }
 
-    // The following if-block is for the sake of optimization depending on the
-    // number of field multipliers.
-    if constexpr (NUM_FIELD_MULT == 0) {
-      // Loop over the quadrature points and dimensions of our vector fields,
-      // scale the integrand by the multiplier, and then perform the
-      // integration, looping over the bases.
-      for (int qp(0); qp < numQP_; ++qp) {
-        for (int dim(0); dim < numDim_; ++dim) {
+    for (int qp(0); qp < numQP_; ++qp) {
+      for (int dim(0); dim < numDim_; ++dim) {
+        if constexpr (NUM_FIELD_MULT == 0) {
           Kokkos::parallel_for(Kokkos::TeamThreadRange(team,0,numBases), [&] (const int basis) {
             field_(cell, basis) += basis_(cell, basis, qp, dim) * multiplier_ * vector_(cell, qp, dim);
           });
-        } // end loop over the dimensions of the vector field
-      } // end loop over the quadrature points
-    }
-    else if constexpr (NUM_FIELD_MULT == 1) {
-      // Loop over the quadrature points and dimensions of our vector fields,
-      // scale the integrand by the multiplier and the single field multiplier,
-      // and then perform the actual integration, looping over the bases.
-      for (int qp(0); qp < numQP_; ++qp) {
-        for (int dim(0); dim < numDim_; ++dim) {
+        }
+        else if constexpr (NUM_FIELD_MULT == 1) {
           Kokkos::parallel_for(Kokkos::TeamThreadRange(team,0,numBases), [&] (const int basis) {
             field_(cell, basis) += basis_(cell, basis, qp, dim) * multiplier_ * vector_(cell, qp, dim)
               * kokkosFieldMults_[0](cell, qp);
           });
-        } // end loop over the dimensions of the vector field
-      } // end loop over the quadrature points
-    }
-    else if constexpr (NUM_FIELD_MULT == 2) {
-      // Loop over the quadrature points and dimensions of our vector fields,
-      // scale the integrand by the multiplier and the single field multiplier,
-      // and then perform the actual integration, looping over the bases.
-      for (int qp(0); qp < numQP_; ++qp) {
-        for (int dim(0); dim < numDim_; ++dim) {
+        }
+        else if constexpr (NUM_FIELD_MULT == 2) {
           Kokkos::parallel_for(Kokkos::TeamThreadRange(team,0,numBases), [&] (const int basis) {
             field_(cell, basis) += basis_(cell, basis, qp, dim) * multiplier_ * vector_(cell, qp, dim) 
               * kokkosFieldMults_[0](cell, qp) * kokkosFieldMults_[1](cell, qp);
           });
-        } // end loop over the dimensions of the vector field
-      } // end loop over the quadrature points
-    }
-    else if constexpr (NUM_FIELD_MULT == 3) {
-      // Loop over the quadrature points and dimensions of our vector fields,
-      // scale the integrand by the multiplier and the single field multiplier,
-      // and then perform the actual integration, looping over the bases.
-      for (int qp(0); qp < numQP_; ++qp) {
-        for (int dim(0); dim < numDim_; ++dim) {
+        }
+        else if constexpr (NUM_FIELD_MULT == 3) {
           Kokkos::parallel_for(Kokkos::TeamThreadRange(team,0,numBases), [&] (const int basis) {
             field_(cell, basis) += basis_(cell, basis, qp, dim) * multiplier_ * vector_(cell, qp, dim)
               * kokkosFieldMults_[0](cell, qp) * kokkosFieldMults_[1](cell, qp) * kokkosFieldMults_[2](cell, qp);
           });
-        } // end loop over the dimensions of the vector field
-      } // end loop over the quadrature points
-    }
-    else {
-      Kokkos::abort("Panzer_Integrator_BasisTimesVector: NUM_FIELD_MULT out of range!");
-    }
-
+        }
+        else {
+          Kokkos::abort("Panzer_Integrator_BasisTimesVector: NUM_FIELD_MULT out of range!");
+        }
+      } // end loop over the dimensions of the vector field
+    } // end loop over the quadrature points
   } // end of operator()()
 
   /////////////////////////////////////////////////////////////////////////////
@@ -385,19 +326,19 @@ namespace panzer
     // number of field multipliers.  The parallel_fors will loop over the cells
     // in the Workset and execute operator()() above.
     if (fieldMults_.size() == 0) {
-      auto policy = panzer::HP::inst().teamPolicy<ScalarT,FieldMultTag<0>,PHX::exec_space>(workset.num_cells);
+      auto policy = panzer::HP::inst().teamPolicy<ScalarT,FieldMultTag<0>,PHX::ExecutionSpace>(workset.num_cells);
       parallel_for("Panzer_Integrator_BasisTimesVector<0>", policy, *this);
     }
     else if (fieldMults_.size() == 1) {
-      auto policy = panzer::HP::inst().teamPolicy<ScalarT,FieldMultTag<1>,PHX::exec_space>(workset.num_cells);
+      auto policy = panzer::HP::inst().teamPolicy<ScalarT,FieldMultTag<1>,PHX::ExecutionSpace>(workset.num_cells);
       parallel_for("Panzer_Integrator_BasisTimesVector<1>", policy, *this);
     }
     else  if (fieldMults_.size() == 2) {
-      auto policy = panzer::HP::inst().teamPolicy<ScalarT,FieldMultTag<2>,PHX::exec_space>(workset.num_cells);
+      auto policy = panzer::HP::inst().teamPolicy<ScalarT,FieldMultTag<2>,PHX::ExecutionSpace>(workset.num_cells);
       parallel_for("Panzer_Integrator_BasisTimesVector<2>", policy, *this);
     }
     else  if (fieldMults_.size() == 3) {
-      auto policy = panzer::HP::inst().teamPolicy<ScalarT,FieldMultTag<3>,PHX::exec_space>(workset.num_cells);
+      auto policy = panzer::HP::inst().teamPolicy<ScalarT,FieldMultTag<3>,PHX::ExecutionSpace>(workset.num_cells);
       parallel_for("Panzer_Integrator_BasisTimesVector<3>", policy, *this);
     }
   } // end of evaluateFields()

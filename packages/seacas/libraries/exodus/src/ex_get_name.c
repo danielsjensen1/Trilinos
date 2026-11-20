@@ -66,7 +66,7 @@ int ex_get_name(int exoid, ex_entity_type obj_type, ex_entity_id entity_id, char
   }
 
   int varid;
-  if (nc_inq_varid(exoid, vobj, &varid) == NC_NOERR) {
+  if (nc_inq_varid(exoid, vobj, &varid) == EX_NOERR) {
     /* If this is a null entity, then 'ent_ndx' will be negative.
      * We don't care in this __func__, so make it positive and continue...
      */
@@ -77,12 +77,16 @@ int ex_get_name(int exoid, ex_entity_type obj_type, ex_entity_id entity_id, char
 
     /* read the name */
     {
-      int db_name_size  = ex_inquire_int(exoid, EX_INQ_DB_MAX_ALLOWED_NAME_LENGTH);
-      int api_name_size = ex_inquire_int(exoid, EX_INQ_MAX_READ_NAME_LENGTH);
-      int name_size     = db_name_size < api_name_size ? db_name_size : api_name_size;
+      int db_name_size   = ex_inquire_int(exoid, EX_INQ_DB_MAX_ALLOWED_NAME_LENGTH);
+      int api_name_size  = ex_inquire_int(exoid, EX_INQ_MAX_READ_NAME_LENGTH);
+      int used_name_size = ex_inquire_int(exoid, EX_INQ_DB_MAX_USED_NAME_LENGTH);
+      int name_size      = db_name_size < api_name_size ? db_name_size : api_name_size;
+      if (used_name_size < name_size) {
+        name_size = used_name_size;
+      }
 
       int status = exi_get_name(exoid, varid, ent_ndx - 1, name, name_size, obj_type, __func__);
-      if (status != NC_NOERR) {
+      if (status != EX_NOERR) {
         EX_FUNC_LEAVE(EX_FATAL);
       }
     }

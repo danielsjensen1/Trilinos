@@ -1,4 +1,4 @@
-// Copyright(C) 1999-2020, 2022, 2023, 2024 National Technology & Engineering Solutions
+// Copyright(C) 1999-2020, 2022, 2023, 2024, 2025 National Technology & Engineering Solutions
 // of Sandia, LLC (NTESS).  Under the terms of Contract DE-NA0003525 with
 // NTESS, the U.S. Government retains certain rights in this software.
 //
@@ -26,7 +26,7 @@ namespace Ioss {
 
   /** \brief A collection of element edges.
    */
-  class IOSS_EXPORT EdgeSet : public EntitySet
+  class IOSS_EXPORT EdgeSet final : public EntitySet
   {
   public:
     EdgeSet(); // Used for template typing only
@@ -43,7 +43,7 @@ namespace Ioss {
     // An example would be 'element_block_count' for a region.
     IOSS_NODISCARD Property get_implicit_property(const std::string &my_name) const override;
 
-    void block_membership(std::vector<std::string> &block_membership) override;
+    void block_membership(Ioss::NameList &block_membership) override;
 
   protected:
     int64_t internal_get_field_data(const Field &field, void *data,

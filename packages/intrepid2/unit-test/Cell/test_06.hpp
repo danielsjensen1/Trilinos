@@ -1,43 +1,10 @@
 // @HEADER
-// ************************************************************************
-//
+// *****************************************************************************
 //                           Intrepid2 Package
-//                 Copyright (2007) Sandia Corporation
 //
-// Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
-// license for use of this work by or on behalf of the U.S. Government.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Kyungjoo Kim  (kyukim@sandia.gov), or
-//                    Mauro Perego  (mperego@sandia.gov)
-//
-// ************************************************************************
+// Copyright 2007 NTESS and the Intrepid2 contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 
@@ -70,7 +37,8 @@ namespace Intrepid2 {
 
     template<typename OutputViewType,
              typename inputViewType,
-             typename worksetViewType>
+             typename worksetViewType,
+             typename ImplBasis>
     struct F_mapToPhysicalFrame {
       OutputViewType _output;
       inputViewType _input;
@@ -96,28 +64,32 @@ namespace Intrepid2 {
         for (ordinal_type i=0;i<P;++i) {
           auto in  = Kokkos::subview(_input,      i, Kokkos::ALL()); // D
           auto out = Kokkos::subview(_output, cl, i, Kokkos::ALL()); // D
-          Impl::Basis_HGRAD_QUAD_C1_FEM::Serial<OPERATOR_VALUE>::getValues(val, in);
+          ImplBasis::template Serial<OPERATOR_VALUE>::getValues(val, in);
           Impl::CellTools::Serial::mapToPhysicalFrame(out, val, nodes);
         }
       }
     };
 
     template<typename OutputViewType,
-             typename inputViewType,
-             typename worksetViewType>      
+             typename InputViewType,
+             typename WorksetViewType,
+             typename ImplBasis>      
     struct F_mapToReferenceFrame {
       OutputViewType _output;
-      inputViewType _input;
-      worksetViewType _workset;
+      InputViewType _input;
+      WorksetViewType _workset;
+      typename InputViewType::value_type _shellThickness;
 
 
       KOKKOS_INLINE_FUNCTION
       F_mapToReferenceFrame(OutputViewType output_,
-                            inputViewType input_,
-                            worksetViewType workset_) 
+                            InputViewType input_,
+                            WorksetViewType workset_,
+                            typename InputViewType::value_type shellThickness_ = -1.0) 
         : _output(output_), 
           _input(input_), 
-          _workset(workset_) {}
+          _workset(workset_),
+          _shellThickness(shellThickness_) {}
       
       KOKKOS_INLINE_FUNCTION
       void
@@ -125,12 +97,13 @@ namespace Intrepid2 {
         const ordinal_type P = _output.extent(1);
 
         auto nodes = Kokkos::subview(_workset, cl, Kokkos::ALL(), Kokkos::ALL()); // N,D
+        typename InputViewType::value_type tol = tolerance();
         for (ordinal_type i=0;i<P;++i) {
           auto in  = Kokkos::subview(_input,  cl, i, Kokkos::ALL()); // D
           auto out = Kokkos::subview(_output, cl, i, Kokkos::ALL()); // D
           
           Impl::CellTools::Serial
-            ::mapToReferenceFrame<Impl::Basis_HGRAD_QUAD_C1_FEM>(out, in, nodes);
+            ::mapToReferenceFrame<ImplBasis>(out, in, nodes, tol, _shellThickness);
         }
         
       }
@@ -163,7 +136,7 @@ namespace Intrepid2 {
         << "|                                                                             |\n"
         << "===============================================================================\n";
   
-      const ValueType tol = tolerence()*100.0;
+      const ValueType tol = tolerance<ValueType>()*100.0;
 
       int errorFlag = 0;
       
@@ -246,7 +219,8 @@ namespace Intrepid2 {
           {
             typedef F_mapToPhysicalFrame<decltype(b_pts_on_phy),
                                          decltype(pts_on_ref),
-                                         decltype(workset)> FunctorType;
+                                         decltype(workset),
+                                         Impl::Basis_HGRAD_QUAD_C1_FEM> FunctorType;
             Kokkos::parallel_for(policy, FunctorType(b_pts_on_phy, pts_on_ref, workset));
           }
           // I love lambda...
@@ -314,7 +288,8 @@ namespace Intrepid2 {
           {
             typedef F_mapToReferenceFrame<decltype(b_pts_on_ref),
                                           decltype(pts_on_phy),
-                                          decltype(workset)> FunctorType;
+                                          decltype(workset),
+                                          Impl::Basis_HGRAD_QUAD_C1_FEM> FunctorType;
             Kokkos::parallel_for(policy, FunctorType(b_pts_on_ref, pts_on_phy, workset));
           }
           // Kokkos::parallel_for(policy, KOKKOS_LAMBDA(const ordinal_type cl) {
@@ -327,8 +302,7 @@ namespace Intrepid2 {
           //         ::mapToReferenceFrame<Impl::Basis_HGRAD_QUAD_C1_FEM>(pt_on_ref, pt_on_phy, nodes);
           //     }
           //   });
-          auto b_pts_on_ref_host = Kokkos::create_mirror_view(Kokkos::HostSpace(), b_pts_on_ref);
-          Kokkos::deep_copy(b_pts_on_ref_host, b_pts_on_ref);
+          auto b_pts_on_ref_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), b_pts_on_ref);
 
           // ** compare          
           {
@@ -391,7 +365,8 @@ namespace Intrepid2 {
           {
             typedef F_mapToPhysicalFrame<decltype(b_pts3d_on_phy),
                                          decltype(pts_on_ref),
-                                         decltype(workset3d)> FunctorType;
+                                         decltype(workset3d),
+                                         Impl::Basis_HGRAD_QUAD_C1_FEM> FunctorType;
             Kokkos::parallel_for(policy, FunctorType(b_pts3d_on_phy, pts_on_ref, workset3d));
           }
 
@@ -400,24 +375,24 @@ namespace Intrepid2 {
           ///
 
           // ** compute via impl interface
-          Kokkos::DynRankView<ValueType,DeviceArrayLayout,DeviceType> b_pts3d_on_ref("b_pts3d_on_ref", C, P, D);
-
+          
           {
-            typedef F_mapToReferenceFrame<decltype(b_pts3d_on_ref),
+            Kokkos::deep_copy(b_pts_on_ref, 0.0);
+            typedef F_mapToReferenceFrame<decltype(b_pts_on_ref),
                                           decltype(b_pts3d_on_phy),
-                                          decltype(workset3d)> FunctorType;
-            Kokkos::parallel_for(policy, FunctorType(b_pts3d_on_ref, b_pts3d_on_phy, workset3d));
+                                          decltype(workset3d),
+                                          Impl::Basis_HGRAD_QUAD_C1_FEM> FunctorType;
+            Kokkos::parallel_for(policy, FunctorType(b_pts_on_ref, b_pts3d_on_phy, workset3d));
           }
 
-          auto b_pts3d_on_ref_host = Kokkos::create_mirror_view(Kokkos::HostSpace(), b_pts3d_on_ref);
-          Kokkos::deep_copy(b_pts3d_on_ref_host, b_pts3d_on_ref);
+          Kokkos::deep_copy(b_pts_on_ref_host, b_pts_on_ref);
 
           // ** compare
           {
             for (ordinal_type cl=0;cl<C;++cl)
               for (ordinal_type i=0;i<P;++i)
                 for (ordinal_type j=0;j<D;++j) {
-                  const double diff = std::abs(pts_on_ref_host(i, j) - b_pts3d_on_ref_host(cl, i, j));
+                  const double diff = std::abs(pts_on_ref_host(i, j) - b_pts_on_ref_host(cl, i, j));
                   if (diff > tol) {
                     *outStream << "Error (3d physical space) : mapToReferenceFrame (impl version) at ("
                                << cl << "," << i << "," << j
@@ -426,6 +401,67 @@ namespace Intrepid2 {
                   }
                 }
           }
+
+          *outStream
+            << "\n"
+            << "===============================================================================\n"
+            << "| Test 3: map to reference shell quad c1 element from 3D physical space:      |\n"
+            << "===============================================================================\n\n";
+
+          ValueType shellThickness = 1.0e-2;
+
+          // perturb phys points
+          auto b_pts3d_on_phy_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), b_pts3d_on_phy);
+          ValueType eps = 1e-3;
+          b_pts3d_on_phy_host(0,0,2) += -eps;
+          b_pts3d_on_phy_host(1,1,1) += eps;
+          b_pts3d_on_phy_host(2,3,0) += 2.0*eps;
+          Kokkos::deep_copy(b_pts3d_on_phy,b_pts3d_on_phy_host);
+
+
+          // ** compute via front interface
+          Kokkos::DynRankView<ValueType,DeviceArrayLayout,DeviceType> a_pts3d_on_ref("a_pts3d_on_ref", C, P, D+1);
+          {
+            CellTools<DeviceType>
+              ::mapToReferenceFrame(a_pts3d_on_ref, b_pts3d_on_phy, workset3d, 
+                                    shards::CellTopology(shards::getCellTopologyData<shards::ShellQuadrilateral<4> >()), shellThickness);
+          }
+          
+          // ** compute via Impl interface
+          Kokkos::DynRankView<ValueType,DeviceArrayLayout,DeviceType> b_pts3d_on_ref("b_pts3d_on_ref", C, P, D+1);
+          {            
+            typedef F_mapToReferenceFrame<decltype(b_pts3d_on_ref),
+                                          decltype(b_pts3d_on_phy),
+                                          decltype(workset3d),
+                                          Impl::Basis_HGRAD_QUAD_C1_FEM> FunctorType;
+              Kokkos::parallel_for(policy, FunctorType(b_pts3d_on_ref, b_pts3d_on_phy, workset3d,shellThickness));
+          }
+
+          
+
+          auto a_pts3d_on_ref_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), a_pts3d_on_ref);
+          auto b_pts3d_on_ref_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), b_pts3d_on_ref);
+
+
+          // ** compare          
+          {
+            for (ordinal_type cl=0;cl<C;++cl)
+              for (ordinal_type i=0;i<P;++i) 
+                for (ordinal_type j=0;j<D+1;++j) {
+                  const double diff = std::abs(a_pts3d_on_ref_host(cl, i, j) - b_pts3d_on_ref_host(cl, i, j));
+                  if (diff > tol) {
+                    *outStream << "Error : mapToReferenceFrame (impl version) at (" 
+                               << cl << "," << i << "," << j 
+                               << ") with diff = " << diff << "\n";
+                    errorFlag++;
+                  }
+                }
+          }
+
+
+
+
+
         }
       } catch (std::logic_error &err) {
         //============================================================================================//

@@ -1,41 +1,11 @@
-//@HEADER
-// ************************************************************************
-//
+// @HEADER
+// *****************************************************************************
 //                 Belos: Block Linear Solvers Package
-//                  Copyright 2004 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// ************************************************************************
-//@HEADER
+// Copyright 2004-2016 NTESS and the Belos contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
 
 #ifndef BELOS_TPETRA_GMRES_HPP
 #define BELOS_TPETRA_GMRES_HPP
@@ -288,14 +258,15 @@ protected:
   using vec_type = typename base_type::vec_type;
 
 private:
-  using MVT = Belos::MultiVecTraits<SC, MV>;
+  using DM = Teuchos::SerialDenseMatrix<int, SC>;
+  using MVT = Belos::MultiVecTraits<SC, MV, DM>;
   using LO = typename MV::local_ordinal_type;
   using STS = Teuchos::ScalarTraits<SC>;
   using real_type = typename STS::magnitudeType;
   using STM = Teuchos::ScalarTraits<real_type>;
   using device_type = typename MV::device_type;
 
-  using ortho_type = Belos::OrthoManager<SC, MV>;
+  using ortho_type = Belos::OrthoManager<SC, MV, DM>;
   using dense_matrix_type = Teuchos::SerialDenseMatrix<LO, SC>;
   using dense_vector_type = Teuchos::SerialDenseVector<LO, SC>;
   using real_vector_type = Teuchos::SerialDenseVector<LO, real_type>;
@@ -365,7 +336,7 @@ protected:
       // Since setOrthogonalizer only gets called on demand, we know
       // the preconditioner (if any) at this point.  Thus, we can use
       // Belos::OrthoManagerFactory here.
-      Belos::OrthoManagerFactory<SC, MV, OP> factory;
+      Belos::OrthoManagerFactory<SC, MV, OP, DM> factory;
       Teuchos::RCP<Belos::OutputManager<SC>> outMan; // can be null
       Teuchos::RCP<Teuchos::ParameterList> params;   // can be null
       if (this->input_.maxOrthoSteps > 0) {

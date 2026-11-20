@@ -1,48 +1,11 @@
-/* 
- * @HEADER
- *
- * ***********************************************************************
- *
- *  Zoltan Toolkit for Load-balancing, Partitioning, Ordering and Coloring
- *                  Copyright 2012 Sandia Corporation
- *
- * Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
- * the U.S. Government retains certain rights in this software.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- * 1. Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *
- * 2. Redistributions in binary form must reproduce the above copyright
- * notice, this list of conditions and the following disclaimer in the
- * documentation and/or other materials provided with the distribution.
- *
- * 3. Neither the name of the Corporation nor the names of the
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- * Questions? Contact Karen Devine	kddevin@sandia.gov
- *                    Erik Boman	egboman@sandia.gov
- *
- * ***********************************************************************
- *
- * @HEADER
- */
+// @HEADER
+// *****************************************************************************
+//  Zoltan Toolkit for Load-balancing, Partitioning, Ordering and Coloring
+//
+// Copyright 2012 NTESS and the Zoltan contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
 
 
 #ifdef __cplusplus
@@ -200,7 +163,7 @@ void Zoltan_LB_Serialize(struct Zoltan_Struct const *zz, char **buf)
  
   /* Copy Remap array; needed by Point_Assign  */
   if (lb->Remap != NULL) {
-    int *intptr = (int *)bufptr;
+    intptr = (int *)bufptr;
     *intptr = 1;  // Sending Remap data
     bufptr += sizeof(int);
     int nbytes = lb->Num_Global_Parts * sizeof(int);
@@ -208,7 +171,7 @@ void Zoltan_LB_Serialize(struct Zoltan_Struct const *zz, char **buf)
     bufptr += nbytes;
   }
   else {
-    int *intptr = (int *)bufptr;
+    intptr = (int *)bufptr;
     *intptr = 0;  // Not sending Remap data
     bufptr += sizeof(int);
   }
@@ -221,13 +184,17 @@ void Zoltan_LB_Serialize(struct Zoltan_Struct const *zz, char **buf)
 }
 
 /*****************************************************************************/
-void Zoltan_LB_Deserialize(struct Zoltan_Struct *zz, char **buf)
+int Zoltan_LB_Deserialize(struct Zoltan_Struct *zz, char **buf, size_t bufSize)
 {
+  char *yo = "Zoltan_LB_Deserialize";
   char *bufptr = *buf;
+  size_t remaining = bufSize;
   struct Zoltan_LB_Struct *lb = &(zz->LB);
   int orig_Imb_Tol_Len = lb->Imb_Tol_Len;
 
   /* Copy 12 integers into zz->LB */
+  if (remaining < 12 * sizeof(int))
+    goto Error;
   int *intptr = (int *) bufptr;
   lb->Num_Global_Parts = *intptr; intptr++;
   lb->Num_Global_Parts_Param = *intptr; intptr++;
@@ -242,41 +209,71 @@ void Zoltan_LB_Deserialize(struct Zoltan_Struct *zz, char **buf)
   lb->Uniform_Parts = *intptr; intptr++;
   lb->Imb_Tol_Len = *intptr; intptr++;
   bufptr = (char *) intptr;
+  remaining -= 12 * sizeof(int);
 
   /* Reset the functions (Point_Assign, etc.) associated with the LB_Method */
-  strcpy(lb->Method_Name, bufptr);
+  if (remaining < MAX_PARAM_STRING_LEN)
+    goto Error;
+  strncpy(lb->Method_Name, bufptr, MAX_PARAM_STRING_LEN - 1);
+  lb->Method_Name[MAX_PARAM_STRING_LEN - 1] = '\0';
   bufptr += MAX_PARAM_STRING_LEN;
+  remaining -= MAX_PARAM_STRING_LEN;
   Zoltan_Set_Param(zz, "LB_METHOD", lb->Method_Name);
 
   /* Copy Part_Info */
   if (lb->Part_Info_Len) {
+    if (lb->Part_Info_Len < 0 ||
+        (size_t)lb->Part_Info_Len >
+        remaining / sizeof(struct Zoltan_part_info))
+      goto Error;
     size_t tmpSize = lb->Part_Info_Len * sizeof(struct Zoltan_part_info);
     lb->Part_Info = (struct Zoltan_part_info *) ZOLTAN_MALLOC(tmpSize);
+    if (lb->Part_Info == NULL)
+      goto Error;
     memcpy((char *)(lb->Part_Info), bufptr, tmpSize);
     bufptr += tmpSize;
+    remaining -= tmpSize;
   }
 
   /* Copy Imbalance_Tol */
   if (lb->Imb_Tol_Len) {
+    if (lb->Imb_Tol_Len < 0 ||
+        (size_t)lb->Imb_Tol_Len > remaining / sizeof(float))
+      goto Error;
     size_t tmpSize = lb->Imb_Tol_Len * sizeof(float);
     if (lb->Imb_Tol_Len > orig_Imb_Tol_Len) {
       if (lb->Imbalance_Tol != NULL) ZOLTAN_FREE(&(lb->Imbalance_Tol));
       lb->Imbalance_Tol = (float *) ZOLTAN_MALLOC(tmpSize);
+      if (lb->Imbalance_Tol == NULL)
+        goto Error;
     }
     memcpy((char *)(lb->Imbalance_Tol), bufptr, tmpSize);
     bufptr += tmpSize;
+    remaining -= tmpSize;
   }
 
   /* Copy lb->Approach */
-  strcpy(lb->Approach, bufptr);
+  if (remaining < MAX_PARAM_STRING_LEN)
+    goto Error;
+  strncpy(lb->Approach, bufptr, MAX_PARAM_STRING_LEN - 1);
+  lb->Approach[MAX_PARAM_STRING_LEN - 1] = '\0';
   bufptr += MAX_PARAM_STRING_LEN;
- 
+  remaining -= MAX_PARAM_STRING_LEN;
+
   /* Copy Remap array; needed by Point_Assign  */
-  int nbytes = lb->Num_Global_Parts * sizeof(int);
+  if (remaining < sizeof(int))
+    goto Error;
   intptr = (int *) bufptr;
   bufptr += sizeof(int);
+  remaining -= sizeof(int);
   if (*intptr) {  // Remap data was sent
+    if (lb->Num_Global_Parts < 0 ||
+        (size_t)lb->Num_Global_Parts > remaining / sizeof(int))
+      goto Error;
+    size_t nbytes = lb->Num_Global_Parts * sizeof(int);
     lb->Remap = (int *) ZOLTAN_MALLOC(nbytes);
+    if (lb->Remap == NULL && nbytes)
+      goto Error;
     memcpy(lb->Remap, bufptr, nbytes);
     bufptr += nbytes;
   }
@@ -289,6 +286,13 @@ void Zoltan_LB_Deserialize(struct Zoltan_Struct *zz, char **buf)
     lb->Deserialize_Structure(zz, &bufptr);
 
   *buf = bufptr;
+  return ZOLTAN_OK;
+
+Error:
+  ZOLTAN_PRINT_ERROR(zz->Proc, yo,
+                     "Invalid or truncated serialized Zoltan buffer.");
+  *buf = bufptr;
+  return ZOLTAN_FATAL;
 }
 
 /****************************************************************************/

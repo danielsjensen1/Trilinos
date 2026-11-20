@@ -1,48 +1,11 @@
-/* 
- * @HEADER
- *
- * ***********************************************************************
- *
- *  Zoltan Toolkit for Load-balancing, Partitioning, Ordering and Coloring
- *                  Copyright 2012 Sandia Corporation
- *
- * Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
- * the U.S. Government retains certain rights in this software.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- * 1. Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *
- * 2. Redistributions in binary form must reproduce the above copyright
- * notice, this list of conditions and the following disclaimer in the
- * documentation and/or other materials provided with the distribution.
- *
- * 3. Neither the name of the Corporation nor the names of the
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- * Questions? Contact Karen Devine	kddevin@sandia.gov
- *                    Erik Boman	egboman@sandia.gov
- *
- * ***********************************************************************
- *
- * @HEADER
- */
+// @HEADER
+// *****************************************************************************
+//  Zoltan Toolkit for Load-balancing, Partitioning, Ordering and Coloring
+//
+// Copyright 2012 NTESS and the Zoltan contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
  
 
 #ifdef __cplusplus
@@ -953,14 +916,27 @@ static int pmatching_ipm (ZZ *zz,
         gnoptr = (ZOLTAN_GNO_TYPE *)r;
         intptr = (int *)(gnoptr + 1);
 
+        if ((char *)(intptr + (hgp->UsePrefPart ? 3 : 2)) > edgebuf + recsize)
+          FATAL_ERROR("Received truncated candidate record");
+        if (n >= total_nCandidates)
+          FATAL_ERROR("Received too many candidate records");
+
         gno_locs[n] = (char *)gnoptr - edgebuf;
 
         candidate_index = *intptr++;
+
+        if (candidate_index < 0 || candidate_index >= total_nCandidates)
+          FATAL_ERROR("Received out-of-range candidate index");
 
         permute[candidate_index] = n;
 
         if (hgp->UsePrefPart) intptr++;       
         count           =  *intptr++;       /* count of edges */      
+
+        if (count < 0 ||
+            (size_t)count * sizeof(int)
+              > (size_t)(edgebuf + recsize - (char *)intptr))
+          FATAL_ERROR("Received invalid edge count");
 
         r = (char *)(intptr + count);  /* skip of edge lnos */
         n++;
@@ -1135,8 +1111,14 @@ static int pmatching_ipm (ZZ *zz,
       while(r < recvbuf+recsize){
         gnoptr = (ZOLTAN_GNO_TYPE *)r;
         intptr = (int *)(gnoptr + 1);
+        if ((char *)(intptr + 2) > recvbuf + recsize)
+          FATAL_ERROR("Received truncated inner-product record");
         count = intptr[1];
         candidate_index = intptr[0];
+        if (count < 0 ||
+            (size_t)count * (sizeof(int) + sizeof(float))
+              > (size_t)(recvbuf + recsize - (char *)(intptr + 2)))
+          FATAL_ERROR("Received invalid inner-product count");
         if (candidate_index < 0){                    /* candidate_index */
           *intptr = -candidate_index - 1;         /* make sentinal candidate_index positive */
           rows[k++] = (char *)gnoptr - recvbuf;   /* so we can find gno later */
@@ -1163,6 +1145,8 @@ static int pmatching_ipm (ZZ *zz,
 
               for (j = 0; j < count; j++)  {
                 lno = intptr[2 + j];
+                if (lno < 0 || lno >= hg->nVtx)
+                  FATAL_ERROR("Received out-of-range vertex lno");
                 if (sums[lno] == 0.0){       /* is this first time for this lno? */
                   aux[m++] = lno;           /* then save the lno */
                 }
@@ -1237,17 +1221,32 @@ static int pmatching_ipm (ZZ *zz,
           gnoptr = (ZOLTAN_GNO_TYPE *)r;
           intptr = (int *)(gnoptr + 1);
 
+          if ((char *)(intptr + 2) > recvbuf + recsize)
+            FATAL_ERROR("Received truncated inner-product record");
+
           candidate_gno   = *gnoptr++;
           candidate_index = *intptr++;
           count           = *intptr++;                    /* count of nonzero pairs */
           bestsum = -1.0;                        /* any negative value will do */
           bestlno = -1;                          /* any negative value will do */
 
+          if (candidate_index < 0 || candidate_index >= total_nCandidates)
+            FATAL_ERROR("Received out-of-range candidate index");
+          if (cFLAG && (candidate_gno < 0 || candidate_gno >= hg->nVtx))
+            FATAL_ERROR("Received out-of-range candidate gno");
+          if (count < 0 ||
+              (size_t)count * (sizeof(int) + sizeof(float))
+                > (size_t)(recvbuf + recsize - (char *)intptr))
+            FATAL_ERROR("Received invalid inner-product count");
+
           floatptr = (float *)(intptr + count);
 
           for (i = 0; i < count; i++)  {
             lno =  *intptr++;
             f   =  *floatptr++;     
+
+            if (lno < 0 || lno >= hg->nVtx)
+              FATAL_ERROR("Received out-of-range vertex lno");
 
             if ((f > bestsum) && cmatch[lno] == lno)  { 
               bestsum = f;
@@ -1798,13 +1797,24 @@ static int pmatching_agg_ipm (ZZ *zz,
       gnoptr = (ZOLTAN_GNO_TYPE *)r;
       intptr = (int *)(gnoptr + 1);
 
+      if ((char *)(intptr + header_size) > edgebuf + recsize)
+        FATAL_ERROR("Received truncated candidate record");
+      if (n >= total_nCandidates)
+        FATAL_ERROR("Received too many candidate records");
+
       candidate_index = intptr[0];
+      if (candidate_index < 0 || candidate_index >= total_nCandidates)
+        FATAL_ERROR("Received out-of-range candidate index");
       if (hgp->UsePrefPart){
         count = intptr[2];
       }
       else{
         count = intptr[1];
       }
+      if (count < 0 ||
+          (size_t)count * sizeof(int) + (size_t)VtxDim * sizeof(float)
+            > (size_t)(edgebuf + recsize - (char *)(intptr + header_size)))
+        FATAL_ERROR("Received invalid edge count");
 
       floatptr = (float *)(intptr + header_size + count);
 
@@ -1939,7 +1949,13 @@ static int pmatching_agg_ipm (ZZ *zz,
 
         gnoptr = (ZOLTAN_GNO_TYPE *)r;
         intptr = (int *)(gnoptr + 1);
+        if ((char *)(intptr + 2) > recvbuf + recsize)
+          FATAL_ERROR("Received truncated inner-product record");
         count = intptr[1];
+        if (count < 0 ||
+            (size_t)count * (sizeof(int) + sizeof(float))
+              > (size_t)(recvbuf + recsize - (char *)(intptr + 2)))
+          FATAL_ERROR("Received invalid inner-product count");
         floatptr = (float *)(intptr + 2 + count);
         r = (char *)(floatptr + count);
 
@@ -1973,6 +1989,8 @@ static int pmatching_agg_ipm (ZZ *zz,
 
               for (j = 0; j < count; j++)  {
                 lno = intptr[2+j];
+                if (lno < 0 || lno >= hg->nVtx)
+                  FATAL_ERROR("Received out-of-range vertex lno");
                 if (sums[lno] == 0.0)   /* is this first time for this lno? */ 
                     aux[m++] = lno;     /* then save the lno */
                 sums[lno] += *floatptr++;    /* sum the psums */
@@ -2070,6 +2088,11 @@ static int pmatching_agg_ipm (ZZ *zz,
           candidate_index = *intptr++;
           bestlno         = *intptr++;                    /* count of nonzero pairs */
           bestsum         = *floatptr;
+
+          if (candidate_index < 0 || candidate_index >= total_nCandidates)
+            FATAL_ERROR("Received out-of-range candidate index");
+          if (bestlno < 0 || bestlno >= hg->nVtx)
+            FATAL_ERROR("Received out-of-range vertex lno");
 
 /*          uprintf(hgc, "local best for cand %zd (idx=%d) is %d with ip=%f\n", candidate_gno, candidate_index, (bestlno<0) ? -1 : match[bestlno], bestsum);*/
           master_data[candidate_index].candidate = candidate_gno;
@@ -2227,6 +2250,9 @@ static int pmatching_agg_ipm (ZZ *zz,
         r = (char *)(floatptr + VtxDim);
 
         ci = *intptr++;
+
+        if (ci < 0 || ci >= total_nCandidates)
+          FATAL_ERROR("Received out-of-range candidate index");
 
         lno=VTX_GNO_TO_LNO(hg, global_best[ci].candidate);    /* global_best is not one of my columns */
 

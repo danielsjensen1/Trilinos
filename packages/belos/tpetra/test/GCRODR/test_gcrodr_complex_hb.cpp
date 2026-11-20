@@ -1,43 +1,11 @@
-//@HEADER
-// ************************************************************************
-//
+// @HEADER
+// *****************************************************************************
 //                 Belos: Block Linear Solvers Package
-//                  Copyright 2004 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
-//
-// ************************************************************************
-//@HEADER
+// Copyright 2004-2016 NTESS and the Belos contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
 //
 // This driver reads a problem from a Harwell-Boeing (HB) file.
 // The right-hand-side corresponds to a randomly generated solution.
@@ -59,16 +27,15 @@
 #include <Teuchos_ParameterList.hpp>
 #include <Teuchos_GlobalMPISession.hpp>
 
-template <typename ScalarType>
-int run(int argc, char *argv[])
+template <class ScalarType, class DM>
+int run(Teuchos::CommandLineProcessor& cmdp, int argc, char *argv[])
 { 
   using Teuchos::Comm;
   using Teuchos::RCP;
   using Teuchos::rcpFromRef;
   using Teuchos::tuple;  
   
-  using BST = typename Tpetra::MultiVector<ScalarType>::scalar_type;
-  using ST = typename std::complex<BST>;
+  using ST = ScalarType;
 
   using SCT = typename Teuchos::ScalarTraits<ST>;
   using MT = typename SCT::magnitudeType;
@@ -76,7 +43,7 @@ int run(int argc, char *argv[])
   using OP = typename Tpetra::Operator<ST>;
   using MV = typename Tpetra::MultiVector<ST>;
   using OPT = typename Belos::OperatorTraits<ST,MV,OP>;
-  using MVT = typename Belos::MultiVecTraits<ST,MV>;
+  using MVT = typename Belos::MultiVecTraits<ST,MV,DM>;
 
   using tcrsmatrix_t = Tpetra::CrsMatrix<ST>;
 
@@ -94,7 +61,6 @@ int run(int argc, char *argv[])
   std::string filename("mhd1280b.cua");
   MT tol = 1.0e-5;     // relative residual tolerance
 
-  Teuchos::CommandLineProcessor cmdp(false,true);
   cmdp.setOption("verbose","quiet",&verbose,"Print messages and results.");
   cmdp.setOption("debug","nodebug",&debug,"Run debugging checks.");
   cmdp.setOption("frequency",&frequency,"Solvers frequency for printing residuals (#iters).");
@@ -124,7 +90,7 @@ int run(int argc, char *argv[])
   // Create initial vectors
   RCP<MV> B, X;
   X = rcp( new MV(map,numrhs) );
-  MVT::MvRandom( *X );
+  MVT::MvInit( *X, one );
   B = rcp( new MV(map,numrhs) );
   OPT::Apply( *A, *X, *B );
   MVT::MvInit( *X, 0.0 );
@@ -134,7 +100,7 @@ int run(int argc, char *argv[])
   const int NumGlobalElements = B->getGlobalLength();
   int numIters1, numIters2, numIters3;
   int maxits = NumGlobalElements; // maximum number of iterations to run
-  int numBlocks = 100;
+  int numBlocks = 300;
   int numRecycledBlocks = 20;
   Teuchos::ParameterList belosList;
   belosList.set( "Maximum Iterations", maxits );         // Maximum number of iterations allowed
@@ -157,7 +123,7 @@ int run(int argc, char *argv[])
   }
   
   // Construct an unpreconditioned linear problem instance.
-  Belos::LinearProblem<ST,MV,OP> problem( A, X, B );
+  Belos::LinearProblem<ST,MV,OP,DM> problem( A, X, B );
   bool set = problem.setProblem();
   if (set == false) {
     if (proc_verbose)
@@ -166,7 +132,7 @@ int run(int argc, char *argv[])
   }
 
   // Start the GCRODR iteration
-  Belos::GCRODRSolMgr<ST,MV,OP> solver( rcpFromRef(problem), rcpFromRef(belosList) );
+  Belos::GCRODRSolMgr<ST,MV,OP,DM> solver( rcpFromRef(problem), rcpFromRef(belosList) );
 
   // Print out information about problem
   if (proc_verbose) {
@@ -220,7 +186,10 @@ int run(int argc, char *argv[])
 
   if (proc_verbose) { std::cout << "Third solve took " << numIters3 << " iterations." << std::endl; }
 
-  if ( ret!=Belos::Converged || badRes || numIters1 < numIters2 || numIters2 < numIters3 ) {
+  if ( ret==Belos::Converged && !badRes && numIters1 >= numIters2 && numIters2 >= numIters3 ) {
+    // Ok
+  }
+  else {
     if (proc_verbose) {
       std::cout << "\nEnd Result: TEST FAILED" << std::endl;
     }
@@ -235,8 +204,9 @@ int run(int argc, char *argv[])
 
 } // end test_gcrodr_complex_hb.cpp
 
-int main(int argc, char *argv[]) {
-  return run<double>(argc, argv);
-  // return run<float>(argc, argv);
-}
+#define BELOS_DEFAULT_SCALAR typename Tpetra::MultiVector<std::complex<double>>::scalar_type
+#include "BelosTpetraTestMain.hpp"
 
+int main(int argc, char* argv[]) {
+  return common_main(argc, argv);
+}

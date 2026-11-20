@@ -122,7 +122,6 @@ TEST(UnitTestingOfBulkData, node_sharing)
   std::shared_ptr<BulkData> meshPtr = builder.create();
   BulkData& mesh = *meshPtr;
   MetaData& meta_data = mesh.mesh_meta_data();
-  meta_data.use_simple_fields();
   stk::mesh::Part& elem_part = meta_data.declare_part_with_topology("elem_part", stk::topology::QUAD_4_2D);
   stk::mesh::Part& node_part = meta_data.declare_part_with_topology("node_part", stk::topology::NODE);
   meta_data.commit();
@@ -155,15 +154,12 @@ TEST(UnitTestingOfBulkData, node_sharing)
   mesh.declare_relation( createdElem, createdNodes[3], 3 );
 
   // Declare all processors that share any of our nodes
-  std::ostringstream oss;
   for (unsigned i = 0; i < numSharings; ++i)
   {
     Entity node = mesh.get_entity(stk::topology::NODE_RANK, sharingInfo[p_rank][i*2]);
-    oss << "P" << p_rank << ": entity " << node << " = " <<  mesh.entity_key(node) << std::endl;
     int sharingProc = sharingInfo[p_rank][i*2+1];
     mesh.add_node_sharing(node, sharingProc);
   }
-  std::cout << oss.str() << std::flush;
 
   mesh.modification_end();
 
@@ -282,8 +278,6 @@ TEST(UnitTestingOfBulkData, sharedProcsIntersection)
   builder.set_spatial_dimension(spatialDim);
   std::shared_ptr<BulkData> bulkPtr = builder.create();
   stk::mesh::BulkData& bulk = *bulkPtr;
-  stk::mesh::MetaData& meta = bulk.mesh_meta_data();
-  meta.use_simple_fields();
   stk::io::fill_mesh("generated:1x1x4", bulk);
 
   stk::mesh::Entity sharedNode9 = bulk.get_entity(stk::topology::NODE_RANK, 9);
@@ -391,7 +385,6 @@ TEST(UnitTestingOfBulkData, node_sharing_with_dangling_nodes)
   std::shared_ptr<BulkData> meshPtr = builder.create();
   BulkData& mesh = *meshPtr;
   MetaData& meta_data = mesh.mesh_meta_data();
-  meta_data.use_simple_fields();
   stk::mesh::Part& elem_part = meta_data.declare_part_with_topology("elem_part", stk::topology::QUAD_4_2D);
   stk::mesh::Part& node_part = meta_data.declare_part_with_topology("node_part", stk::topology::NODE);
   meta_data.commit();
@@ -422,7 +415,6 @@ TEST(UnitTestingOfBulkData, node_sharing_with_dangling_nodes)
   if (doNew)
   {
     mesh.declare_node(sharingInfo1[p_rank][0], stk::mesh::ConstPartVector{&node_part}) ;
-    std::cout << "P[" << p_rank << "] declared node= " << sharingInfo1[p_rank][0] << std::endl;
   }
 
   // Add relations to nodes
@@ -445,7 +437,6 @@ TEST(UnitTestingOfBulkData, node_sharing_with_dangling_nodes)
     {
       int sharingProc = sharingInfo1[p_rank][i*2+1];
       Entity node = mesh.get_entity(stk::topology::NODE_RANK, sharingInfo1[p_rank][i*2]);
-      std::cout << "P[" << p_rank << "] add_node_sharing node= " << sharingInfo1[p_rank][i*2] << " sharingProc= " << sharingProc <<  " is_valid= " << mesh.is_valid(node) << std::endl;
       mesh.add_node_sharing(node, sharingProc);
     }
   }
@@ -621,7 +612,6 @@ TEST(UnitTestBulkData, resolveSharedModifiedFaceNextToUnmodifiedFaces)
   std::shared_ptr<BulkData> bulkPtr = builder.create();
   stk::mesh::BulkData& bulk = *bulkPtr;
   stk::mesh::MetaData& meta = bulk.mesh_meta_data();
-  meta.use_simple_fields();
   stk::mesh::Part& block2 = meta.declare_part_with_topology("block_2", stk::topology::HEX_8);
   stk::io::fill_mesh("generated:3x1x2", bulk);
   stk::mesh::Part& block1 = *meta.get_part("block_1");

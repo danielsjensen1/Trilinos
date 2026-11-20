@@ -1,31 +1,10 @@
 // @HEADER
-// ************************************************************************
+// *****************************************************************************
+//           Trilinos: An Object-Oriented Solver Framework
 //
-//                           Intrepid Package
-//                 Copyright (2007) Sandia Corporation
-//
-// Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
-// license for use of this work by or on behalf of the U.S. Government.
-//
-// This library is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as
-// published by the Free Software Foundation; either version 2.1 of the
-// License, or (at your option) any later version.
-//
-// This library is distributed in the hope that it will be useful, but
-// WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-// Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public
-// License along with this library; if not, write to the Free Software
-// Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301
-// USA
-// Questions? Contact Pavel Bochev  (pbboche@sandia.gov),
-//                    Denis Ridzal  (dridzal@sandia.gov),
-//                    Kara Peterson (kjpeter@sandia.gov).
-//
-// ************************************************************************
+// Copyright 2001-2024 NTESS and the Trilinos contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #include <stdlib.h> 
@@ -242,7 +221,7 @@ int main(int argc, char** argv)
       printf("PARSE ERROR\n");
       echo_char_array[essz] = '\0';
       echo_char_array = getPamgenEchoStream(echo_char_array);
-      if(echo_char_array)printf(echo_char_array);
+      if(echo_char_array)printf("%s", echo_char_array);
       if(cr_result == ERROR_CREATING_IMD)printf("ERROR Failure to create Inline_Mesh_Desc creation\n");
       if(echo_char_array)free(echo_char_array);
       return 1;
@@ -253,7 +232,7 @@ int main(int argc, char** argv)
       char * error_char_array = (char *)malloc(essz+1);
       error_char_array[essz] = '\0';
       error_char_array = getPamgenErrorStream(error_char_array);
-      if(error_char_array)printf(error_char_array);
+      if(error_char_array)printf("%s", error_char_array);
       printf("\nERROR Failure to create Mesh_Specification\n");
       if(error_char_array)free(error_char_array);
       return 1;
@@ -267,7 +246,7 @@ int main(int argc, char** argv)
 	warning_char_array[wssz] = '\0';
 	warning_char_array = getPamgenWarningStream(warning_char_array);
 	printf("WARNING Records\n");
-	printf(warning_char_array);
+	printf("%s", warning_char_array);
 	free(warning_char_array);
       }
     }
@@ -280,7 +259,7 @@ int main(int argc, char** argv)
 	info_char_array[issz] = '\0';
 	info_char_array = getPamgenInfoStream(info_char_array);
 	printf("INFO Records\n");
-	printf(info_char_array);
+	printf("%s", info_char_array);
 	free(info_char_array);
       }
     }
@@ -850,7 +829,7 @@ int nct;
     if(mss.num_info_records) { 
       printf("Info Records\n");
       for(i = 0; i < mss.num_info_records; i ++){
-	printf(mss.info_records[i]);
+	printf("%s", mss.info_records[i]);
       }
     }
 
@@ -1101,9 +1080,9 @@ void write_to_exodus(int rank, int num_procs, char * out_file_name)
   /*map*/
   error += ex_put_map(out_id, mss.element_order_map);
   PERROR;
-  error += ex_put_elem_num_map(out_id, mss.global_element_numbers);
+  error += ex_put_id_map(out_id, EX_ELEM_MAP, mss.global_element_numbers);
   PERROR;
-  error += ex_put_node_num_map(out_id, mss.global_node_numbers);
+  error += ex_put_id_map(out_id, EX_NODE_MAP, mss.global_node_numbers);
   PERROR;
 
 
@@ -1128,7 +1107,7 @@ void write_to_exodus(int rank, int num_procs, char * out_file_name)
   
   for (b = 0; b < mss.num_elem_blk; b++) {
     if ( mss.elements[b] > 0 ){
-      error += ex_put_elem_conn(out_id,mss.block_id[b],mss.elmt_node_linkage[b]);
+      error += ex_put_conn(out_id,EX_ELEM_BLOCK,mss.block_id[b],mss.elmt_node_linkage[b], 0, 0);
       PERROR;
     }
   }
@@ -1137,26 +1116,26 @@ void write_to_exodus(int rank, int num_procs, char * out_file_name)
 /* write in nodal boundary sets for the body.*/
 
   for(i = 0; i < mss.num_node_sets; i++) {  
-    error += ex_put_node_set_param(out_id, mss.node_set_id[i],
-                                  mss.num_nodes_in_node_set[i], 
-                                  mss.num_df_in_node_set[i]);
+    error += ex_put_set_param(out_id, EX_NODE_SET, mss.node_set_id[i],
+                              mss.num_nodes_in_node_set[i],
+                              mss.num_df_in_node_set[i]);
     PERROR;
     if(mss.num_nodes_in_node_set[i])
-      error += ex_put_node_set(out_id, mss.node_set_id[i], mss.node_set_nodes[i]);
+      error += ex_put_set(out_id, EX_NODE_SET, mss.node_set_id[i], mss.node_set_nodes[i], NULL);
     PERROR;
 
   }
 
   for(i = 0; i < mss.num_side_sets; i++) {
-    error += ex_put_side_set_param(out_id, mss.side_set_id[i], 
-                                  mss.num_elements_in_side_set[i],
-                                  mss.num_df_in_side_set[i]);
+    error += ex_put_set_param(out_id, EX_SIDE_SET, mss.side_set_id[i],
+                              mss.num_elements_in_side_set[i],
+                              mss.num_df_in_side_set[i]);
 
     PERROR;
     if(mss.num_elements_in_side_set[i]) 
-      error += ex_put_side_set(out_id, mss.side_set_id[i], 
-                              mss.side_set_elements[i], 
-                              mss.side_set_faces[i]);
+      error += ex_put_set(out_id, EX_SIDE_SET, mss.side_set_id[i],
+                          mss.side_set_elements[i],
+                          mss.side_set_faces[i]);
     PERROR;
   }
 

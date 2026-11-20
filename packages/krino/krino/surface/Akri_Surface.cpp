@@ -10,30 +10,45 @@
 #include <Akri_SurfaceIntersectionFromSignedDistance.hpp>
 #include <Akri_DiagWriter.hpp>
 #include <stk_util/util/ReportHandler.hpp>
+#include <ostream>
 
 namespace krino{
 
 void
-Surface::prepare_to_compute(const double time, const BoundingBoxType & point_bbox, const double truncation_length)
+Surface::prepare_to_compute(const double /*time*/, const BoundingBoxType & /*point_bbox*/, const double /*truncation_length*/)
 {
   STK_ThrowErrorMsgIf(NULL != my_transformation,
       "This surface with type (" << type()
       << ") has motion specified, but the prepare_to_compute() method has not been implemented yet to support motion.");
 }
 
-void Surface::insert_into(BoundingBoxType & bbox) const
+void Surface::insert_into(BoundingBoxType & /*bbox*/) const
 {
-  ThrowRuntimeError("This surface with type (" << type() << ") has not implemented insert_into().");
+  STK_ThrowErrorMsg("This surface with type (" << type() << ") has not implemented insert_into().");
 }
 
-bool Surface::does_intersect(const BoundingBoxType & bbox) const
+bool Surface::does_intersect(const BoundingBoxType & /*bbox*/) const
 {
-  ThrowRuntimeError("This surface with type (" << type() << ") has not implemented does_intersect().");
+  STK_ThrowErrorMsg("This surface with type (" << type() << ") has not implemented does_intersect().");
+  return false; // unreachable; STK_ThrowErrorMsg does not return
 }
 
 std::pair<int, double> Surface::compute_intersection_with_segment(const stk::math::Vector3d &pt0, const stk::math::Vector3d &pt1, const double edgeCrossingTol) const
 {
   return compute_surface_intersection_with_segment_from_signed_distance(*this, pt0, pt1, edgeCrossingTol);
+}
+
+stk::math::Vector3d Surface::closest_point_normal(const stk::math::Vector3d &x) const
+{
+  STK_ThrowErrorMsg("This surface with type (" << type() << ") has not implemented closest_point_normal().");
+  return stk::math::Vector3d::ZERO; // unreachable; STK_ThrowErrorMsg does not return
+}
+
+std::string Surface::output() const
+{
+  std::ostringstream os;
+  os << "surface with type " << type();
+  return os.str();
 }
 
 } // namespace krino

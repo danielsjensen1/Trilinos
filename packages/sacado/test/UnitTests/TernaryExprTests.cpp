@@ -1,30 +1,10 @@
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //                           Sacado Package
-//                 Copyright (2006) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// This library is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as
-// published by the Free Software Foundation; either version 2.1 of the
-// License, or (at your option) any later version.
-//
-// This library is distributed in the hope that it will be useful, but
-// WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-// Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public
-// License along with this library; if not, write to the Free Software
-// Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301
-// USA
-// Questions? Contact David M. Gay (dmgay@sandia.gov) or Eric T. Phipps
-// (etphipp@sandia.gov).
-//
-// ***********************************************************************
+// Copyright 2006 NTESS and the Sacado contributors.
+// SPDX-License-Identifier: LGPL-2.1-or-later
+// *****************************************************************************
 // @HEADER
 
 #include "Teuchos_UnitTestHarness.hpp"
@@ -84,14 +64,7 @@ TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( Ternary, Ternary, ELRCacheFad_DFadType )
 TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( Ternary, Ternary, ELRCacheFad_SLFadType )
 TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( Ternary, Ternary, ELRCacheFad_SFadType )
 
-#if defined(SACADO_ENABLE_NEW_DESIGN) && !defined(SACADO_NEW_FAD_DESIGN_IS_DEFAULT)
-typedef Sacado::Fad::Exp::DFad<double> ExpFad_DFadType;
-typedef Sacado::Fad::Exp::SLFad<double,global_fad_size> ExpFad_SLFadType;
-typedef Sacado::Fad::Exp::SFad<double,global_fad_size> ExpFad_SFadType;
-TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( Ternary, Ternary, ExpFad_DFadType )
-TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( Ternary, Ternary, ExpFad_SLFadType )
-TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( Ternary, Ternary, ExpFad_SFadType )
-#endif
+
 
 int main( int argc, char* argv[] ) {
   Teuchos::GlobalMPISession mpiSession(&argc, &argv);

@@ -1,3 +1,13 @@
+// @HEADER
+// *****************************************************************************
+//        Phalanx: A Partial Differential Equation Field Evaluation 
+//       Kernel for Flexible Management of Complex Dependency Chains
+//
+// Copyright 2008 NTESS and the Phalanx contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
+
 #ifndef PHALANX_DEVICE_EVALUATOR_HPP
 #define PHALANX_DEVICE_EVALUATOR_HPP
 
@@ -8,7 +18,7 @@ namespace PHX {
   //! Pure virtual interface for instantiating an evaluator on device 
   template<typename Traits>
   struct DeviceEvaluator {
-    using team_policy = Kokkos::TeamPolicy<PHX::exec_space>;
+    using team_policy = Kokkos::TeamPolicy<PHX::ExecutionSpace>;
     using member_type = team_policy::member_type;
     using traits = Traits;
     

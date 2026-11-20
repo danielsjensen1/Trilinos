@@ -1,4 +1,4 @@
-// Copyright(C) 1999-2024 National Technology & Engineering Solutions
+// Copyright(C) 1999-2025 National Technology & Engineering Solutions
 // of Sandia, LLC (NTESS).  Under the terms of Contract DE-NA0003525 with
 // NTESS, the U.S. Government retains certain rights in this software.
 //
@@ -59,11 +59,6 @@ namespace Ioss {
   class IOSS_EXPORT ElementPermutation
   {
   public:
-    ElementPermutation(const ElementPermutation &)            = delete;
-    ElementPermutation &operator=(const ElementPermutation &) = delete;
-
-    virtual ~ElementPermutation() = default;
-
     IOSS_NODISCARD unsigned num_permutations() const;
 
     // The number of positive permutations must be less than or equal to the total number of
@@ -127,7 +122,7 @@ namespace Ioss {
     static EPRegistry &registry();
 
   private:
-    bool equal_(const Ioss::ElementPermutation &rhs, bool quiet) const;
+    IOSS_NODISCARD bool equal_(const Ioss::ElementPermutation &rhs, bool quiet) const;
 
     std::string                           m_type{};
     Permutation                           m_numPermutations{0};
@@ -139,10 +134,7 @@ namespace Ioss {
   class IOSS_EXPORT NullPermutation : public ElementPermutation
   {
   public:
-    static const char *name;
-
     static void factory();
-    NullPermutation(const NullPermutation &) = delete;
 
   protected:
     NullPermutation();
@@ -151,10 +143,7 @@ namespace Ioss {
   class IOSS_EXPORT SpherePermutation : public ElementPermutation
   {
   public:
-    static const char *name;
-
     static void factory();
-    SpherePermutation(const SpherePermutation &) = delete;
 
   protected:
     SpherePermutation();
@@ -163,10 +152,7 @@ namespace Ioss {
   class IOSS_EXPORT LinePermutation : public ElementPermutation
   {
   public:
-    static const char *name;
-
     static void factory();
-    LinePermutation(const LinePermutation &) = delete;
 
   protected:
     LinePermutation();
@@ -175,10 +161,7 @@ namespace Ioss {
   class IOSS_EXPORT SpringPermutation : public ElementPermutation
   {
   public:
-    static const char *name;
-
     static void factory();
-    SpringPermutation(const SpringPermutation &) = delete;
 
   protected:
     SpringPermutation();
@@ -187,10 +170,7 @@ namespace Ioss {
   class IOSS_EXPORT TriPermutation : public ElementPermutation
   {
   public:
-    static const char *name;
-
     static void factory();
-    TriPermutation(const TriPermutation &) = delete;
 
   protected:
     TriPermutation();
@@ -199,10 +179,7 @@ namespace Ioss {
   class IOSS_EXPORT QuadPermutation : public ElementPermutation
   {
   public:
-    static const char *name;
-
     static void factory();
-    QuadPermutation(const QuadPermutation &) = delete;
 
   protected:
     QuadPermutation();
@@ -211,10 +188,7 @@ namespace Ioss {
   class IOSS_EXPORT TetPermutation : public ElementPermutation
   {
   public:
-    static const char *name;
-
     static void factory();
-    TetPermutation(const TetPermutation &) = delete;
 
   protected:
     TetPermutation();
@@ -223,10 +197,7 @@ namespace Ioss {
   class IOSS_EXPORT PyramidPermutation : public ElementPermutation
   {
   public:
-    static const char *name;
-
     static void factory();
-    PyramidPermutation(const PyramidPermutation &) = delete;
 
   protected:
     PyramidPermutation();
@@ -235,10 +206,7 @@ namespace Ioss {
   class IOSS_EXPORT WedgePermutation : public ElementPermutation
   {
   public:
-    static const char *name;
-
     static void factory();
-    WedgePermutation(const WedgePermutation &) = delete;
 
   protected:
     WedgePermutation();
@@ -247,10 +215,7 @@ namespace Ioss {
   class IOSS_EXPORT HexPermutation : public ElementPermutation
   {
   public:
-    static const char *name;
-
     static void factory();
-    HexPermutation(const HexPermutation &) = delete;
 
   protected:
     HexPermutation();
@@ -259,12 +224,9 @@ namespace Ioss {
   class IOSS_EXPORT SuperPermutation : public ElementPermutation
   {
   public:
-    static const char *basename;
-
     static void make_super(const std::string &type);
     static void factory();
     static void factory(unsigned n);
-    SuperPermutation(const SuperPermutation &) = delete;
 
     static std::string get_name(unsigned n);
 

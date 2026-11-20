@@ -1,48 +1,12 @@
 // @HEADER
-//
-// ***********************************************************************
-//
+// *****************************************************************************
 //        MueLu: A package for multigrid based preconditioning
-//                  Copyright 2012 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact
-//                    Jonathan Hu       (jhu@sandia.gov)
-//                    Andrey Prokopenko (aprokop@sandia.gov)
-//                    Ray Tuminaro      (rstumin@sandia.gov)
-//
-// ***********************************************************************
-//
+// Copyright 2012 NTESS and the MueLu contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
+
 #include <iostream>
 
 // Teuchos
@@ -63,12 +27,10 @@
 #include "MueLu_NullspacePresmoothFactory.hpp"
 #include "MueLu_SaPFactory.hpp"
 #include "MueLu_RAPFactory.hpp"
-#include "MueLu_IfpackSmoother.hpp"
 #include "MueLu_Ifpack2Smoother.hpp"
 #include "MueLu_ProjectorSmoother.hpp"
 
 #include "MueLu_MergedSmoother.hpp"
-#include "MueLu_AmesosSmoother.hpp"
 #include "MueLu_Amesos2Smoother.hpp"
 #include "MueLu_Utilities.hpp"
 
@@ -118,20 +80,9 @@ RCP<SmootherPrototype> gimmeGaussSeidelProto(Xpetra::UnderlyingLib lib) {
   ifpackList.set("relaxation: sweeps", (LO)1);
   ifpackList.set("relaxation: damping factor", (SC)1.0);
 
-  if (lib == Xpetra::UseEpetra) {
-#if defined(HAVE_MUELU_EPETRA) && defined(HAVE_MUELU_IFPACK)
-#if defined(HAVE_MUELU_SERIAL)
-    ifpackList.set("relaxation: type", "symmetric Gauss-Seidel");
-    smooProto = MueLu::GetIfpackSmoother<SC, LO, GO, NO>("point relaxation stand-alone", ifpackList);
-#else
-    throw(MueLu::Exceptions::RuntimeError("gimmeGaussSeidelProto: IfpackSmoother only available with SerialNode."));
-#endif
-#endif
-  } else if (lib == Xpetra::UseTpetra) {
-#if defined(HAVE_MUELU_IFPACK2)
+  if (lib == Xpetra::UseTpetra) {
     ifpackList.set("relaxation: type", "Symmetric Gauss-Seidel");
     smooProto = rcp(new Ifpack2Smoother("RELAXATION", ifpackList));
-#endif
   }
   if (smooProto == Teuchos::null) {
     throw(MueLu::Exceptions::RuntimeError("gimmeGaussSeidelSmoother: smoother error"));
@@ -142,29 +93,12 @@ RCP<SmootherPrototype> gimmeGaussSeidelProto(Xpetra::UnderlyingLib lib) {
 
 RCP<SmootherPrototype> gimmeCoarseProto(Xpetra::UnderlyingLib lib, const std::string& coarseSolver, int rank) {
   RCP<SmootherPrototype> coarseProto;
-  if (lib == Xpetra::UseEpetra) {
-#if defined(HAVE_MUELU_EPETRA) && defined(HAVE_MUELU_AMESOS)
-#if defined(HAVE_MUELU_SERIAL)
-    if (rank == 0) std::cout << "CoarseGrid: AMESOS" << std::endl;
-    Teuchos::ParameterList amesosList;
-    amesosList.set("PrintTiming", true);
-    coarseProto = MueLu::GetAmesosSmoother<SC, LO, GO, NO>("Amesos_Klu", amesosList);
-#else
-    throw(MueLu::Exceptions::RuntimeError("gimmeGaussSeidelProto: AmesosSmoother only available with SerialNode."));
-#endif
-#endif
-  } else if (lib == Xpetra::UseTpetra) {
+  if (lib == Xpetra::UseTpetra) {
     if (coarseSolver == "amesos2") {
-#if defined(HAVE_MUELU_AMESOS2)
       if (rank == 0) std::cout << "CoarseGrid: AMESOS2" << std::endl;
       Teuchos::ParameterList paramList;  // unused
       coarseProto = rcp(new Amesos2Smoother("Superlu", paramList));
-#else
-      std::cout << "AMESOS2 not available (try --coarseSolver=ifpack2)" << std::endl;
-      return Teuchos::null;  // TODO test for exception //EXIT_FAILURE;
-#endif  // HAVE_MUELU_AMESOS2
     } else if (coarseSolver == "ifpack2") {
-#if defined(HAVE_MUELU_IFPACK2)
       if (rank == 0) std::cout << "CoarseGrid: IFPACK2" << std::endl;
       Teuchos::ParameterList ifpack2List;
       ifpack2List.set("fact: ilut level-of-fill", (double)99);  // TODO ??
@@ -172,11 +106,6 @@ RCP<SmootherPrototype> gimmeCoarseProto(Xpetra::UnderlyingLib lib, const std::st
       ifpack2List.set("fact: absolute threshold", 0.0);
       ifpack2List.set("fact: relative threshold", 1.0);
       coarseProto = rcp(new Ifpack2Smoother("ILUT", ifpack2List));
-#else
-      std::cout << "IFPACK2 not available (try --coarseSolver=amesos2)" << std::endl;
-      // TODO        TEUCHOS_TEST_FOR_EXCEPTION
-      return Teuchos::null;
-#endif
     } else {
       std::cout << "Unknow coarse grid solver (try  --coarseSolver=ifpack2 or --coarseSolver=amesos2)" << std::endl;
       return Teuchos::null;
@@ -235,7 +164,7 @@ int main(int argc, char* argv[]) {
     clp.setOption("nSmoothers", &nSmoothers, "number of Gauss-Seidel smoothers in the MergedSmoothers");
     clp.setOption("maxLevels", &maxLevels, "maximum number of levels allowed. If 1, then a MergedSmoother is used on the coarse grid");
     clp.setOption("its", &its, "number of multigrid cycles");
-    clp.setOption("coarseSolver", &coarseSolver, "amesos2 or ifpack2 (Tpetra specific. Ignored for Epetra)");
+    clp.setOption("coarseSolver", &coarseSolver, "amesos2 or ifpack2");
 
     switch (clp.parse(argc, argv)) {
       case Teuchos::CommandLineProcessor::PARSE_HELP_PRINTED: return EXIT_SUCCESS;

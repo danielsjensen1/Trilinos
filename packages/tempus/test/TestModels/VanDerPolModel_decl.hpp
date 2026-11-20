@@ -1,10 +1,11 @@
-// @HEADER
-// ****************************************************************************
-//                Tempus: Copyright (2017) Sandia Corporation
+//@HEADER
+// *****************************************************************************
+//          Tempus: Time Integration and Sensitivity Analysis Package
 //
-// Distributed under BSD 3-clause license (See accompanying file Copyright.txt)
-// ****************************************************************************
-// @HEADER
+// Copyright 2017 NTESS and the Tempus contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+//@HEADER
 
 #ifndef TEMPUS_TEST_VANDERPOL_MODEL_DECL_HPP
 #define TEMPUS_TEST_VANDERPOL_MODEL_DECL_HPP
@@ -18,6 +19,8 @@
 namespace Tempus_Test {
 
 /** \brief van der Pol model problem for nonlinear electrical circuit.
+ *
+ * \section tempus_vanderpol_model van der Pol Model
  *
  * This is a canonical equation of a nonlinear oscillator (Hairer, Norsett,
  * and Wanner, pp. 111-115, and Hairer and Wanner, pp. 4-5) for an electrical

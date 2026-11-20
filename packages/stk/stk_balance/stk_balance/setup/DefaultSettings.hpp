@@ -67,6 +67,7 @@ struct DefaultSettings {
   static constexpr double faceSearchVertexMultiplier {1.0};
   static constexpr double faceSearchEdgeWeight {1.0};
   static constexpr bool fixSpiders {false};
+  static constexpr bool groupSpiderLegs {false};
 
   static constexpr VertexWeightMethod sdVertexWeightMethod {VertexWeightMethod::CONNECTIVITY};
   static constexpr double sdGraphEdgeWeightMultiplier {10.0};
@@ -81,6 +82,7 @@ struct DefaultSettings {
   static constexpr bool smFixSpiders {false};
 
   static constexpr const char * vertexWeightBlockMultiplier {""};
+  static constexpr const char * cohesiveElements {""};
 
 };
 

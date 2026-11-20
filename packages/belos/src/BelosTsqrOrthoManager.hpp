@@ -1,43 +1,11 @@
-//@HEADER
-// ************************************************************************
-//
+// @HEADER
+// *****************************************************************************
 //                 Belos: Block Linear Solvers Package
-//                  Copyright 2004 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
-//
-// ************************************************************************
-//@HEADER
+// Copyright 2004-2016 NTESS and the Belos contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
 
 /// \file BelosTsqrOrthoManager.hpp
 /// \brief Orthogonalization manager based on Tall Skinny QR (TSQR)
@@ -75,7 +43,7 @@ namespace Belos {
 /// However, if you handle Tsqr(Mat)OrthoManager through this mixin,
 /// you can exploit TSQR's unique interface to avoid copying back and
 /// forth between scratch space.
-template<class Scalar, class MV>
+template<class Scalar, class MV, class DM = DefaultDenseMatrix<int,ScalarType>>
 class OutOfPlaceNormalizerMixin {
 public:
   typedef Scalar scalar_type;
@@ -84,8 +52,8 @@ public:
   /// \brief Multivector type with which this class was specialized.
   typedef MV multivector_type;
 
-  typedef Teuchos::SerialDenseMatrix<int, Scalar> mat_type;
-  typedef Teuchos::RCP<mat_type>                  mat_ptr;
+  typedef DM                        mat_type;
+  typedef Teuchos::RCP<mat_type>    mat_ptr;
 
   /// \brief Normalize X into Q*B.
   ///
@@ -133,10 +101,10 @@ public:
 ///
 /// Subclass of OrthoManager, implemented using TsqrOrthoManagerImpl
 /// (TSQR + Block Gram-Schmidt).
-template<class Scalar, class MV>
+template<class Scalar, class MV, class DM = DefaultDenseMatrix<int,ScalarType>>
 class TsqrOrthoManager :
-    public OrthoManager<Scalar, MV>,
-    public OutOfPlaceNormalizerMixin<Scalar, MV>
+    public OrthoManager<Scalar, MV, DM>,
+    public OutOfPlaceNormalizerMixin<Scalar, MV, DM>
 {
 public:
   typedef Scalar scalar_type;
@@ -144,8 +112,8 @@ public:
   //! \typedef Multivector type with which this class was specialized
   typedef MV multivector_type;
 
-  typedef Teuchos::SerialDenseMatrix<int, Scalar> mat_type;
-  typedef Teuchos::RCP<mat_type>                  mat_ptr;
+  typedef DM                          mat_type;
+  typedef Teuchos::RCP<mat_type>      mat_ptr;
 
   void setParameterList (const Teuchos::RCP<Teuchos::ParameterList>& params) {
     impl_.setParameterList (params);
@@ -353,7 +321,7 @@ private:
   /// The object is delcared "mutable" because it has internal
   /// scratch space state, and because the OrthoManager interface
   /// requires most of its methods to be declared const.
-  mutable TsqrOrthoManagerImpl<Scalar, MV> impl_;
+  mutable TsqrOrthoManagerImpl<Scalar, MV, DM> impl_;
 
   //! Label for timers (if timers are enabled at compile time).
   std::string label_;
@@ -373,10 +341,10 @@ private:
 /// TSQR uses multivector scratch space.  However, scratch space
 /// initialization is "lazy," so scratch space will not be allocated
 /// if TSQR is not used.
-template<class Scalar, class MV, class OP>
+template<class Scalar, class MV, class OP, class DM = DefaultDenseMatrix<int,ScalarType>>
 class TsqrMatOrthoManager :
-    public MatOrthoManager<Scalar, MV, OP>,
-    public OutOfPlaceNormalizerMixin<Scalar, MV>
+    public MatOrthoManager<Scalar, MV, OP, DM>,
+    public OutOfPlaceNormalizerMixin<Scalar, MV, DM>
 {
 public:
   typedef Scalar scalar_type;
@@ -386,7 +354,7 @@ public:
   //! Operator type with which this class was specialized
   typedef OP operator_type;
 
-  typedef Teuchos::SerialDenseMatrix<int, Scalar> mat_type;
+  typedef DM mat_type;
   typedef Teuchos::RCP<mat_type>                  mat_ptr;
 
 private:
@@ -398,19 +366,19 @@ private:
   /// point, we might not have specialized the specific base class
   /// yet; it's just a template at the moment and not a "real
   /// class.")
-  typedef MatOrthoManager<Scalar, MV, OP> base_type;
+  typedef MatOrthoManager<Scalar, MV, OP, DM> base_type;
 
   /// \typedef tsqr_type
   /// \brief Implementation of TSQR-based orthogonalization
-  typedef TsqrOrthoManagerImpl<Scalar, MV> tsqr_type;
+  typedef TsqrOrthoManagerImpl<Scalar, MV, DM> tsqr_type;
 
   /// \typedef dgks_type
   /// \brief Implementation of DGKS-based orthogonalization
-  typedef DGKSOrthoManager<Scalar, MV, OP> dgks_type;
+  typedef DGKSOrthoManager<Scalar, MV, OP, DM> dgks_type;
 
   /// \typedef MVT
   /// \brief Traits class for the multivector type
-  typedef MultiVecTraits<Scalar, MV> MVT;
+  typedef MultiVecTraits<Scalar, MV, DM> MVT;
 
 public:
   /// \brief Constructor (that sets user-specified parameters).
@@ -436,7 +404,7 @@ public:
   TsqrMatOrthoManager (const Teuchos::RCP<Teuchos::ParameterList>& params,
                        const std::string& label = "Belos",
                        Teuchos::RCP<const OP> Op = Teuchos::null) :
-    MatOrthoManager<Scalar, MV, OP> (Op),
+    MatOrthoManager<Scalar, MV, OP, DM> (Op),
     tsqr_ (params, label),
     pDgks_ (Teuchos::null) // Initialized lazily
   {}
@@ -451,7 +419,7 @@ public:
   ///   compile-time option for enabling timers is set.
   TsqrMatOrthoManager (const std::string& label = "Belos",
                        Teuchos::RCP<const OP> Op = Teuchos::null) :
-    MatOrthoManager<Scalar, MV, OP> (Op),
+    MatOrthoManager<Scalar, MV, OP, DM> (Op),
     tsqr_ (label),
     pDgks_ (Teuchos::null) // Initialized lazily
   {}

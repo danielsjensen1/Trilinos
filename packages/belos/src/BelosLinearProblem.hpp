@@ -1,44 +1,12 @@
 
-//@HEADER
-// ************************************************************************
-//
+// @HEADER
+// *****************************************************************************
 //                 Belos: Block Linear Solvers Package
-//                  Copyright 2004 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
-//
-// ************************************************************************
-//@HEADER
+// Copyright 2004-2016 NTESS and the Belos contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
 
 #ifndef BELOS_LINEAR_PROBLEM_HPP
 #define BELOS_LINEAR_PROBLEM_HPP
@@ -78,7 +46,7 @@ namespace Belos {
   /// \tparam OP The operator type.  (Operators are functions that
   ///   take a multivector as input and compute a multivector as
   ///   output.)
-  template <class ScalarType, class MV, class OP>
+  template <class ScalarType, class MV, class OP, class DM  = DefaultDenseMatrix<int,ScalarType>>
   class LinearProblem {
   public:
     
@@ -106,7 +74,7 @@ namespace Belos {
     /// \brief Copy constructor.
     ///
     /// Makes a copy of an existing LinearProblem instance.
-    LinearProblem (const LinearProblem<ScalarType,MV,OP>& Problem);
+    LinearProblem (const LinearProblem<ScalarType,MV,OP,DM>& Problem);
     
     //! Destructor (declared virtual for memory safety of derived classes).
     virtual ~LinearProblem (void) {}
@@ -278,7 +246,7 @@ namespace Belos {
     Teuchos::RCP<MV> 
     updateSolution( const Teuchos::RCP<MV>& update = Teuchos::null,
                     ScalarType scale = Teuchos::ScalarTraits<ScalarType>::one() ) const
-    { return const_cast<LinearProblem<ScalarType,MV,OP> *>(this)->updateSolution( update, false, scale ); }
+    { return const_cast<LinearProblem<ScalarType,MV,OP,DM> *>(this)->updateSolution( update, false, scale ); }
 
     //@}
     
@@ -539,6 +507,9 @@ namespace Belos {
     //! Right preconditioning operator of linear system
     Teuchos::RCP<const OP> RP_;
     
+    //! Scratch vector for use in apply()
+    mutable Teuchos::RCP<MV> Y_temp_;
+
     //! Timers
     mutable Teuchos::RCP<Teuchos::Time> timerOp_, timerPrec_;
 
@@ -574,7 +545,7 @@ namespace Belos {
 
   private:
  
-    typedef MultiVecTraits<ScalarType,MV>  MVT;
+    typedef MultiVecTraits<ScalarType,MV,DM>  MVT;
     typedef OperatorTraits<ScalarType,MV,OP>  OPT;
   };
   
@@ -582,8 +553,8 @@ namespace Belos {
   //  Constructor Implementations
   //--------------------------------------------
   
-  template <class ScalarType, class MV, class OP>
-  LinearProblem<ScalarType,MV,OP>::LinearProblem(void) : 
+  template <class ScalarType, class MV, class OP, class DM>
+  LinearProblem<ScalarType,MV,OP,DM>::LinearProblem(void) :
     blocksize_(0),
     num2Solve_(0),
     rhsIndex_(0),
@@ -595,11 +566,11 @@ namespace Belos {
   {
   }
   
-  template <class ScalarType, class MV, class OP>
-  LinearProblem<ScalarType,MV,OP>::LinearProblem(const Teuchos::RCP<const OP> &A, 
-						 const Teuchos::RCP<MV> &X, 
-						 const Teuchos::RCP<const MV> &B
-						 ) :
+  template <class ScalarType, class MV, class OP, class DM>
+  LinearProblem<ScalarType,MV,OP,DM>::LinearProblem(const Teuchos::RCP<const OP> &A,
+						    const Teuchos::RCP<MV> &X,
+						    const Teuchos::RCP<const MV> &B
+						    ) :
     A_(A),
     X_(X),
     B_(B),
@@ -614,8 +585,8 @@ namespace Belos {
   {
   }
   
-  template <class ScalarType, class MV, class OP>
-  LinearProblem<ScalarType,MV,OP>::LinearProblem(const LinearProblem<ScalarType,MV,OP>& Problem) :
+  template <class ScalarType, class MV, class OP, class DM>
+  LinearProblem<ScalarType,MV,OP,DM>::LinearProblem(const LinearProblem<ScalarType,MV,OP,DM>& Problem) :
     A_(Problem.A_),
     X_(Problem.X_),
     curX_(Problem.curX_),
@@ -640,8 +611,8 @@ namespace Belos {
   {
   }
   
-  template <class ScalarType, class MV, class OP>
-  void LinearProblem<ScalarType,MV,OP>::setLSIndex(const std::vector<int>& index)
+  template <class ScalarType, class MV, class OP, class DM>
+  void LinearProblem<ScalarType,MV,OP,DM>::setLSIndex(const std::vector<int>& index)
   {
     // Set new linear systems using the indices in index.
     rhsIndex_ = index;
@@ -707,8 +678,8 @@ namespace Belos {
   }
 
 
-  template <class ScalarType, class MV, class OP>
-  void LinearProblem<ScalarType,MV,OP>::setCurrLS() 
+  template <class ScalarType, class MV, class OP, class DM>
+  void LinearProblem<ScalarType,MV,OP,DM>::setCurrLS()
   { 
     //
     // We only need to copy the solutions back if the linear systems of
@@ -741,9 +712,9 @@ namespace Belos {
   }
   
 
-  template <class ScalarType, class MV, class OP>
+  template <class ScalarType, class MV, class OP, class DM>
   Teuchos::RCP<MV> 
-  LinearProblem<ScalarType,MV,OP>::
+  LinearProblem<ScalarType,MV,OP,DM>::
   updateSolution (const Teuchos::RCP<MV>& update, 
 		  bool updateLP,
 		  ScalarType scale)
@@ -803,8 +774,8 @@ namespace Belos {
     return newSoln;
   }
   
-  template <class ScalarType, class MV, class OP>
-  void LinearProblem<ScalarType,MV,OP>::setLabel(const std::string& label)
+  template <class ScalarType, class MV, class OP, class DM>
+  void LinearProblem<ScalarType,MV,OP,DM>::setLabel(const std::string& label)
   {
     if (label != label_) {
       label_ = label;
@@ -824,9 +795,9 @@ namespace Belos {
     }
   }
 
-  template <class ScalarType, class MV, class OP>
+  template <class ScalarType, class MV, class OP, class DM>
   bool 
-  LinearProblem<ScalarType,MV,OP>::
+  LinearProblem<ScalarType,MV,OP,DM>::
   setProblem (const Teuchos::RCP<MV> &newX, 
 	      const Teuchos::RCP<const MV> &newB)
   {
@@ -843,6 +814,8 @@ namespace Belos {
       timerPrec_ = Teuchos::TimeMonitor::getNewCounter( precLabel );
 #endif
     }
+
+    Y_temp_ = Teuchos::null;
 
     // Set the linear system using the arguments newX and newB
     if (newX != Teuchos::null)
@@ -928,8 +901,8 @@ namespace Belos {
     return isSet_;
   }
 
-  template <class ScalarType, class MV, class OP>
-  Teuchos::RCP<const MV> LinearProblem<ScalarType,MV,OP>::getInitResVec() const 
+  template <class ScalarType, class MV, class OP, class DM>
+  Teuchos::RCP<const MV> LinearProblem<ScalarType,MV,OP,DM>::getInitResVec() const
   {
     if(Teuchos::nonnull(R0_user_)) {
       return R0_user_;
@@ -937,8 +910,8 @@ namespace Belos {
     return(R0_); 
   }
 
-  template <class ScalarType, class MV, class OP>
-  Teuchos::RCP<const MV> LinearProblem<ScalarType,MV,OP>::getInitPrecResVec() const 
+  template <class ScalarType, class MV, class OP, class DM>
+  Teuchos::RCP<const MV> LinearProblem<ScalarType,MV,OP,DM>::getInitPrecResVec() const
   { 
     if(Teuchos::nonnull(PR0_user_)) {
       return PR0_user_;
@@ -946,8 +919,8 @@ namespace Belos {
     return(PR0_); 
   }
   
-  template <class ScalarType, class MV, class OP>
-  Teuchos::RCP<MV> LinearProblem<ScalarType,MV,OP>::getCurrLHSVec()
+  template <class ScalarType, class MV, class OP, class DM>
+  Teuchos::RCP<MV> LinearProblem<ScalarType,MV,OP,DM>::getCurrLHSVec()
   {
     if (isSet_) {
       return curX_;
@@ -957,8 +930,8 @@ namespace Belos {
     }
   }
   
-  template <class ScalarType, class MV, class OP>
-  Teuchos::RCP<const MV> LinearProblem<ScalarType,MV,OP>::getCurrRHSVec()
+  template <class ScalarType, class MV, class OP, class DM>
+  Teuchos::RCP<const MV> LinearProblem<ScalarType,MV,OP,DM>::getCurrRHSVec()
   {
     if (isSet_) {
       return curB_;
@@ -968,8 +941,8 @@ namespace Belos {
     }
   }
   
-  template <class ScalarType, class MV, class OP>
-  void LinearProblem<ScalarType,MV,OP>::apply( const MV& x, MV& y ) const
+  template <class ScalarType, class MV, class OP, class DM>
+  void LinearProblem<ScalarType,MV,OP,DM>::apply( const MV& x, MV& y ) const
   {
     using Teuchos::null;
     using Teuchos::RCP;
@@ -977,11 +950,12 @@ namespace Belos {
     const bool leftPrec = LP_ != null;
     const bool rightPrec = RP_ != null;
 
-    // We only need a temporary vector for intermediate results if
-    // there is a left or right preconditioner.  We really should just
-    // keep this temporary vector around instead of allocating it each
-    // time.
-    RCP<MV> ytemp = (leftPrec || rightPrec) ? MVT::Clone (y, MVT::GetNumberVecs (y)) : null;
+    if(leftPrec || rightPrec) {
+      const auto num_vecs_y = MVT::GetNumberVecs(y);
+      if(!Y_temp_ || MVT::GetNumberVecs(*Y_temp_) != num_vecs_y) {
+        Y_temp_ = MVT::Clone (y, num_vecs_y);
+      }
+    }
 
     //
     // No preconditioning.
@@ -995,29 +969,29 @@ namespace Belos {
     else if( leftPrec && rightPrec ) 
     {
       applyRightPrec( x, y );
-      applyOp( y, *ytemp );
-      applyLeftPrec( *ytemp, y );
+      applyOp( y, *Y_temp_ );
+      applyLeftPrec( *Y_temp_, y );
     }
     //
     // Preconditioning is only being done on the left side
     //
     else if( leftPrec ) 
     {
-      applyOp( x, *ytemp );
-      applyLeftPrec( *ytemp, y );
+      applyOp( x, *Y_temp_ );
+      applyLeftPrec( *Y_temp_, y );
     }
     //
     // Preconditioning is only being done on the right side
     //
     else 
     {
-      applyRightPrec( x, *ytemp );
-      applyOp( *ytemp, y );
+      applyRightPrec( x, *Y_temp_ );
+      applyOp( *Y_temp_, y );
     }  
   }
   
-  template <class ScalarType, class MV, class OP>
-  void LinearProblem<ScalarType,MV,OP>::applyOp( const MV& x, MV& y ) const {
+  template <class ScalarType, class MV, class OP, class DM>
+  void LinearProblem<ScalarType,MV,OP,DM>::applyOp( const MV& x, MV& y ) const {
     if (A_.get()) {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
       Teuchos::TimeMonitor OpTimer(*timerOp_);
@@ -1030,8 +1004,8 @@ namespace Belos {
     }
   }
   
-  template <class ScalarType, class MV, class OP>
-  void LinearProblem<ScalarType,MV,OP>::applyLeftPrec( const MV& x, MV& y ) const {
+  template <class ScalarType, class MV, class OP, class DM>
+  void LinearProblem<ScalarType,MV,OP,DM>::applyLeftPrec( const MV& x, MV& y ) const {
     if (LP_!=Teuchos::null) {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
       Teuchos::TimeMonitor PrecTimer(*timerPrec_);
@@ -1044,8 +1018,8 @@ namespace Belos {
     }
   }
   
-  template <class ScalarType, class MV, class OP>
-  void LinearProblem<ScalarType,MV,OP>::applyRightPrec( const MV& x, MV& y ) const {
+  template <class ScalarType, class MV, class OP, class DM>
+  void LinearProblem<ScalarType,MV,OP,DM>::applyRightPrec( const MV& x, MV& y ) const {
     if (RP_!=Teuchos::null) {
 #ifdef BELOS_TEUCHOS_TIME_MONITOR
       Teuchos::TimeMonitor PrecTimer(*timerPrec_);
@@ -1058,8 +1032,8 @@ namespace Belos {
     }
   }
   
-  template <class ScalarType, class MV, class OP>
-  void LinearProblem<ScalarType,MV,OP>::computeCurrPrecResVec( MV* R, const MV* X, const MV* B ) const {
+  template <class ScalarType, class MV, class OP, class DM>
+  void LinearProblem<ScalarType,MV,OP,DM>::computeCurrPrecResVec( MV* R, const MV* X, const MV* B ) const {
 
     if (R) {
       if (X && B) // The entries are specified, so compute the residual of Op(A)X = B
@@ -1107,8 +1081,8 @@ namespace Belos {
   }
   
   
-  template <class ScalarType, class MV, class OP>
-  void LinearProblem<ScalarType,MV,OP>::computeCurrResVec( MV* R, const MV* X, const MV* B ) const {
+  template <class ScalarType, class MV, class OP, class DM>
+  void LinearProblem<ScalarType,MV,OP,DM>::computeCurrResVec( MV* R, const MV* X, const MV* B ) const {
 
     if (R) {
       if (X && B) // The entries are specified, so compute the residual of Op(A)X = B
@@ -1136,6 +1110,19 @@ namespace Belos {
   }
   
 } // end Belos namespace
+
+#ifdef HAVE_BELOS_TPETRA
+#include "BelosTpetraETIHelpers.hpp"
+
+#define BELOS_TPETRA_LINEARPROBLEM_NOEXTERN_CALL(SC, LO, GO, NT)            \
+  BELOS_TPETRA_CALL(Belos::LinearProblem, SC, LO, GO, NT)
+
+#define BELOS_TPETRA_LINEARPROBLEM_EXTERN_CALL(SC, LO, GO, NT)              \
+  BELOS_TPETRA_EXTERN_CALL(Belos::LinearProblem, SC, LO, GO, NT)
+
+TPETRA_INSTANTIATE_SLGN_NO_ORDINAL_SCALAR(BELOS_TPETRA_LINEARPROBLEM_EXTERN_CALL)
+#endif
+
 
 #endif /* BELOS_LINEAR_PROBLEM_HPP */
 

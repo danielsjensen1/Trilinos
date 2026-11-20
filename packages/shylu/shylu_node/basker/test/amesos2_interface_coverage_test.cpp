@@ -1,3 +1,12 @@
+// @HEADER
+// *****************************************************************************
+//               ShyLU: Scalable Hybrid LU Preconditioner and Solver
+//
+// Copyright 2011 NTESS and the ShyLU contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
+
 /*
   Joshua Dennis Booth
   Test the Amesos2 Interface calls with refactoring
@@ -12,12 +21,13 @@
 int main(int argc, char* argv[])
 {
 
-  typedef long           Int;
-  typedef double         Entry;
-  typedef Kokkos::OpenMP Exe_Space;
+  using Int       = long;
+  using Entry     = double;
+  using Exe_Space = Kokkos::DefaultHostExecutionSpace;
 
   std::string mname;
 
+  int error = 0;
   if(argc > 2)
   {
     std::cout <<"Test Input is only the coverage matrix"
@@ -44,9 +54,9 @@ int main(int argc, char* argv[])
   std::cout << "Matrix read" << std::endl;
   double rmatrix = myTime();
   readMatrix<Int,Entry>(mname, m, n, nnz, 
-			&col_ptr, &row_idx, &val);
+                        &col_ptr, &row_idx, &val);
   std::cout << "Read Matrix, Time: " 
-	    << totalTime(rmatrix,myTime()) << std::endl;
+            << totalTime(rmatrix,myTime()) << std::endl;
   
   //RHS
   Int vn, vm;
@@ -56,10 +66,10 @@ int main(int argc, char* argv[])
   vn = n;
   x = new Entry[vn]();
   xhat = new Entry[vn]();
+  y = new Entry[m]();
   //Populate Vector
   {
     vm = m;
-    y = new Entry[m]();
     for(Int i = 0; i < vm; i++)
     {
       xhat[i] = (Entry) i;
@@ -67,7 +77,7 @@ int main(int argc, char* argv[])
     multiply<Int,Entry>(m,n,col_ptr,row_idx,val, xhat, y);
     for(Int i = 0; i < vm; i++)
     {
-      //std::cout  << "y " << y[i] << std::endl;
+      //std::cout << "y " << y[i] << std::endl;
       xhat[i] = (Entry) 0.0;
     }
   }
@@ -76,14 +86,14 @@ int main(int argc, char* argv[])
   int nthreads = 4; // We will not use all 4 in all tests
   Kokkos::initialize(Kokkos::InitializationSettings().set_num_threads(nthreads));
   std::cout << "Kokkos Settings" << std::endl;
-  std::cout << "hwloc aval: " 
-	    << Kokkos::hwloc::available()<< std::endl;
-  std::cout << "numa count: " 
-	    << Kokkos::hwloc::get_available_numa_count() 
-	    << std::endl;
-  std::cout << "thrd numa:  " 
-	    << Kokkos::hwloc::get_available_cores_per_numa() 
-	    << std::endl;
+  std::cout << "hwloc aval: "
+            << Kokkos::hwloc::available()<< std::endl;
+  std::cout << "numa count: "
+            << Kokkos::hwloc::get_available_numa_count()
+            << std::endl;
+  std::cout << "thrd numa:  "
+            << Kokkos::hwloc::get_available_cores_per_numa()
+            << std::endl;
  
   //-----------------------Start Basker (Test - 1, 1 thread)-----------------
   {
@@ -94,7 +104,7 @@ int main(int argc, char* argv[])
     BaskerNS::Basker<Int, Entry, Exe_Space> mybasker;
     //---Options
     mybasker.Options.same_pattern       = BASKER_FALSE;
-    mybasker.Options.verbose            = BASKER_FALSE;
+    mybasker.Options.verbose            = BASKER_TRUE;
     mybasker.Options.verbose_matrix_out = BASKER_FALSE;
     mybasker.Options.realloc            = BASKER_TRUE;
     mybasker.Options.transpose          = BASKER_FALSE;
@@ -114,22 +124,25 @@ int main(int argc, char* argv[])
     mybasker.SetThreads(1);
     std::cout << "Setting Threads:" << 1 << std::endl;
     double stime = myTime();
-    mybasker.Symbolic(m,n,nnz,col_ptr,row_idx,val);
-    std::cout << "Done with Symbolic, Time: " 
-	      << totalTime(stime, myTime()) << std::endl;
+    error = mybasker.Symbolic(m,n,nnz,col_ptr,row_idx,val);
+    std::cout << "Done with Symbolic, Time: "
+              << totalTime(stime, myTime())
+              << " with error = " << error << std::endl;
+    if(error != 0) return error;
     double ftime = myTime();
-    mybasker.Factor(m,n,nnz,col_ptr,row_idx,val);
+    error = mybasker.Factor(m,n,nnz,col_ptr,row_idx,val);
     std::cout << "Done with Factor, Time: "
-	      << totalTime(ftime, myTime()) << std::endl;
+              << totalTime(ftime, myTime())
+              << " with error = " << error << std::endl;
+    if(error != 0) return error;
     //mybasker.DEBUG_PRINT();
     double ttime = myTime();
-    Int *lperm;
-    Int *rperm;
-    mybasker.GetPerm(&lperm,&rperm);
     
-    mybasker.Solve(y,x);
+    error = mybasker.Solve(y,x);
     std::cout << "Done with Solve, Time: "
-	      << totalTime(ttime, myTime()) << std::endl;
+              << totalTime(ttime, myTime())
+              << " with error = " << error << std::endl;
+    if(error != 0) return error;
 
     multiply<Int,Entry>(m,n,col_ptr,row_idx,val, x, xhat);
     for(Int i = 0; i < m; i++)
@@ -137,19 +150,19 @@ int main(int argc, char* argv[])
       xhat[i] = y[i] - xhat[i];
     }
     std::cout << "||X||: " << norm2<Int,Entry>(n,x)
-	      << " ||Y-AX||: " << norm2<Int,Entry>(m,xhat)
-	      << std::endl;
+              << " ||Y-AX||: " << norm2<Int,Entry>(m,xhat)
+              << std::endl;
     
     //Refactor
     double rftime = myTime();
     mybasker.Factor(m,n,nnz,col_ptr,row_idx,val);
     std::cout << "Done with Refactor Factor, Time: "
-	      << totalTime(rftime, myTime()) << std::endl;
+              << totalTime(rftime, myTime()) << std::endl;
     //ReSolve
     double rttime = myTime();
     mybasker.Solve(y,x);
     std::cout << "Done with Refactor Solve, Time: "
-	      << totalTime(rttime, myTime()) << std::endl;
+              << totalTime(rttime, myTime()) << std::endl;
 
     multiply<Int,Entry>(m,n,col_ptr,row_idx,val, x, xhat);
     for(Int i = 0; i < m; i++)
@@ -158,8 +171,8 @@ int main(int argc, char* argv[])
     }
     
     std::cout << "||X||: " << norm2<Int,Entry>(n,x)
-	      << " ||Y-AX||: " << norm2<Int,Entry>(m,xhat)
-	      << std::endl;
+              << " ||Y-AX||: " << norm2<Int,Entry>(m,xhat)
+              << std::endl;
 
     mybasker.Finalize();
   }
@@ -173,7 +186,7 @@ int main(int argc, char* argv[])
     BaskerNS::Basker<Int, Entry, Exe_Space> mybasker;
     //---Options
     mybasker.Options.same_pattern       = BASKER_FALSE;
-    mybasker.Options.verbose            = BASKER_FALSE;
+    mybasker.Options.verbose            = BASKER_TRUE;
     mybasker.Options.verbose_matrix_out = BASKER_FALSE;
     mybasker.Options.realloc            = BASKER_TRUE;
     mybasker.Options.transpose          = BASKER_FALSE;
@@ -193,22 +206,22 @@ int main(int argc, char* argv[])
     mybasker.SetThreads(2);
     std::cout << "Setting Threads:" << 2 << std::endl;
     double stime = myTime();
-    mybasker.Symbolic(m,n,nnz,col_ptr,row_idx,val);
-    std::cout << "Done with Symbolic, Time: " 
-	      << totalTime(stime, myTime()) << std::endl;
+    error = mybasker.Symbolic(m,n,nnz,col_ptr,row_idx,val);
+    std::cout << "Done with Symbolic, Time: "
+              << totalTime(stime, myTime()) << std::endl;
+    if(error != 0) return error;
     double ftime = myTime();
-    mybasker.Factor(m,n,nnz,col_ptr,row_idx,val);
+    error = mybasker.Factor(m,n,nnz,col_ptr,row_idx,val);
     std::cout << "Done with Factor, Time: "
-	      << totalTime(ftime, myTime()) << std::endl;
+              << totalTime(ftime, myTime()) << std::endl;
+    if(error != 0) return error;
     //mybasker.DEBUG_PRINT();
     double ttime = myTime();
-    Int *lperm;
-    Int *rperm;
-    mybasker.GetPerm(&lperm,&rperm);
     
-    mybasker.Solve(y,x);
+    error = mybasker.Solve(y,x);
     std::cout << "Done with Solve, Time: "
-	      << totalTime(ttime, myTime()) << std::endl;
+              << totalTime(ttime, myTime()) << std::endl;
+    if(error != 0) return error;
 
     multiply<Int,Entry>(m,n,col_ptr,row_idx,val, x, xhat);
     for(Int i = 0; i < m; i++)
@@ -216,19 +229,19 @@ int main(int argc, char* argv[])
       xhat[i] = y[i] - xhat[i];
     }
     std::cout << "||X||: " << norm2<Int,Entry>(n,x)
-	      << " ||Y-AX||: " << norm2<Int,Entry>(m,xhat)
-	      << std::endl;
+              << " ||Y-AX||: " << norm2<Int,Entry>(m,xhat)
+              << std::endl;
     
     //Refactor
     double rftime = myTime();
     mybasker.Factor(m,n,nnz,col_ptr,row_idx,val);
     std::cout << "Done with Refactor Factor, Time: "
-	      << totalTime(rftime, myTime()) << std::endl;
+              << totalTime(rftime, myTime()) << std::endl;
     //ReSolve
     double rttime = myTime();
     mybasker.Solve(y,x);
     std::cout << "Done with Refactor Solve, Time: "
-	      << totalTime(rttime, myTime()) << std::endl;
+              << totalTime(rttime, myTime()) << std::endl;
 
     multiply<Int,Entry>(m,n,col_ptr,row_idx,val, x, xhat);
     for(Int i = 0; i < m; i++)
@@ -237,8 +250,8 @@ int main(int argc, char* argv[])
     }
 
     std::cout << "||X||: " << norm2<Int,Entry>(n,x)
-	      << " ||Y-AX||: " << norm2<Int,Entry>(m,xhat)
-	      << std::endl;
+              << " ||Y-AX||: " << norm2<Int,Entry>(m,xhat)
+              << std::endl;
 
     mybasker.Finalize();
   }
@@ -277,55 +290,59 @@ int main(int argc, char* argv[])
     double stime = myTime();
     mybasker.Symbolic(m,n,nnz,col_ptr,row_idx,val);
     std::cout << "Done with Symbolic, Time: " 
-	      << totalTime(stime, myTime()) << std::endl;
+              << totalTime(stime, myTime()) << std::endl;
     double ftime = myTime();
     mybasker.Factor(m,n,nnz,col_ptr,row_idx,val);
     std::cout << "Done with Factor, Time: "
-	      << totalTime(ftime, myTime()) << std::endl;
+              << totalTime(ftime, myTime()) << std::endl;
     //mybasker.DEBUG_PRINT();
     double ttime = myTime();
-    Int *lperm;
-    Int *rperm;
-    mybasker.GetPerm(&lperm,&rperm);
-    
+
     mybasker.Solve(y,x);
     std::cout << "Done with Solve, Time: "
-	      << totalTime(ttime, myTime()) << std::endl;
+              << totalTime(ttime, myTime()) << std::endl;
 
     multiply<Int,Entry>(m,n,col_ptr,row_idx,val, x, xhat);
     for(Int i = 0; i < m; i++)
     {
-     	xhat[i] = y[i] - xhat[i];
+             xhat[i] = y[i] - xhat[i];
     }
     std::cout << "||X||: " << norm2<Int,Entry>(n,x)
-	      << " ||Y-AX||: " << norm2<Int,Entry>(m,xhat)
-	      << std::endl;
+              << " ||Y-AX||: " << norm2<Int,Entry>(m,xhat)
+              << std::endl;
     
     //Refactor
     double rftime = myTime();
     mybasker.Factor(m,n,nnz,col_ptr,row_idx,val);
     std::cout << "Done with Refactor Factor, Time: "
-	      << totalTime(rftime, myTime()) << std::endl;
+              << totalTime(rftime, myTime()) << std::endl;
     //ReSolve
     double rttime = myTime();
     mybasker.Solve(y,x);
     std::cout << "Done with Refactor Solve, Time: "
-	      << totalTime(rttime, myTime()) << std::endl;
+              << totalTime(rttime, myTime()) << std::endl;
 
     multiply<Int,Entry>(m,n,col_ptr,row_idx,val, x, xhat);
     for(Int i = 0; i < m; i++)
     {
-     	xhat[i] = y[i] - xhat[i];
+             xhat[i] = y[i] - xhat[i];
     }
     
     std::cout << "||X||: " << norm2<Int,Entry>(n,x)
-	      << " ||Y-AX||: " << norm2<Int,Entry>(m,xhat)
-	      << std::endl;
+              << " ||Y-AX||: " << norm2<Int,Entry>(m,xhat)
+              << std::endl;
 
     mybasker.Finalize();
   }
 */
+  delete [] x;
+  delete [] xhat;
+  delete [] y;
+  delete [] col_ptr;
+  delete [] row_idx;
+  delete [] val;
   
   Kokkos::finalize();
 
+  return error;
 }//end main

@@ -1,42 +1,10 @@
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //                    Teuchos: Common Tools Package
-//                 Copyright (2004) Sandia Corporation
 //
-// Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
-// license for use of this work by or on behalf of the U.S. Government.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
-//
-// ***********************************************************************
+// Copyright 2004 NTESS and the Teuchos contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #ifndef TEUCHOS_COMM_HELPERS_HPP
@@ -44,6 +12,7 @@
 
 #include "Teuchos_Comm.hpp"
 #include "Teuchos_CommUtilities.hpp"
+#include "Teuchos_CompilerCodeTweakMacros.hpp"
 #include "Teuchos_SerializationTraitsHelpers.hpp"
 #include "Teuchos_ReductionOpHelpers.hpp"
 #include "Teuchos_SerializerHelpers.hpp"
@@ -163,6 +132,44 @@ void broadcast(
   const int rootRank, const ArrayView<const Ptr<Packet> > &buffer
   );
 
+/// \brief Scatter values from all processes to all processes.
+/// \relates Comm
+///
+/// This wraps MPI_Alltoall in an MPI build, when Comm implements MpiComm.
+template<typename Ordinal, typename Packet>
+void
+alltoAll (const Packet sendBuf[],
+          const Ordinal sendCount,
+          Packet recvBuf[],
+          const Ordinal recvCount,
+          const Comm<Ordinal>& comm)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION
+    (true, std::logic_error, "Teuchos::alltoAll<" <<
+     TypeNameTraits<Ordinal>::name () << "," << TypeNameTraits<Packet>::name ()
+     << ">: Generic version is not yet implemented.");
+}
+
+/// \brief Scatter values from all processes to all processes.
+/// \relates Comm
+///
+/// This wraps MPI_Alltoallv in an MPI build, when Comm implements MpiComm.
+template<typename Ordinal, typename Packet>
+void
+alltoAllv (const Packet sendBuf[],
+           const Ordinal sendCounts[],
+           const Ordinal sendDispls[],
+           Packet recvBuf[],
+           const Ordinal recvCounts[],
+           const Ordinal recvDispls[],
+           const Comm<Ordinal>& comm)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION
+    (true, std::logic_error, "Teuchos::alltoAllv<" <<
+     TypeNameTraits<Ordinal>::name () << "," << TypeNameTraits<Packet>::name ()
+     << ">: Generic version is not yet implemented.");
+}
+
 /** \brief Broadcast array of objects that use value semantics using
  * customized serializer.
  *
@@ -280,6 +287,27 @@ scatter (const Packet sendBuf[],
   // if there is interest.
   TEUCHOS_TEST_FOR_EXCEPTION
     (true, std::logic_error, "Teuchos::scatter<" <<
+     TypeNameTraits<Ordinal>::name () << "," << TypeNameTraits<Packet>::name ()
+     << ">: Generic version is not yet implemented.  This function currently "
+     "only has an implementtion for Ordinal = int and Packet = int.  "
+     "See Bug 6375 and Bug 6336.");
+}
+
+template<typename Ordinal, typename Packet>
+void
+scatterv (const Packet sendBuf[],
+         const Ordinal sendCounts[],
+         const Ordinal displs[],
+         Packet recvBuf[],
+         const Ordinal recvCount,
+         const Ordinal root,
+         const Comm<Ordinal>& comm)
+{
+  // See Bug 6375; Tpetra does not actually need any specializations
+  // other than Ordinal = int and Packet = int.  We may add them later
+  // if there is interest.
+  TEUCHOS_TEST_FOR_EXCEPTION
+    (true, std::logic_error, "Teuchos::scatterv<" <<
      TypeNameTraits<Ordinal>::name () << "," << TypeNameTraits<Packet>::name ()
      << ">: Generic version is not yet implemented.  This function currently "
      "only has an implementtion for Ordinal = int and Packet = int.  "
@@ -1131,6 +1159,7 @@ createOp (const EReductionType reductType)
            "(EReductionType): The Packet type " << TypeNameTraits<Packet>::name ()
            << " is not less-than comparable, so it does not make sense to do a "
            "MIN reduction with it.");
+        TEUCHOS_UNREACHABLE_RETURN(nullptr);
       }
     }
     case REDUCE_MAX: {
@@ -1143,6 +1172,7 @@ createOp (const EReductionType reductType)
            "(EReductionType): The Packet type " << TypeNameTraits<Packet>::name ()
            << " is not less-than comparable, so it does not make sense to do a "
            "MAX reduction with it.");
+        TEUCHOS_UNREACHABLE_RETURN(nullptr);
       }
     }
     case REDUCE_AND: {
@@ -1570,6 +1600,16 @@ isend<int, std::complex<float> > (const ArrayRCP<const std::complex<float> >& se
 // Specialization for Ordinal=int and Packet=double.
 template<>
 TEUCHOSCOMM_LIB_DLL_EXPORT void
+alltoAllv<int, double> (const double sendBuf[],
+                        const int sendCounts[],
+                        const int sendDispls[],
+                        double recvBuf[],
+                        const int recvCounts[],
+                        const int recvDispls[],
+                        const Comm<int>& comm);
+
+template<>
+TEUCHOSCOMM_LIB_DLL_EXPORT void
 reduceAll<int, double> (const Comm<int>& comm,
                         const EReductionType reductType,
                         const int count,
@@ -1605,6 +1645,16 @@ isend<int, double> (const ArrayRCP<const double>& sendBuffer,
                     const int destRank,
                     const int tag,
                     const Comm<int>& comm);
+
+template<>
+TEUCHOSCOMM_LIB_DLL_EXPORT void
+gatherv<int, double> (const double sendBuf[],
+                      const int sendCount,
+                      double recvBuf[],
+                      const int recvCounts[],
+                      const int displs[],
+                      const int root,
+                      const Comm<int>& comm);
 
 // Specialization for Ordinal=int and Packet=float.
 template<>
@@ -1644,6 +1694,16 @@ isend<int, float> (const ArrayRCP<const float>& sendBuffer,
                    const int destRank,
                    const int tag,
                    const Comm<int>& comm);
+
+template<>
+TEUCHOSCOMM_LIB_DLL_EXPORT void
+gatherv<int, float> (const float sendBuf[],
+                     const int sendCount,
+                     float recvBuf[],
+                     const int recvCounts[],
+                     const int displs[],
+                     const int root,
+                     const Comm<int>& comm);
 
 // Specialization for Ordinal=int and Packet=long long.
 template<>
@@ -1872,6 +1932,24 @@ isend<int, unsigned long> (const ArrayRCP<const unsigned long>& sendBuffer,
 // Specialization for Ordinal=int and Packet=int.
 template<>
 TEUCHOSCOMM_LIB_DLL_EXPORT void
+alltoAll<int, int> (const int sendBuf[],
+                    const int sendCount,
+                    int recvBuf[],
+                    const int recvCount,
+                    const Comm<int>& comm);
+
+template<>
+TEUCHOSCOMM_LIB_DLL_EXPORT void
+alltoAllv<int, int> (const int sendBuf[],
+                     const int sendCounts[],
+                     const int sendDispls[],
+                     int recvBuf[],
+                     const int recvCounts[],
+                     const int recvDispls[],
+                     const Comm<int>& comm);
+
+template<>
+TEUCHOSCOMM_LIB_DLL_EXPORT void
 gather<int, int> (const int sendBuf[],
                   const int sendCount,
                   int recvBuf[],
@@ -1895,6 +1973,33 @@ scatter (const int sendBuf[],
          const int recvCount,
          const int root,
          const Comm<int>& comm);
+template<>
+TEUCHOSCOMM_LIB_DLL_EXPORT void
+scatterv (const int sendBuf[],
+          const int sendCounts[],
+          const int displs[],
+          int recvBuf[],
+          const int recvCount,
+          const int root,
+          const Comm<int>& comm);
+template<>
+TEUCHOSCOMM_LIB_DLL_EXPORT void
+scatterv (const double sendBuf[],
+          const int sendCounts[],
+          const int displs[],
+          double recvBuf[],
+          const int recvCount,
+          const int root,
+          const Comm<int>& comm);
+template<>
+TEUCHOSCOMM_LIB_DLL_EXPORT void
+scatterv (const float sendBuf[],
+          const int sendCounts[],
+          const int displs[],
+          float recvBuf[],
+          const int recvCount,
+          const int root,
+          const Comm<int>& comm);
 template<>
 TEUCHOSCOMM_LIB_DLL_EXPORT void
 reduce<int, int> (const int sendBuf[],

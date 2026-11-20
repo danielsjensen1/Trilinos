@@ -1,20 +1,12 @@
 // clang-format off
-/* =====================================================================================
-Copyright 2022 National Technology & Engineering Solutions of Sandia, LLC (NTESS).
-Under the terms of Contract DE-NA0003525 with NTESS, the U.S. Government retains
-certain rights in this software.
-
-SCR#:2790.0
-
-This file is part of Tacho. Tacho is open source software: you can redistribute it
-and/or modify it under the terms of BSD 2-Clause License
-(https://opensource.org/licenses/BSD-2-Clause). A copy of the licese is also
-provided under the main directory
-
-Questions? Kyungjoo Kim at <kyukim@sandia.gov,https://github.com/kyungjoo-kim>
-
-Sandia National Laboratories, Albuquerque, NM, USA
-===================================================================================== */
+// @HEADER
+// *****************************************************************************
+//                            Tacho package
+//
+// Copyright 2022 NTESS and the Tacho contributors.
+// SPDX-License-Identifier: BSD-2-Clause
+// *****************************************************************************
+// @HEADER
 // clang-format on
 #ifndef __TACHO_UTIL_HPP__
 #define __TACHO_UTIL_HPP__
@@ -132,18 +124,29 @@ enum : int { MaxDependenceSize = 4, ThresholdSolvePhaseUsingBlas3 = 12, CudaVect
 ///
 /// util
 ///
-template <typename Ta, typename Tb> KOKKOS_FORCEINLINE_FUNCTION static Ta min(const Ta a, const Tb b) {
+template <typename Ta, typename Tb>
+KOKKOS_FORCEINLINE_FUNCTION static Ta min(const Ta a, const Tb b) {
   return (a < static_cast<Ta>(b) ? a : static_cast<Ta>(b));
 }
 
-template <typename Ta, typename Tb> KOKKOS_FORCEINLINE_FUNCTION static Ta max(const Ta a, const Tb b) {
+template <typename Ta, typename Tb>
+KOKKOS_FORCEINLINE_FUNCTION static Ta max(const Ta a, const Tb b) {
   return (a > static_cast<Ta>(b) ? a : static_cast<Ta>(b));
 }
 
-template <typename Ta, typename Tb> KOKKOS_FORCEINLINE_FUNCTION static void swap(Ta &a, Tb &b) {
+template <typename Ta, typename Tb>
+KOKKOS_FORCEINLINE_FUNCTION static void swap(Ta &a, Tb &b) {
   Ta c(a);
   a = static_cast<Ta>(b);
   b = static_cast<Tb>(c);
+}
+
+// to avoid scope erasure on intel
+template <typename T, typename ordinal_type>
+KOKKOS_FORCEINLINE_FUNCTION static void swap_i(T *p, ordinal_type i, ordinal_type j) {
+  T c(p[i]);
+  p[i] = p[j];
+  p[j] = c;
 }
 
 KOKKOS_FORCEINLINE_FUNCTION
@@ -201,7 +204,7 @@ template <size_t BufSize, typename SpaceType = Kokkos::DefaultExecutionSpace> st
   void init(value_type &update) { update = 0; }
 
   KOKKOS_INLINE_FUNCTION
-  void join(volatile value_type &update, const volatile value_type &input) { update += input; }
+  void join(volatile value_type &update, const volatile value_type &input) { update = update + input; }
 
   KOKKOS_INLINE_FUNCTION
   void operator()(const int i, value_type &update) const { update += _buf[i]; }

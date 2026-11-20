@@ -1,9 +1,10 @@
-IF (NOT Kokkos_INSTALL_TESTING)
-  ADD_SUBDIRECTORY(src)
-ENDIF()
+if(NOT Kokkos_INSTALL_TESTING)
+  add_subdirectory(src)
+endif()
 
 # FIXME_OPENACC: temporarily disabled due to unimplemented features
-IF(NOT KOKKOS_ENABLE_OPENACC)
-KOKKOS_ADD_TEST_DIRECTORIES(unit_tests)
-KOKKOS_ADD_TEST_DIRECTORIES(performance_tests)
-ENDIF()
+# FIXME_NEXTSILICON: unimplemented features
+if(NOT (KOKKOS_ENABLE_OPENACC OR KOKKOS_ENABLE_NEXTSILICON))
+  kokkos_add_test_directories(unit_tests)
+  kokkos_add_test_directories(performance_tests)
+endif()

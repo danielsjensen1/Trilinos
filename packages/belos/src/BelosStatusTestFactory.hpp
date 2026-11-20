@@ -1,43 +1,11 @@
-//@HEADER
-// ************************************************************************
-//
+// @HEADER
+// *****************************************************************************
 //                 Belos: Block Linear Solvers Package
-//                  Copyright 2004 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
-//
-// ************************************************************************
-//@HEADER
+// Copyright 2004-2016 NTESS and the Belos contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
 
 #include <BelosStatusTestCombo.hpp>
 #include <BelosStatusTestGenResNorm.hpp>
@@ -54,14 +22,14 @@ namespace Belos {
   ///
   /// This factory takes a Teuchos::ParameterList and generates an entire set (a tree)
   /// of status tests for use in Belos.
-  template<class Scalar, class MV, class OP>
+  template<class Scalar, class MV, class OP, class DM = DefaultDenseMatrix<int,Scalar>>
   class StatusTestFactory {
   public:
     typedef typename Teuchos::ScalarTraits<Scalar>::magnitudeType magnitude_type;
-    typedef StatusTest<Scalar,MV,OP> base_test;
+    typedef StatusTest<Scalar,MV,OP,DM> base_test;
 
-    typedef StatusTestMaxIters<Scalar,MV,OP> max_iter_test;
-    typedef StatusTestCombo<Scalar,MV,OP> combo_test;
+    typedef StatusTestMaxIters<Scalar,MV,OP,DM> max_iter_test;
+    typedef StatusTestCombo<Scalar,MV,OP,DM> combo_test;
 
     //! Constructor
     StatusTestFactory() {
@@ -106,7 +74,7 @@ namespace Belos {
       return status_test;
     }
 
-    static typename StatusTestCombo<Scalar,MV,OP>::ComboType stringToComboType ( const std::string& comboString ) {
+    static typename StatusTestCombo<Scalar,MV,OP,DM>::ComboType stringToComboType ( const std::string& comboString ) {
       typedef typename combo_test::ComboType comboType;
       comboType userCombo;
       if     (comboString == "AND") userCombo = combo_test::AND;
@@ -152,7 +120,7 @@ namespace Belos {
     }
 
     Teuchos::RCP<base_test> buildResidualNormTest(Teuchos::ParameterList& p) const {
-      typedef StatusTestGenResNorm<Scalar,MV,OP> res_norm_test;
+      typedef StatusTestGenResNorm<Scalar,MV,OP,DM> res_norm_test;
       typename Teuchos::ScalarTraits<Scalar>::magnitudeType tolerance = p.get("Convergence Tolerance", 1.0e-8);
       int quorum = p.get<int>("Deflation Quorum", -1);
       bool showMaxResNormOnly = p.get<bool>("Show Maximum Residual Norm Only",false);
@@ -179,7 +147,7 @@ namespace Belos {
     }
 
     Teuchos::RCP<base_test> buildPartialResidualNormTest(Teuchos::ParameterList& p) const {
-      typedef StatusTestGenResSubNorm<Scalar,MV,OP> res_partialnorm_test;
+      typedef StatusTestGenResSubNorm<Scalar,MV,OP,DM> res_partialnorm_test;
       typename Teuchos::ScalarTraits<Scalar>::magnitudeType tolerance = p.get("Convergence Tolerance", 1.0e-8);
       int quorum = p.get<int>("Deflation Quorum", -1);
       int subIdx = p.get<int>("Block index",-1);

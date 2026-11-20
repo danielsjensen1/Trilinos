@@ -1,43 +1,11 @@
-//@HEADER
-// ************************************************************************
-//
+// @HEADER
+// *****************************************************************************
 //                 Belos: Block Linear Solvers Package
-//                  Copyright 2004 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
-//
-// ************************************************************************
-//@HEADER
+// Copyright 2004-2016 NTESS and the Belos contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
 
 #ifndef BELOS_PSEUDO_BLOCK_STOCHASTIC_CG_ITER_HPP
 #define BELOS_PSEUDO_BLOCK_STOCHASTIC_CG_ITER_HPP
@@ -57,7 +25,6 @@
 #include "BelosOperatorTraits.hpp"
 #include "BelosMultiVecTraits.hpp"
 
-#include "Teuchos_SerialDenseMatrix.hpp"
 #include "Teuchos_SerialDenseVector.hpp"
 #include "Teuchos_SerialDenseHelpers.hpp"
 #include "Teuchos_ScalarTraits.hpp"
@@ -81,16 +48,17 @@
 
 namespace Belos {
   
-  template<class ScalarType, class MV, class OP>
-  class PseudoBlockStochasticCGIter : virtual public StochasticCGIteration<ScalarType,MV,OP> {
+  template<class ScalarType, class MV, class OP, class DM = DefaultDenseMatrix<int,ScalarType>>
+  class PseudoBlockStochasticCGIter : virtual public StochasticCGIteration<ScalarType,MV,OP,DM> {
     
   public:
     
     //
     // Convenience typedefs
     //
-    typedef MultiVecTraits<ScalarType,MV> MVT;
+    typedef MultiVecTraits<ScalarType,MV,DM> MVT;
     typedef OperatorTraits<ScalarType,MV,OP> OPT;
+    typedef DenseMatTraits<ScalarType,DM> DMT;
     typedef Teuchos::ScalarTraits<ScalarType> SCT;
     typedef typename SCT::magnitudeType MagnitudeType;
     
@@ -102,9 +70,9 @@ namespace Belos {
      * This constructor takes pointers required by the linear solver, in addition
      * to a parameter list of options for the linear solver. 
      */
-    PseudoBlockStochasticCGIter( const Teuchos::RCP<LinearProblem<ScalarType,MV,OP> > &problem, 
+    PseudoBlockStochasticCGIter( const Teuchos::RCP<LinearProblem<ScalarType,MV,OP,DM> > &problem,
 				 const Teuchos::RCP<OutputManager<ScalarType> > &printer,
-				 const Teuchos::RCP<StatusTest<ScalarType,MV,OP> > &tester,
+				 const Teuchos::RCP<StatusTest<ScalarType,MV,OP,DM> > &tester,
 				 Teuchos::ParameterList &params );
     
     //! Destructor.
@@ -208,7 +176,7 @@ namespace Belos {
     //@{ 
     
     //! Get a constant reference to the linear problem.
-    const LinearProblem<ScalarType,MV,OP>& getProblem() const { return *lp_; }
+    const LinearProblem<ScalarType,MV,OP,DM>& getProblem() const { return *lp_; }
     
     //! Get the blocksize to be used by the iterative solver in solving this linear problem.
     int getBlockSize() const { return 1; }
@@ -270,9 +238,9 @@ namespace Belos {
     //
     // Classes inputed through constructor that define the linear problem to be solved.
     //
-    const Teuchos::RCP<LinearProblem<ScalarType,MV,OP> >    lp_;
+    const Teuchos::RCP<LinearProblem<ScalarType,MV,OP,DM> >    lp_;
     const Teuchos::RCP<OutputManager<ScalarType> >          om_;
-    const Teuchos::RCP<StatusTest<ScalarType,MV,OP> >       stest_;
+    const Teuchos::RCP<StatusTest<ScalarType,MV,OP,DM> >       stest_;
     
     //
     // Algorithmic parameters
@@ -319,10 +287,10 @@ namespace Belos {
   
   //////////////////////////////////////////////////////////////////////////////////////////////////
   // Constructor.
-  template<class ScalarType, class MV, class OP>
-  PseudoBlockStochasticCGIter<ScalarType,MV,OP>::PseudoBlockStochasticCGIter(const Teuchos::RCP<LinearProblem<ScalarType,MV,OP> > &problem, 
+  template<class ScalarType, class MV, class OP, class DM>
+  PseudoBlockStochasticCGIter<ScalarType,MV,OP,DM>::PseudoBlockStochasticCGIter(const Teuchos::RCP<LinearProblem<ScalarType,MV,OP,DM> > &problem,
 							       const Teuchos::RCP<OutputManager<ScalarType> > &printer,
-							       const Teuchos::RCP<StatusTest<ScalarType,MV,OP> > &tester,
+							       const Teuchos::RCP<StatusTest<ScalarType,MV,OP,DM> > &tester,
 							       Teuchos::ParameterList &params ):
     lp_(problem),
     om_(printer),
@@ -337,8 +305,8 @@ namespace Belos {
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
   // Initialize this iteration object
-  template <class ScalarType, class MV, class OP>
-  void PseudoBlockStochasticCGIter<ScalarType,MV,OP>::initializeCG(StochasticCGIterationState<ScalarType,MV>& newstate)
+  template<class ScalarType, class MV, class OP, class DM>
+  void PseudoBlockStochasticCGIter<ScalarType,MV,OP,DM>::initializeCG(StochasticCGIterationState<ScalarType,MV>& newstate)
   {
     // Check if there is any multivector to clone from.
     Teuchos::RCP<const MV> lhsMV = lp_->getCurrLHSVec();
@@ -370,10 +338,6 @@ namespace Belos {
     //
     std::string errstr("Belos::BlockPseudoStochasticCGIter::initialize(): Specified multivectors must have a consistent length and width.");
 
-    // Create convenience variables for zero and one.
-    const ScalarType one = Teuchos::ScalarTraits<ScalarType>::one();
-    const MagnitudeType zero = Teuchos::ScalarTraits<MagnitudeType>::zero();
-
     if (!Teuchos::is_null(newstate.R)) {
 
       TEUCHOS_TEST_FOR_EXCEPTION( MVT::GetGlobalLength(*newstate.R) != MVT::GetGlobalLength(*R_),
@@ -384,7 +348,7 @@ namespace Belos {
       // Copy basis vectors from newstate into V
       if (newstate.R != R_) {
         // copy over the initial residual (unpreconditioned).
-	MVT::MvAddMv( one, *newstate.R, zero, *newstate.R, *R_ );
+	MVT::Assign( *newstate.R, *R_ );
       }
 
       // Compute initial direction vectors
@@ -404,7 +368,7 @@ namespace Belos {
       else {
 	Z_ = R_;
       }
-      MVT::MvAddMv( one, *Z_, zero, *Z_, *P_ );
+      MVT::Assign( *Z_, *P_ );
     }
     else {
 
@@ -419,8 +383,8 @@ namespace Belos {
 
  //////////////////////////////////////////////////////////////////////////////////////////////////
   // Iterate until the status test informs us we should stop.
-  template <class ScalarType, class MV, class OP>
-  void PseudoBlockStochasticCGIter<ScalarType,MV,OP>::iterate()
+  template<class ScalarType, class MV, class OP, class DM>
+  void PseudoBlockStochasticCGIter<ScalarType,MV,OP,DM>::iterate()
   {
     //
     // Allocate/initialize data structures
@@ -432,8 +396,9 @@ namespace Belos {
     // Allocate memory for scalars.
     int i=0;
     std::vector<int> index(1);
-    std::vector<ScalarType> rHz( numRHS_ ), rHz_old( numRHS_ ), pAp( numRHS_ );
-    Teuchos::SerialDenseMatrix<int, ScalarType> alpha( numRHS_,numRHS_ ), beta( numRHS_,numRHS_ ), zeta(numRHS_,numRHS_);
+    std::vector<ScalarType> rHz( numRHS_ ), rHz_old( numRHS_ ), pAp( numRHS_ ), beta( numRHS_ );
+    Teuchos::RCP<DM> alpha = DMT::Create( numRHS_,numRHS_ );
+    Teuchos::RCP<DM> zeta = DMT::Create( numRHS_,numRHS_ );
 
     // Create convenience variables for zero and one.
     const ScalarType one = Teuchos::ScalarTraits<ScalarType>::one();
@@ -474,20 +439,22 @@ namespace Belos {
                                 CGPositiveDefiniteFailure,
                                 "Belos::PseudoBlockStochasticCGIter::iterate(): non-positive value for p^H*A*p encountered!" );
 
-        alpha(i,i) = rHz[i] / pAp[i];
+        DMT::Value(*alpha,i,i) = rHz[i] / pAp[i];
 
 	// Compute the scaling parameter for the stochastic vector
-	zeta(i,i) = z[i] / Teuchos::ScalarTraits<ScalarType>::squareroot(pAp[i]);
+	DMT::Value(*zeta,i,i) = z[i] / Teuchos::ScalarTraits<ScalarType>::squareroot(pAp[i]);
       }
+      DMT::SyncDeviceToHost( *alpha );
+      DMT::SyncDeviceToHost( *zeta );
 
       //
       // Update the solution std::vector x := x + alpha * P_
       //
-      MVT::MvTimesMatAddMv( one, *P_, alpha, one, *cur_soln_vec );
+      MVT::MvTimesMatAddMv( one, *P_, *alpha, one, *cur_soln_vec );
       lp_->updateSolution();
 
       // Updates the stochastic vector y := y + zeta * P_
-      MVT::MvTimesMatAddMv( one, *P_, zeta, one, *Y_);
+      MVT::MvTimesMatAddMv( one, *P_, *zeta, one, *Y_);
 
       //
       // Save the denominator of beta before residual is updated [ old <R_, Z_> ]
@@ -498,7 +465,7 @@ namespace Belos {
       //
       // Compute the new residual R_ := R_ - alpha * AP_
       //
-      MVT::MvTimesMatAddMv( -one, *AP_, alpha, one, *R_ );
+      MVT::MvTimesMatAddMv( -one, *AP_, *alpha, one, *R_ );
       //
       // Compute beta := [ new <R_, Z_> ] / [ old <R_, Z_> ], 
       // and the new direction std::vector p.
@@ -527,11 +494,11 @@ namespace Belos {
       //
       // Update the search directions.
       for (i=0; i<numRHS_; ++i) {
-        beta(i,i) = rHz[i] / rHz_old[i];
+        beta[i] = rHz[i] / rHz_old[i];
 	index[0] = i;
 	Teuchos::RCP<const MV> Z_i = MVT::CloneView( *Z_, index );
 	Teuchos::RCP<MV> P_i = MVT::CloneViewNonConst( *P_, index );
-        MVT::MvAddMv( one, *Z_i, beta(i,i), *P_i, *P_i );
+        MVT::MvAddMv( one, *Z_i, beta[i], *P_i, *P_i );
       }
       //      
     } // end while (sTest_->checkStatus(this) != Passed)

@@ -1,3 +1,13 @@
+// @HEADER
+// *****************************************************************************
+//        Phalanx: A Partial Differential Equation Field Evaluation 
+//       Kernel for Flexible Management of Complex Dependency Chains
+//
+// Copyright 2008 NTESS and the Phalanx contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
+
 #ifndef EXAMPLE_WORKSET_BUILDER
 #define EXAMPLE_WORKSET_BUILDER
 
@@ -7,7 +17,7 @@
 
 struct WorksetBuilder {
 
-  using team_t = Kokkos::TeamPolicy<PHX::exec_space>::member_type;
+  using team_t = Kokkos::TeamPolicy<PHX::ExecutionSpace>::member_type;
   struct CopyWorksetDetJac_Tag{};
   struct CopyWorksetGradBasisReal_Tag{};
 
@@ -21,7 +31,7 @@ struct WorksetBuilder {
   void operator() (const CopyWorksetDetJac_Tag& , const team_t& team) const
   {
     const int cell = team.league_rank();
-    Kokkos::parallel_for(Kokkos::TeamThreadRange(team,0,mesh_det_jac.extent(1)), [=] (const int& qp) {
+    Kokkos::parallel_for(Kokkos::TeamThreadRange(team,0,mesh_det_jac.extent(1)), [&] (const int& qp) {
         workset_det_jac(cell,qp) = mesh_det_jac(cell+first_cell_global_index,qp);
         //printf("det_jac=%f\n",workset.det_jac_(cell,qp));
     });
@@ -31,7 +41,7 @@ struct WorksetBuilder {
   void operator() (const CopyWorksetGradBasisReal_Tag& , const team_t& team) const
   {
     const int cell = team.league_rank();
-    Kokkos::parallel_for(Kokkos::TeamThreadRange(team,0,mesh_det_jac.extent(1)), [=] (const int& qp) {
+    Kokkos::parallel_for(Kokkos::TeamThreadRange(team,0,mesh_det_jac.extent(1)), [&] (const int& qp) {
         for (int basis=0; basis < static_cast<int>(mesh_grad_basis_real.extent(2)); ++basis)
           for (int dim=0; dim < static_cast<int>(mesh_grad_basis_real.extent(3)); ++dim)
             workset_grad_basis_real(cell,qp,basis,dim) =
@@ -85,8 +95,8 @@ struct WorksetBuilder {
       workset_det_jac = worksets[w].det_jac_;
       workset_grad_basis_real = worksets[w].grad_basis_real_;
       
-      Kokkos::parallel_for(Kokkos::TeamPolicy<CopyWorksetDetJac_Tag,PHX::exec_space>(worksets[w].num_cells_,Kokkos::AUTO()), *this);
-      Kokkos::parallel_for(Kokkos::TeamPolicy<CopyWorksetGradBasisReal_Tag,PHX::exec_space>(worksets[w].num_cells_,Kokkos::AUTO()), *this);
+      Kokkos::parallel_for(Kokkos::TeamPolicy<CopyWorksetDetJac_Tag,PHX::ExecutionSpace>(worksets[w].num_cells_,Kokkos::AUTO()), *this);
+      Kokkos::parallel_for(Kokkos::TeamPolicy<CopyWorksetGradBasisReal_Tag,PHX::ExecutionSpace>(worksets[w].num_cells_,Kokkos::AUTO()), *this);
       Kokkos::fence();
     }
   }

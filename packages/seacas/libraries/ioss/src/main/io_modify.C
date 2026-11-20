@@ -1,4 +1,4 @@
-// Copyright(C) 1999-2024 National Technology & Engineering Solutions
+// Copyright(C) 1999-2025 National Technology & Engineering Solutions
 // of Sandia, LLC (NTESS).  Under the terms of Contract DE-NA0003525 with
 // NTESS, the U.S. Government retains certain rights in this software.
 //
@@ -7,12 +7,15 @@
 #include "Ionit_Initializer.h"
 #include "Ioss_Assembly.h"
 #include "Ioss_Blob.h"
+#include "Ioss_CodeTypes.h"
 #include "Ioss_DBUsage.h"
 #include "Ioss_DatabaseIO.h"
 #include "Ioss_ElementBlock.h"
 #include "Ioss_ElementTopology.h"
 #include "Ioss_FileInfo.h"
+#if !defined(USE_STD_GETLINE)
 #include "Ioss_Getline.h"
+#endif
 #include "Ioss_Glob.h"
 #include "Ioss_GroupingEntity.h"
 #include "Ioss_IOFactory.h"
@@ -20,6 +23,7 @@
 #include "Ioss_NodeSet.h"
 #include "Ioss_Property.h"
 #include "Ioss_Region.h"
+#include "Ioss_ScopeGuard.h"
 #include "Ioss_SideBlock.h"
 #include "Ioss_SideSet.h"
 #include "Ioss_StructuredBlock.h"
@@ -30,7 +34,6 @@
 #include <cstdlib>
 #include <exception>
 #include <fmt/color.h>
-#include <fmt/core.h>
 #include <fmt/format.h>
 #include <fmt/ostream.h>
 #include <fmt/ranges.h>
@@ -47,15 +50,13 @@
 #include "Ioss_EntityType.h"
 #include "Ioss_ParallelUtils.h"
 #include "Ioss_PropertyManager.h"
-#include "Ioss_ScopeGuard.h"
 #include "Ioss_State.h"
 #include "modify_interface.h"
 
-#if defined(SEACAS_HAVE_EXODUS)
+// `io_modify` is only built if Exodus is enabled...
 #include "exodus/Ioex_Internals.h"
 #include "exodus/Ioex_Utils.h"
 #include <exodusII.h>
-#endif
 
 #if defined(SEACAS_HAVE_CGNS)
 #include "cgns/Iocgns_Utils.h"
@@ -72,7 +73,7 @@ using real = double;
 
 namespace {
   std::string codename;
-  std::string version = "2.05 (2024-03-25)";
+  std::string version = "2.09 (2025-05-08)";
 
   std::vector<Ioss::GroupingEntity *> attributes_modified;
 
@@ -119,26 +120,25 @@ namespace {
 
   Ioss::NameList get_name_list(const Ioss::Region &region, Ioss::EntityType type);
   void           handle_help(const std::string &topic);
-  bool           handle_delete(const std::vector<std::string> &tokens, Ioss::Region &region);
-  void           handle_list(const std::vector<std::string> &tokens, const Ioss::Region &region,
+  bool           handle_delete(const Ioss::NameList &tokens, Ioss::Region &region);
+  void           handle_list(const Ioss::NameList &tokens, const Ioss::Region &region,
                              bool show_attribute = false);
-  void           handle_graph(const std::vector<std::string> &tokens, const Ioss::Region &region);
-  bool           handle_assembly(const std::vector<std::string> &tokens, Ioss::Region &region,
-                                 bool allow_modify);
-  bool           handle_attribute(const std::vector<std::string> &tokens, Ioss::Region &region);
-  bool           handle_geometry(const std::vector<std::string> &tokens, Ioss::Region &region);
-  bool           handle_time(const std::vector<std::string> &tokens, Ioss::Region &region);
-  bool           handle_rename(const std::vector<std::string> &tokens, Ioss::Region &region);
-  void           update_assembly_info(Ioss::Region &region, const Modify::Interface &interFace);
+  void           handle_graph(const Ioss::NameList &tokens, const Ioss::Region &region);
+  bool handle_assembly(const Ioss::NameList &tokens, Ioss::Region &region, bool allow_modify);
+  bool handle_attribute(const Ioss::NameList &tokens, Ioss::Region &region);
+  bool handle_geometry(const Ioss::NameList &tokens, Ioss::Region &region);
+  bool handle_time(const Ioss::NameList &tokens, Ioss::Region &region);
+  bool handle_rename(const Ioss::NameList &tokens, Ioss::Region &region);
+  void update_assembly_info(Ioss::Region &region, const Modify::Interface &interFace);
 
   void modify_time(Ioss::Region &region, double scale, double offset);
 
   void offset_filtered_coordinates(Ioss::Region &region, real offset[3],
-                                   const std::vector<int> &filter);
+                                   const std::vector<const Ioss::GroupingEntity *> &blocks);
   void scale_filtered_coordinates(Ioss::Region &region, real scale[3],
-                                  const std::vector<int> &filter);
+                                  const std::vector<const Ioss::GroupingEntity *> &blocks);
   void rotate_filtered_coordinates(Ioss::Region &region, real rotation_matrix[3][3],
-                                   const std::vector<int> &filter);
+                                   const std::vector<const Ioss::GroupingEntity *> &blocks);
   bool update_rotation_matrix(real rotation_matrix[3][3], const std::string &axis, double angle);
 
   void set_db_properties(const Modify::Interface &interFace, Ioss::DatabaseIO *dbi);
@@ -154,7 +154,7 @@ namespace {
   void info_time(const Ioss::Region &region);
 
   template <typename T>
-  void info_entities(const std::vector<T *> &entities, const std::vector<std::string> &tokens,
+  void info_entities(const std::vector<T *> &entities, const Ioss::NameList &tokens,
                      const Ioss::Region &region, const std::string &type,
                      bool show_property = false)
   {
@@ -320,7 +320,10 @@ int main(int argc, char *argv[])
   while (true) {
     std::string input;
     if (from_term) {
-      fmt::print(fg(fmt::terminal_color::magenta), "\n");
+#if defined(USE_STD_GETLINE)
+      std::cout << "COMMAND> ";
+      std::getline(std::cin, input);
+#else
       const char *cinput = Ioss::getline_int("COMMAND> ");
       if (cinput && cinput[0] == '\0') {
         break;
@@ -329,6 +332,7 @@ int main(int argc, char *argv[])
         Ioss::gl_histadd(cinput);
       }
       input = cinput;
+#endif
     }
     else {
       std::getline(std::cin, input);
@@ -406,7 +410,8 @@ namespace {
     fmt::print("{:14} cells, {:14} nodes\n", fmt::group_digits(num_cell),
                fmt::group_digits(num_node));
     if (show_property) {
-      Ioss::Utils::info_property(sb, Ioss::Property::ATTRIBUTE, "\tAttributes (Reduction): ", "\t");
+      Ioss::Utils::info_property(sb, Ioss::Property::Origin::ATTRIBUTE,
+                                 "\tAttributes (Reduction): ", "\t");
     }
   }
 
@@ -414,7 +419,7 @@ namespace {
   {
     fmt::print("\nRegion (global)\n");
     if (show_property) {
-      Ioss::Utils::info_property(&region, Ioss::Property::ATTRIBUTE,
+      Ioss::Utils::info_property(&region, Ioss::Property::Origin::ATTRIBUTE,
                                  "\tAttributes (Reduction): ", "\t");
     }
   }
@@ -436,7 +441,8 @@ namespace {
     }
     fmt::print("\n");
     if (show_property) {
-      Ioss::Utils::info_property(as, Ioss::Property::ATTRIBUTE, "\tAttributes (Reduction): ", "\t");
+      Ioss::Utils::info_property(as, Ioss::Property::Origin::ATTRIBUTE,
+                                 "\tAttributes (Reduction): ", "\t");
     }
   }
 
@@ -445,7 +451,7 @@ namespace {
     fmt::print("\n{} id: {:6d}, contains: {} item(s).\n", name(blob), id(blob),
                blob->entity_count());
     if (show_property) {
-      Ioss::Utils::info_property(blob, Ioss::Property::ATTRIBUTE,
+      Ioss::Utils::info_property(blob, Ioss::Property::Origin::ATTRIBUTE,
                                  "\tAttributes (Reduction): ", "\t");
     }
   }
@@ -459,7 +465,8 @@ namespace {
     fmt::print("\n{} id: {:6d}, topology: {:>10s}, {:14} elements, {:3d} attributes.\n", name(eb),
                id(eb), type, fmt::group_digits(num_elem), num_attrib);
     if (show_property) {
-      Ioss::Utils::info_property(eb, Ioss::Property::ATTRIBUTE, "\tAttributes (Reduction): ", "\t");
+      Ioss::Utils::info_property(eb, Ioss::Property::Origin::ATTRIBUTE,
+                                 "\tAttributes (Reduction): ", "\t");
     }
   }
 
@@ -483,7 +490,8 @@ namespace {
                  fmt::group_digits(count), num_attrib, fmt::group_digits(num_dist));
     }
     if (show_property) {
-      Ioss::Utils::info_property(ss, Ioss::Property::ATTRIBUTE, "\tAttributes (Reduction): ", "\t");
+      Ioss::Utils::info_property(ss, Ioss::Property::Origin::ATTRIBUTE,
+                                 "\tAttributes (Reduction): ", "\t");
     }
   }
 
@@ -495,7 +503,8 @@ namespace {
     fmt::print("\n{} id: {:6d}, {:8} nodes, {:3d} attributes, {:8} distribution factors.\n",
                name(ns), id(ns), fmt::group_digits(count), num_attrib, fmt::group_digits(num_dist));
     if (show_property) {
-      Ioss::Utils::info_property(ns, Ioss::Property::ATTRIBUTE, "\tAttributes (Reduction): ", "\t");
+      Ioss::Utils::info_property(ns, Ioss::Property::Origin::ATTRIBUTE,
+                                 "\tAttributes (Reduction): ", "\t");
     }
   }
 
@@ -506,7 +515,8 @@ namespace {
     fmt::print("\n{} {:14} nodes, {:3d} attributes.\n", name(nb), fmt::group_digits(num_nodes),
                num_attrib);
     if (show_property) {
-      Ioss::Utils::info_property(nb, Ioss::Property::ATTRIBUTE, "\tAttributes (Reduction): ", "\t");
+      Ioss::Utils::info_property(nb, Ioss::Property::Origin::ATTRIBUTE,
+                                 "\tAttributes (Reduction): ", "\t");
     }
   }
 
@@ -526,6 +536,7 @@ namespace {
     if (dbi == nullptr || !dbi->ok(true)) {
       std::exit(EXIT_FAILURE);
     }
+    dbi->set_lowercase_database_names(false);
   }
 
   void handle_help(const std::string &topic)
@@ -661,11 +672,12 @@ namespace {
       fmt::print(fmt::emphasis::bold, "\tGEOMETRY OFFSET ");
       fmt::print("{{X|Y|Z}} {{offset}} ...\n");
       fmt::print(fmt::emphasis::bold, "\tGEOMETRY ROTATE ");
-      fmt::print("{{ELEMENTBLOCKS|BLOCKS|ASSEMBLY}} {{names}} {{X|Y|Z}} {{angle}} ...\n");
+      fmt::print("{{ELEMENTBLOCKS|BLOCKS|ASSEMBLY}} {{names}} {{X|Y|Z}} {{angle}}\n");
       fmt::print(fmt::emphasis::bold, "\tGEOMETRY MIRROR ");
       fmt::print("{{ELEMENTBLOCKS|BLOCKS|ASSEMBLY}} {{names}} {{X|Y|Z}} ...\n");
       fmt::print(fmt::emphasis::bold, "\tGEOMETRY SCALE  ");
-      fmt::print("{{ELEMENTBLOCKS|BLOCKS|ASSEMBLY}} {{names}} {{X|Y|Z}} {{scale_factor}} ...\n");
+      fmt::print("{{ELEMENTBLOCKS|BLOCKS|ASSEMBLY}} {{names}} {{X|Y|Z}} {{scale_factor}} ... "
+                 "\n");
       fmt::print(fmt::emphasis::bold, "\tGEOMETRY OFFSET ");
       fmt::print("{{ELEMENTBLOCKS|BLOCKS|ASSEMBLY}} {{names}} {{X|Y|Z}} {{offset}} ...\n");
     }
@@ -696,8 +708,7 @@ namespace {
     }
   }
 
-  void handle_list(const std::vector<std::string> &tokens, const Ioss::Region &region,
-                   bool show_attribute)
+  void handle_list(const Ioss::NameList &tokens, const Ioss::Region &region, bool show_attribute)
   {
     if (tokens.size() > 1) {
       if (Ioss::Utils::substr_equal(tokens[1], "summary")) {
@@ -706,8 +717,7 @@ namespace {
       else if (Ioss::Utils::substr_equal(tokens[1], "region")) {
         info_entity(region, show_attribute);
       }
-      else if (Ioss::Utils::substr_equal(tokens[1], "elementblock") ||
-               Ioss::Utils::substr_equal(tokens[1], "block")) {
+      else if (Ioss::Utils::substr_equal(tokens[1], "elementblock")) {
         const auto &entities = region.get_element_blocks();
         info_entities(entities, tokens, region, "Element Blocks", show_attribute);
       }
@@ -728,6 +738,17 @@ namespace {
       else if (Ioss::Utils::substr_equal(tokens[1], "structuredblock")) {
         const auto &entities = region.get_structured_blocks();
         info_entities(entities, tokens, region, "Structured Blocks", show_attribute);
+      }
+      else if (Ioss::Utils::substr_equal(tokens[1], "blocks")) {
+        const auto type = region.mesh_type();
+        if (type == Ioss::MeshType::UNSTRUCTURED) {
+          const auto &entities = region.get_element_blocks();
+          info_entities(entities, tokens, region, "Element Blocks", show_attribute);
+        }
+        else if (type == Ioss::MeshType::STRUCTURED) {
+          const auto &entities = region.get_structured_blocks();
+          info_entities(entities, tokens, region, "Structured Blocks", show_attribute);
+        }
       }
       else if (Ioss::Utils::substr_equal(tokens[1], "sideset") ||
                Ioss::Utils::substr_equal(tokens[1], "sset")) {
@@ -754,9 +775,9 @@ namespace {
 
   class Graph
   {
-    std::map<std::string, int>    m_vertices;
-    std::vector<std::string>      m_vertex;
-    std::vector<std::vector<int>> m_adj; // Pointer to an array containing adjacency std::lists
+    std::map<std::string, int>   m_vertices;
+    Ioss::NameList               m_vertex;
+    std::vector<Ioss::IntVector> m_adj; // Pointer to an array containing adjacency std::lists
 
     bool is_cyclic_internal(int v, std::vector<bool> &visited, std::vector<bool> &recStack);
     int  vertex(const std::string &node);
@@ -844,7 +865,7 @@ namespace {
     return false;
   }
 
-  void handle_graph(const std::vector<std::string> &tokens, const Ioss::Region &region)
+  void handle_graph(const Ioss::NameList &tokens, const Ioss::Region &region)
   {
     if (tokens.size() == 1) {
       handle_help("graph");
@@ -905,7 +926,7 @@ namespace {
     }
   }
 
-  bool handle_delete(const std::vector<std::string> &tokens, Ioss::Region &region)
+  bool handle_delete(const Ioss::NameList &tokens, Ioss::Region &region)
   {
     // Returns true if requested assembly was deleted.
     // False if assembly does not exist, or was not deletable (not created during this run)
@@ -947,7 +968,7 @@ namespace {
     return false;
   }
 
-  bool handle_attribute(const std::vector<std::string> &tokens, Ioss::Region &region)
+  bool handle_attribute(const Ioss::NameList &tokens, Ioss::Region &region)
   {
     //     0          1        2       3         4       5...
     // ATTRIBUTE {{ent_name}} ADD {{att_name}} STRING {{values...}}
@@ -961,13 +982,9 @@ namespace {
     if (Ioss::Utils::substr_equal(tokens[2], "add")) {
       // Must be at least 6 tokens...
       if (tokens.size() < 6) {
-        fmt::print(stderr,
-#if !defined __NVCC__
-                   fg(fmt::color::red),
-#endif
-                   "ERROR: ATTRIBUTE Command does not have enough tokens to be valid.\n"
-                   "\t\t{}\n",
-                   fmt::join(tokens, " "));
+        fmt::print(stderr, fg(fmt::color::red),
+                   "ERROR: ATTRIBUTE Command does not have enough tokens to be valid.\n");
+        fmt::print(stderr, "\t\t{}\n", fmt::join(tokens, " "));
         handle_help("attribute");
         return false;
       }
@@ -994,7 +1011,7 @@ namespace {
         for (size_t i = 6; i < tokens.size(); i++) {
           value += " " + tokens[i];
         }
-        ge->property_add(Ioss::Property(att_name, value, Ioss::Property::ATTRIBUTE));
+        ge->property_add(Ioss::Property(att_name, value, Ioss::Property::Origin::ATTRIBUTE));
       }
       else if (Ioss::Utils::substr_equal(tokens[4], "double")) {
         std::vector<double> values(value_count);
@@ -1010,10 +1027,10 @@ namespace {
           }
         }
 
-        ge->property_add(Ioss::Property(att_name, values, Ioss::Property::ATTRIBUTE));
+        ge->property_add(Ioss::Property(att_name, values, Ioss::Property::Origin::ATTRIBUTE));
       }
       else if (Ioss::Utils::substr_equal(tokens[4], "integer")) {
-        std::vector<int> values(value_count);
+        Ioss::IntVector values(value_count);
         for (size_t i = 0; i < value_count; i++) {
           try {
             int val   = std::stoi(tokens[i + 5]);
@@ -1025,7 +1042,7 @@ namespace {
             return false;
           }
         }
-        ge->property_add(Ioss::Property(att_name, values, Ioss::Property::ATTRIBUTE));
+        ge->property_add(Ioss::Property(att_name, values, Ioss::Property::Origin::ATTRIBUTE));
       }
       else {
         fmt::print(stderr, fg(fmt::color::red),
@@ -1050,7 +1067,7 @@ namespace {
         if (ge != nullptr) {
           std::string prefix =
               fmt::format("\n{} id: {:6d}\n\tAttributes (Reduction): ", name(ge), id(ge));
-          Ioss::Utils::info_property(ge, Ioss::Property::ATTRIBUTE, prefix, "\t");
+          Ioss::Utils::info_property(ge, Ioss::Property::Origin::ATTRIBUTE, prefix, "\t");
         }
       }
       return false;
@@ -1075,7 +1092,7 @@ namespace {
     return false;
   }
 
-  bool handle_rename(const std::vector<std::string> &tokens, Ioss::Region &region)
+  bool handle_rename(const Ioss::NameList &tokens, Ioss::Region &region)
   {
     //     0          1        2       3         4
     // RENAME   {{ent_name}}   TO   {{new_name}}
@@ -1083,13 +1100,9 @@ namespace {
 
     // Must be at least 4 tokens...
     if (tokens.size() < 4) {
-      fmt::print(stderr,
-#if !defined __NVCC__
-                 fg(fmt::color::red),
-#endif
-                 "ERROR: RENAME Command does not have enough tokens to be valid.\n"
-                 "\t\t{}\n",
-                 fmt::join(tokens, " "));
+      fmt::print(stderr, fg(fmt::color::red),
+                 "ERROR: RENAME Command does not have enough tokens to be valid.\n");
+      fmt::print(stderr, "\t\t{}\n", fmt::join(tokens, " "));
       handle_help("rename");
       return false;
     }
@@ -1145,13 +1158,20 @@ namespace {
   }
 
   void build_block_list(Ioss::Region &region, const Ioss::GroupingEntity *ge,
-                        std::vector<const Ioss::ElementBlock *> &blocks)
+                        std::vector<const Ioss::GroupingEntity *> &blocks)
   {
     if (ge) {
       if (ge->type() == Ioss::ELEMENTBLOCK) {
         auto *eb = dynamic_cast<const Ioss::ElementBlock *>(ge);
         if (eb != nullptr) {
           blocks.push_back(eb);
+        }
+        return;
+      }
+      else if (ge->type() == Ioss::STRUCTUREDBLOCK) {
+        auto *sb = dynamic_cast<const Ioss::StructuredBlock *>(ge);
+        if (sb != nullptr) {
+          blocks.push_back(sb);
         }
         return;
       }
@@ -1166,20 +1186,24 @@ namespace {
     }
   }
 
-  std::vector<int> get_filtered_node_list(Ioss::Region                            &region,
-                                          std::vector<const Ioss::ElementBlock *> &blocks)
+  std::vector<int> get_filtered_node_list(Ioss::Region                                    &region,
+                                          const std::vector<const Ioss::GroupingEntity *> &blocks)
   {
+    const auto type = region.get_database()->get_format();
+    if (type != "Exodus") {
+      return {};
+    }
     auto node_count = region.get_property("node_count").get_int();
     if (blocks.empty() ||
         blocks.size() == (size_t)region.get_property("element_block_count").get_int()) {
-      return std::vector<int>(node_count, 1);
+      return Ioss::IntVector(node_count, 1);
     }
     else {
-      std::vector<int> node_filter(node_count);
+      Ioss::IntVector node_filter(node_count);
       // Iterate all element blocks in 'blocks', get connectivity_raw
       // and set `node_filter` to 1 for nodes in connectivity list.
       if (region.get_database()->int_byte_size_api() == 4) {
-        std::vector<int> connect;
+        Ioss::IntVector connect;
         for (const auto *block : blocks) {
           block->get_field_data("connectivity_raw", connect);
           for (auto node : connect) {
@@ -1200,19 +1224,15 @@ namespace {
     }
   }
 
-  bool handle_time(const std::vector<std::string> &tokens, Ioss::Region &region)
+  bool handle_time(const Ioss::NameList &tokens, Ioss::Region &region)
   {
     //   0      1       2
     // TIME   SCALE  {{scale}}
     // TIME   OFFSET {{offset}
     if (tokens.size() < 3) {
-      fmt::print(stderr,
-#if !defined __NVCC__
-                 fg(fmt::color::red),
-#endif
-                 "ERROR: TIME Command does not have enough tokens to be valid.\n"
-                 "\t\t{}\n",
-                 fmt::join(tokens, " "));
+      fmt::print(stderr, fg(fmt::color::red),
+                 "ERROR: TIME Command does not have enough tokens to be valid.\n");
+      fmt::print(stderr, "\t\t{}\n", fmt::join(tokens, " "));
       handle_help("time");
       return false;
     }
@@ -1233,7 +1253,7 @@ namespace {
     return false;
   }
 
-  bool handle_geometry(const std::vector<std::string> &tokens, Ioss::Region &region)
+  bool handle_geometry(const Ioss::NameList &tokens, Ioss::Region &region)
   {
     //     0        1        2         3         4       5...
     // GEOMETRY   ROTATE {{X|Y|Z}} {{angle}} ...
@@ -1245,21 +1265,20 @@ namespace {
     // GEOMETRY   OFFSET {{ELEMENTBLOCKS|BLOCKS|ASSEMBLY}} {{names}} {{X|Y|Z}} {{offset}} ...
 
     if (tokens.size() < 3) {
-      fmt::print(stderr,
-#if !defined __NVCC__
-                 fg(fmt::color::red),
-#endif
-                 "ERROR: GEOMETRY Command does not have enough tokens to be valid.\n"
-                 "\t\t{}\n",
-                 fmt::join(tokens, " "));
+      fmt::print(stderr, fg(fmt::color::red),
+                 "ERROR: GEOMETRY Command does not have enough tokens to be valid.\n");
+      fmt::print(stderr, "\t\t{}\n", fmt::join(tokens, " "));
       handle_help("geometry");
       return false;
     }
 
+    const auto type = region.mesh_type();
+
     // See if applying just selected (and connected) blocks.
-    size_t                                  idx = 2;
-    std::vector<const Ioss::ElementBlock *> blocks;
+    size_t                                    idx = 2;
+    std::vector<const Ioss::GroupingEntity *> blocks;
     if (Ioss::Utils::substr_equal(tokens[idx], "elementblocks") ||
+        Ioss::Utils::substr_equal(tokens[idx], "structuredblocks") ||
         Ioss::Utils::substr_equal(tokens[idx], "blocks") ||
         Ioss::Utils::substr_equal(tokens[idx], "assembly")) {
       // Parse list of block|assembly names...
@@ -1268,7 +1287,9 @@ namespace {
                Ioss::Utils::str_equal(tokens[idx], "y") ||
                Ioss::Utils::str_equal(tokens[idx], "z"))) {
         const auto &name = tokens[idx++];
-        auto       *ge   = region.get_entity(name, Ioss::ELEMENTBLOCK);
+        auto       *ge =
+            region.get_entity(name, type == Ioss::MeshType::UNSTRUCTURED ? Ioss::ELEMENTBLOCK
+                                                                         : Ioss::STRUCTUREDBLOCK);
         if (ge == nullptr) {
           ge = region.get_entity(name, Ioss::ASSEMBLY);
         }
@@ -1282,50 +1303,58 @@ namespace {
     // If blocks is non-empty, then we are applying geometry modification to a subset of the model.
     // In that case, we need to get all blocks that are connected to the user-specified blocks...
     if (!blocks.empty()) {
-      std::vector<const Ioss::ElementBlock *> tmp(blocks);
-      for (const auto *block : blocks) {
-        const auto &connected = block->get_block_adjacencies();
-        for (const auto &connect : connected) {
-          auto *eb = region.get_element_block(connect);
-          tmp.push_back(eb);
+      if (type == Ioss::MeshType::UNSTRUCTURED) {
+        auto tmp(blocks);
+        for (const auto *block : blocks) {
+          auto *eb = dynamic_cast<const Ioss::ElementBlock *>(block);
+          if (eb != nullptr) {
+            const auto &connected = eb->get_block_adjacencies();
+            for (const auto &connect : connected) {
+              auto *elb = region.get_element_block(connect);
+              tmp.push_back(elb);
+            }
+          }
         }
+        Ioss::Utils::uniquify(tmp);
+        blocks = tmp;
       }
-      Ioss::Utils::uniquify(tmp);
-      blocks = tmp;
     }
 
-    if (blocks.empty() ||
-        blocks.size() == (size_t)region.get_property("element_block_count").get_int()) {
-      fmt::print(fg(fmt::color::cyan),
-                 "\n\t*** {} transformation will be applied to ALL element blocks.\n", tokens[1]);
+    if (blocks.empty()) {
+      fmt::print(fg(fmt::color::cyan), "\n\t*** {} transformation will be applied to ALL blocks.\n",
+                 tokens[1]);
     }
     else {
-      fmt::print(fg(fmt::color::cyan),
-                 "\n\t*** {} transformation will be applied to element blocks:\n\t", tokens[1]);
+      fmt::print(fg(fmt::color::cyan), "\n\t*** {} transformation will be applied to blocks:\n\t",
+                 tokens[1]);
       for (const auto *block : blocks) {
         fmt::print(fg(fmt::color::cyan), "{}, ", block->name());
       }
       fmt::print("\n");
     }
 
-    // Now, filter the nodes to determine which nodes are connected to elements in the block list.
-    auto node_filter = get_filtered_node_list(region, blocks);
-
     if (Ioss::Utils::substr_equal(tokens[1], "rotate")) {
       real rotation_matrix[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
 
       // Get rotation axis...
       do {
-        const std::string &axis  = tokens[idx++];
-        double             angle = std::stod(tokens[idx++]);
-        auto               ok    = update_rotation_matrix(rotation_matrix, axis, angle);
+        const std::string &axis = tokens[idx++];
+        if (axis != "x" && axis != "y" && axis != "z" && axis != "X" && axis != "Y" &&
+            axis != "Z") {
+          fmt::print(stderr, fg(fmt::color::red),
+                     "ERROR: Unrecognized axis {}.  Expected one of xyzXYZ.\n", axis);
+          handle_help("geometry");
+          return false;
+        }
+        double angle = std::stod(tokens[idx++]);
+        auto   ok    = update_rotation_matrix(rotation_matrix, axis, angle);
         if (!ok) {
           return false;
         }
       } while (idx < tokens.size());
 
       // Do the rotation...
-      rotate_filtered_coordinates(region, rotation_matrix, node_filter);
+      rotate_filtered_coordinates(region, rotation_matrix, blocks);
       fmt::print(fg(fmt::color::cyan), "\t*** Database coordinates rotated.\n");
       return false;
     }
@@ -1335,8 +1364,15 @@ namespace {
 
       // Get scale axis and scale factor...
       do {
-        const std::string &axis   = tokens[idx++];
-        double             factor = std::stod(tokens[idx++]);
+        const std::string &axis = tokens[idx++];
+        if (axis != "x" && axis != "y" && axis != "z" && axis != "X" && axis != "Y" &&
+            axis != "Z") {
+          fmt::print(stderr, fg(fmt::color::red),
+                     "ERROR: Unrecognized axis {}.  Expected one of xyzXYZ.\n", axis);
+          handle_help("geometry");
+          return false;
+        }
+        double factor = std::stod(tokens[idx++]);
         if (Ioss::Utils::substr_equal(axis, "x")) {
           scale[0] = factor;
         }
@@ -1349,7 +1385,7 @@ namespace {
       } while (idx < tokens.size());
 
       // Do the transformation...
-      scale_filtered_coordinates(region, scale, node_filter);
+      scale_filtered_coordinates(region, scale, blocks);
       fmt::print(fg(fmt::color::cyan), "\t*** Database coordinate(s) scaled.\n");
       return false;
     }
@@ -1360,6 +1396,13 @@ namespace {
       // Get mirror axis ...
       do {
         const std::string &axis = tokens[idx++];
+        if (axis != "x" && axis != "y" && axis != "z" && axis != "X" && axis != "Y" &&
+            axis != "Z") {
+          fmt::print(stderr, fg(fmt::color::red),
+                     "ERROR: Unrecognized axis {}.  Expected one of xyzXYZ.\n", axis);
+          handle_help("geometry");
+          return false;
+        }
         if (Ioss::Utils::substr_equal(axis, "x")) {
           scale[0] = -1.0;
         }
@@ -1372,7 +1415,7 @@ namespace {
       } while (idx < tokens.size());
 
       // Do the transformation...
-      scale_filtered_coordinates(region, scale, node_filter);
+      scale_filtered_coordinates(region, scale, blocks);
       fmt::print(fg(fmt::color::cyan), "\t*** Database coordinate(s) mirrored.\n");
       return false;
     }
@@ -1382,8 +1425,15 @@ namespace {
 
       // Get offset axis and offset factor...
       do {
-        const std::string &axis   = tokens[idx++];
-        double             factor = std::stod(tokens[idx++]);
+        const std::string &axis = tokens[idx++];
+        if (axis != "x" && axis != "y" && axis != "z" && axis != "X" && axis != "Y" &&
+            axis != "Z") {
+          fmt::print(stderr, fg(fmt::color::red),
+                     "ERROR: Unrecognized axis {}.  Expected one of xyzXYZ.\n", axis);
+          handle_help("geometry");
+          return false;
+        }
+        double factor = std::stod(tokens[idx++]);
         if (Ioss::Utils::substr_equal(axis, "x")) {
           offset[0] = factor;
         }
@@ -1396,7 +1446,7 @@ namespace {
       } while (idx < tokens.size());
 
       // Do the transformation...
-      offset_filtered_coordinates(region, offset, node_filter);
+      offset_filtered_coordinates(region, offset, blocks);
       fmt::print(fg(fmt::color::cyan), "\t*** Database coordinate(s) offset.\n");
       return false;
     }
@@ -1406,8 +1456,7 @@ namespace {
     return false;
   }
 
-  bool handle_assembly(const std::vector<std::string> &tokens, Ioss::Region &region,
-                       bool allow_modify)
+  bool handle_assembly(const Ioss::NameList &tokens, Ioss::Region &region, bool allow_modify)
   {
     bool            changed = false;
     Ioss::Assembly *assem   = nullptr;
@@ -1653,7 +1702,6 @@ namespace {
   }
 #endif
 
-#if defined(SEACAS_HAVE_EXODUS)
   void update_exodus_assembly_info(Ioss::Region &region, const Modify::Interface &interFace)
   {
     std::vector<Ioex::Assembly> ex_assemblies;
@@ -1716,18 +1764,13 @@ namespace {
       Ioex::write_reduction_attributes(exoid, attributes_modified);
     }
   }
-#endif
 
   void update_assembly_info(Ioss::Region &region, const Modify::Interface &interFace)
   {
     // Determine type of underlying database...
     const auto type = region.get_database()->get_format();
     if (type == "Exodus") {
-#if defined(SEACAS_HAVE_EXODUS)
       update_exodus_assembly_info(region, interFace);
-#else
-      fmt::print(stderr, fg(fmt::color::red), "ERROR: Exodus capability is not enabled.\n");
-#endif
     }
     else if (type == "CGNS") {
 #if defined(SEACAS_HAVE_CGNS)
@@ -1743,30 +1786,81 @@ namespace {
     }
   }
 
-  void rotate_filtered_coordinates(Ioss::Region &region, real rotation_matrix[3][3],
+  void rotate_filtered_coordinates(const Ioss::GroupingEntity *nb, real rotation_matrix[3][3],
                                    const std::vector<int> &filter)
   {
-    // `filter` is of size number of nodes.  Value = 1 the rotate; value = 0 leave as is.
-    Ioss::NodeBlock    *nb = region.get_node_block("nodeblock_1");
-    std::vector<double> coord;
+    // `filter` is of size number of nodes.  Value = 1 then rotate; value = 0 leave as is.
 
     // Get original coordinates...
+    std::vector<double> coord;
     nb->get_field_data("mesh_model_coordinates", coord);
-    size_t node_count = nb->entity_count();
+    size_t node_count = coord.size() / 3;
 
     // Do the rotation...
     for (size_t i = 0; i < node_count; i++) {
-      real x = coord[3 * i + 0];
-      real y = coord[3 * i + 1];
-      real z = coord[3 * i + 2];
+      if (filter.empty() || filter[i] == 1) {
+        real x = coord[3 * i + 0];
+        real y = coord[3 * i + 1];
+        real z = coord[3 * i + 2];
 
-      real xn = x * rotation_matrix[0][0] + y * rotation_matrix[1][0] + z * rotation_matrix[2][0];
-      real yn = x * rotation_matrix[0][1] + y * rotation_matrix[1][1] + z * rotation_matrix[2][1];
-      real zn = x * rotation_matrix[0][2] + y * rotation_matrix[1][2] + z * rotation_matrix[2][2];
+        real xn = x * rotation_matrix[0][0] + y * rotation_matrix[1][0] + z * rotation_matrix[2][0];
+        real yn = x * rotation_matrix[0][1] + y * rotation_matrix[1][1] + z * rotation_matrix[2][1];
+        real zn = x * rotation_matrix[0][2] + y * rotation_matrix[1][2] + z * rotation_matrix[2][2];
 
-      coord[3 * i + 0] = filter[i] * xn + (1 - filter[i]) * coord[3 * i + 0];
-      coord[3 * i + 1] = filter[i] * yn + (1 - filter[i]) * coord[3 * i + 1];
-      coord[3 * i + 2] = filter[i] * zn + (1 - filter[i]) * coord[3 * i + 2];
+        coord[3 * i + 0] = xn;
+        coord[3 * i + 1] = yn;
+        coord[3 * i + 2] = zn;
+      }
+    }
+
+    // Output updated coordinates...
+    nb->put_field_data("mesh_model_coordinates", coord);
+  }
+
+  void rotate_filtered_coordinates(Ioss::Region &region, real rotation_matrix[3][3],
+                                   const std::vector<const Ioss::GroupingEntity *> &blocks)
+  {
+    const auto type = region.mesh_type();
+    if (type == Ioss::MeshType::UNSTRUCTURED) {
+      auto             filter = get_filtered_node_list(region, blocks);
+      Ioss::NodeBlock *nb     = region.get_node_block("nodeblock_1");
+      rotate_filtered_coordinates(nb, rotation_matrix, filter);
+    }
+    else if (type == Ioss::MeshType::STRUCTURED) {
+      if (blocks.empty()) {
+        auto sblocks = region.get_structured_blocks();
+        for (const auto &sb : sblocks) {
+          rotate_filtered_coordinates(sb, rotation_matrix, std::vector<int>());
+        }
+      }
+      else {
+        for (const auto &blk : blocks) {
+          auto *sb = dynamic_cast<const Ioss::StructuredBlock *>(blk);
+          if (sb != nullptr) {
+            rotate_filtered_coordinates(sb, rotation_matrix, std::vector<int>());
+          }
+        }
+      }
+    }
+  }
+
+  void offset_filtered_coordinates(const Ioss::GroupingEntity *nb, real offset[3],
+                                   const std::vector<int> &filter)
+  {
+    // `filter` is of size number of nodes.  Value = 1 transform; value = 0 leave as is.
+
+    // Get original coordinates...
+    std::vector<double> coord;
+    nb->get_field_data("mesh_model_coordinates", coord);
+    size_t node_count = coord.size() / 3;
+
+    // Do the transformation...
+    for (size_t i = 0; i < node_count; i++) {
+      if (filter.empty() || filter[i] == 1) {
+        coord[3 * i + 0] += offset[0];
+        coord[3 * i + 1] += offset[1];
+        coord[3 * i + 2] += offset[2];
+      }
     }
 
     // Output updated coordinates...
@@ -1774,29 +1868,47 @@ namespace {
   }
 
   void offset_filtered_coordinates(Ioss::Region &region, real offset[3],
-                                   const std::vector<int> &filter)
+                                   const std::vector<const Ioss::GroupingEntity *> &blocks)
   {
-    // `filter` is of size number of nodes.  Value = 1 transform; value = 0 leave as is.
-    Ioss::NodeBlock    *nb = region.get_node_block("nodeblock_1");
-    std::vector<double> coord;
+    const auto type = region.mesh_type();
+    if (type == Ioss::MeshType::UNSTRUCTURED) {
+      auto             filter = get_filtered_node_list(region, blocks);
+      Ioss::NodeBlock *nb     = region.get_node_block("nodeblock_1");
+      offset_filtered_coordinates(nb, offset, filter);
+    }
+    else if (type == Ioss::MeshType::STRUCTURED) {
+      if (blocks.empty()) {
+        auto sblocks = region.get_structured_blocks();
+        for (const auto &sb : sblocks) {
+          offset_filtered_coordinates(sb, offset, std::vector<int>());
+        }
+      }
+      else {
+        for (const auto &blk : blocks) {
+          auto *sb = dynamic_cast<const Ioss::StructuredBlock *>(blk);
+          if (sb != nullptr) {
+            offset_filtered_coordinates(sb, offset, std::vector<int>());
+          }
+        }
+      }
+    }
+  }
 
+  void scale_filtered_coordinates(const Ioss::GroupingEntity *nb, real scale[3],
+                                  const std::vector<int> &filter)
+  {
     // Get original coordinates...
+    std::vector<double> coord;
     nb->get_field_data("mesh_model_coordinates", coord);
-    size_t node_count = nb->entity_count();
+    size_t node_count = coord.size() / 3;
 
     // Do the transformation...
     for (size_t i = 0; i < node_count; i++) {
-      real x = coord[3 * i + 0];
-      real y = coord[3 * i + 1];
-      real z = coord[3 * i + 2];
-
-      real xn = x + offset[0];
-      real yn = y + offset[1];
-      real zn = z + offset[2];
-
-      coord[3 * i + 0] = filter[i] * xn + (1 - filter[i]) * coord[3 * i + 0];
-      coord[3 * i + 1] = filter[i] * yn + (1 - filter[i]) * coord[3 * i + 1];
-      coord[3 * i + 2] = filter[i] * zn + (1 - filter[i]) * coord[3 * i + 2];
+      if (filter.empty() || filter[i] == 1) {
+        coord[3 * i + 0] *= scale[0];
+        coord[3 * i + 1] *= scale[1];
+        coord[3 * i + 2] *= scale[2];
+      }
     }
 
     // Output updated coordinates...
@@ -1804,33 +1916,30 @@ namespace {
   }
 
   void scale_filtered_coordinates(Ioss::Region &region, real scale[3],
-                                  const std::vector<int> &filter)
+                                  const std::vector<const Ioss::GroupingEntity *> &blocks)
   {
-    // `filter` is of size number of nodes.  Value = 1 transform; value = 0 leave as is.
-    Ioss::NodeBlock    *nb = region.get_node_block("nodeblock_1");
-    std::vector<double> coord;
-
-    // Get original coordinates...
-    nb->get_field_data("mesh_model_coordinates", coord);
-    size_t node_count = nb->entity_count();
-
-    // Do the transformation...
-    for (size_t i = 0; i < node_count; i++) {
-      real x = coord[3 * i + 0];
-      real y = coord[3 * i + 1];
-      real z = coord[3 * i + 2];
-
-      real xn = x * scale[0];
-      real yn = y * scale[1];
-      real zn = z * scale[2];
-
-      coord[3 * i + 0] = filter[i] * xn + (1 - filter[i]) * coord[3 * i + 0];
-      coord[3 * i + 1] = filter[i] * yn + (1 - filter[i]) * coord[3 * i + 1];
-      coord[3 * i + 2] = filter[i] * zn + (1 - filter[i]) * coord[3 * i + 2];
+    const auto type = region.mesh_type();
+    if (type == Ioss::MeshType::UNSTRUCTURED) {
+      auto             filter = get_filtered_node_list(region, blocks);
+      Ioss::NodeBlock *nb     = region.get_node_block("nodeblock_1");
+      scale_filtered_coordinates(nb, scale, filter);
     }
-
-    // Output updated coordinates...
-    nb->put_field_data("mesh_model_coordinates", coord);
+    else if (type == Ioss::MeshType::STRUCTURED) {
+      if (blocks.empty()) {
+        auto sblocks = region.get_structured_blocks();
+        for (const auto &sb : sblocks) {
+          scale_filtered_coordinates(sb, scale, std::vector<int>());
+        }
+      }
+      else {
+        for (const auto &blk : blocks) {
+          auto *sb = dynamic_cast<const Ioss::StructuredBlock *>(blk);
+          if (sb != nullptr) {
+            scale_filtered_coordinates(sb, scale, std::vector<int>());
+          }
+        }
+      }
+    }
   }
 
   bool update_rotation_matrix(real rotation_matrix[3][3], const std::string &axis, double angle)
@@ -1912,5 +2021,4 @@ namespace {
     Ioex::update_last_time_attribute(exoid, max_time);
     (void)region.get_min_time(); // Triggers reloading region stateTimes vector.
   }
-
 } // nameSpace

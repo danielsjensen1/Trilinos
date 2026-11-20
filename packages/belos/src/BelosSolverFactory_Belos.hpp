@@ -1,43 +1,11 @@
-//@HEADER
-// ************************************************************************
-//
+// @HEADER
+// *****************************************************************************
 //                 Belos: Block Linear Solvers Package
-//                  Copyright 2004 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
-//
-// ************************************************************************
-//@HEADER
+// Copyright 2004-2016 NTESS and the Belos contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
 
 #ifndef BELOSSOLVERFACTORY_BELOS_HPP
 #define BELOSSOLVERFACTORY_BELOS_HPP
@@ -54,7 +22,15 @@
 
 namespace Belos {
 
-class BelosSolverFactory : public Impl::SolverFactoryParent<double,MultiVec<double>,Operator<double>>
+/** \example epetra/example/SolverFactory/SolverFactoryEpetraGaleriEx.cpp 
+    This is an example of how to use the Belos::SolverFactory with Epetra.
+*/
+/** \example tpetra/example/SolverFactory/SolverFactoryTpetraGaleriEx.cpp 
+    This is an example of how to use the Belos::SolverFactory with Tpetra.
+*/
+
+  class BelosSolverFactory : public Impl::SolverFactoryParent<double,MultiVec<double, DefaultDenseMatrix<int,double>>,Operator<double, DefaultDenseMatrix<int,double>>,
+                                                          DefaultDenseMatrix<int,double>>
 {
   public:
     BelosSolverFactory() {
@@ -62,7 +38,8 @@ class BelosSolverFactory : public Impl::SolverFactoryParent<double,MultiVec<doub
     };
 };
 
-class BelosFloatSolverFactory : public Impl::SolverFactoryParent<float,MultiVec<float>,Operator<float>>
+  class BelosFloatSolverFactory : public Impl::SolverFactoryParent<float,MultiVec<float, DefaultDenseMatrix<int,float>>,Operator<float, DefaultDenseMatrix<int,float>>,
+                                                          DefaultDenseMatrix<int,float>>
 {
   public:
     BelosFloatSolverFactory() {
@@ -73,19 +50,20 @@ class BelosFloatSolverFactory : public Impl::SolverFactoryParent<float,MultiVec<
 namespace Impl {
 
 template<>
-class SolverFactorySelector<double,MultiVec<double>,Operator<double>> {
+class SolverFactorySelector<double,MultiVec<double, DefaultDenseMatrix<int,double>>,Operator<double, DefaultDenseMatrix<int,double>>,DefaultDenseMatrix<int,double>> {
   public:
     typedef BelosSolverFactory type;
 };
 
 template<>
-class SolverFactorySelector<float,MultiVec<float>,Operator<float>> {
+class SolverFactorySelector<float,MultiVec<float, DefaultDenseMatrix<int,float>>,Operator<float, DefaultDenseMatrix<int,float>>,DefaultDenseMatrix<int,float>> {
   public:
     typedef BelosFloatSolverFactory type;
 };
 
 #ifdef HAVE_TEUCHOS_COMPLEX
-class BelosComplexSolverFactory : public Impl::SolverFactoryParent<std::complex<double>,MultiVec<std::complex<double>>,Operator<std::complex<double>>>
+class BelosComplexSolverFactory : public Impl::SolverFactoryParent<std::complex<double>,MultiVec<std::complex<double>>,
+  Operator<std::complex<double>, DefaultDenseMatrix<int,std::complex<double>>>, DefaultDenseMatrix<int,std::complex<double>>>
 {
   public:
     BelosComplexSolverFactory() {
@@ -94,12 +72,15 @@ class BelosComplexSolverFactory : public Impl::SolverFactoryParent<std::complex<
 };
 
 template<>
-class SolverFactorySelector<std::complex<double>,MultiVec<std::complex<double>>,Operator<std::complex<double>>> {
+class SolverFactorySelector<std::complex<double>,MultiVec<std::complex<double>>,Operator<std::complex<double>, DefaultDenseMatrix<int,std::complex<double>>>,
+                                    DefaultDenseMatrix<int,std::complex<double>>>
+{
   public:
     typedef BelosComplexSolverFactory type;
 };
 
-class BelosFloatComplexSolverFactory : public Impl::SolverFactoryParent<std::complex<float>,MultiVec<std::complex<float>>,Operator<std::complex<float>>>
+class BelosFloatComplexSolverFactory : public Impl::SolverFactoryParent<std::complex<float>,MultiVec<std::complex<float>>,
+                                                                        Operator<std::complex<float>, DefaultDenseMatrix<int,std::complex<float>>>, DefaultDenseMatrix<int,std::complex<float>>>
 {
   public:
     BelosFloatComplexSolverFactory() {
@@ -108,7 +89,9 @@ class BelosFloatComplexSolverFactory : public Impl::SolverFactoryParent<std::com
 };
 
 template<>
-class SolverFactorySelector<std::complex<float>,MultiVec<std::complex<float>>,Operator<std::complex<float>>> {
+class SolverFactorySelector<std::complex<float>,MultiVec<std::complex<float>>,Operator<std::complex<float>, DefaultDenseMatrix<int,std::complex<float>>>,
+                                    DefaultDenseMatrix<int,std::complex<float>>>
+{
   public:
     typedef BelosFloatComplexSolverFactory type;
 };

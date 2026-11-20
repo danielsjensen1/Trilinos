@@ -1,5 +1,5 @@
 /*
- * Copyright(C) 1999-2024 National Technology & Engineering Solutions
+ * Copyright(C) 1999-2025 National Technology & Engineering Solutions
  * of Sandia, LLC (NTESS).  Under the terms of Contract DE-NA0003525 with
  * NTESS, the U.S. Government retains certain rights in this software.
  *
@@ -47,17 +47,20 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+/** Maximum length of name permitted by NetCDF */
+#define EX_MAX_NAME NC_MAX_NAME
+
 #ifndef NC_INT64
 #error "NetCDF version 4.1.2 or later is required."
 #endif
 
 /* EXODUS version number */
-#define EXODUS_VERSION       "8.25"
-#define EXODUS_VERSION_MAJOR 8
-#define EXODUS_VERSION_MINOR 25
-#define EXODUS_RELEASE_DATE  "July 28, 2023"
+#define EXODUS_VERSION       "9.06"
+#define EXODUS_VERSION_MAJOR 9
+#define EXODUS_VERSION_MINOR 6
+#define EXODUS_RELEASE_DATE  "August 25, 2025"
 
-#define EX_API_VERS       8.25f
+#define EX_API_VERS       9.06f
 #define EX_API_VERS_NODOT (100 * EXODUS_VERSION_MAJOR + EXODUS_VERSION_MINOR)
 #define EX_VERS           EX_API_VERS
 
@@ -212,6 +215,7 @@ enum ex_inquiry {
   EX_INQ_NUM_ELEM_SET_VAR    = 69, /**< number of element set variables */
   EX_INQ_NUM_SIDE_SET_VAR    = 70, /**< number of sideset variables */
   EX_INQ_NUM_GLOBAL_VAR      = 71, /**< number of global variables */
+  EX_INQ_FILE_FORMAT         = 72, /**< netCDF file format */
   EX_INQ_INVALID             = -1
 };
 
@@ -239,9 +243,11 @@ NetCDF-4.?.? and later
 enum ex_option_type {
   EX_OPT_MAX_NAME_LENGTH =
       1, /**< Maximum length of names that will be returned/passed via api call. */
-  EX_OPT_COMPRESSION_TYPE,    /**<  Not currently used; default is gzip */
-  EX_OPT_COMPRESSION_LEVEL,   /**<  In the range [0..9]. A value of 0 indicates no compression */
+  EX_OPT_COMPRESSION_TYPE,    /**<  Default is gzip */
+  EX_OPT_COMPRESSION_LEVEL,   /**<  Range depends on compression type. */
   EX_OPT_COMPRESSION_SHUFFLE, /**<  1 if enabled, 0 if disabled */
+  EX_OPT_QUANTIZE_NSD,        /**< if > 0, Number of significant digits to retain in lossy quantize
+                                 compression */
   EX_OPT_INTEGER_SIZE_API, /**<  4 or 8 indicating byte size of integers used in api functions. */
   EX_OPT_INTEGER_SIZE_DB,  /**<  Query only, returns 4 or 8 indicating byte size of integers stored
                              on  the database. */
@@ -252,6 +258,8 @@ enum ex_compression_type {
   EX_COMPRESS_ZLIB = 1, /**< Use ZLIB-based compression (if available) */
   EX_COMPRESS_GZIP = 1, /**< Same as ZLIB, but typical alias used */
   EX_COMPRESS_SZIP,     /**< Use SZIP-based compression (if available) */
+  EX_COMPRESS_ZSTD,     /**< Use ZStandard compression (if available) */
+  EX_COMPRESS_BZ2,      /**< Use BZ2 / Bzip2 compression (if available) */
 };
 typedef enum ex_compression_type ex_compression_type;
 /** @}*/
@@ -282,6 +290,98 @@ enum ex_entity_type {
 };
 typedef enum ex_entity_type ex_entity_type;
 
+enum ex_field_type {
+  EX_FIELD_TYPE_INVALID = 0,
+  EX_FIELD_TYPE_USER_DEFINED,
+  EX_FIELD_TYPE_SEQUENCE,
+  EX_BASIS,
+  EX_QUADRATURE,
+  EX_SCALAR,
+  EX_VECTOR_1D,
+  EX_VECTOR_2D,
+  EX_VECTOR_3D,
+  EX_QUATERNION_2D,
+  EX_QUATERNION_3D,
+  EX_FULL_TENSOR_36,
+  EX_FULL_TENSOR_32,
+  EX_FULL_TENSOR_22,
+  EX_FULL_TENSOR_16,
+  EX_FULL_TENSOR_12,
+  EX_SYM_TENSOR_33,
+  EX_SYM_TENSOR_31,
+  EX_SYM_TENSOR_21,
+  EX_SYM_TENSOR_13,
+  EX_SYM_TENSOR_11,
+  EX_SYM_TENSOR_10,
+  EX_ASYM_TENSOR_03,
+  EX_ASYM_TENSOR_02,
+  EX_ASYM_TENSOR_01,
+  EX_MATRIX_2X2,
+  EX_MATRIX_3X3
+};
+typedef enum ex_field_type ex_field_type;
+
+#define EX_MAX_FIELD_NESTING 2
+typedef struct ex_field
+{
+  ex_entity_type entity_type;
+  int64_t        entity_id;
+  char           name[EX_MAX_NAME + 1]; /* Name of the field */
+  /*
+   * For basis, user, quadrature -- what is name of the subtype. This
+   * is a comma-separated list of `nesting` names Use two consecutive
+   * commas for an empty type_name. Leave empty if no type_names
+   */
+  int           nesting; /* Number of composite fields (vector at each quadrature point = 2) */
+  char          type_name[EX_MAX_NAME + 1];
+  ex_field_type type[EX_MAX_FIELD_NESTING];                /* ex_field_type of each nested field */
+  int           cardinality[EX_MAX_FIELD_NESTING];         /* 0 to calculate based on type */
+  char          component_separator[EX_MAX_FIELD_NESTING]; /* empty defaults to '_'; */
+  char          suffices[EX_MAX_NAME + 1]; /* Optional comma-separated list of suffices if type is
+                                              EX_FIELD_TYPE_USER_DEFINED */
+} ex_field;
+
+typedef struct ex_basis
+{
+  /*
+   clang-format off
+   *
+   * subc_dim: dimension of the subcell associated with the specified DoF ordinal
+   *      -- 0 node, 1 edge, 2 face, 3 volume [Range: 0..3]
+   * subc_ordinal: ordinal of the subcell relative to its parent cell
+   *      -- 0..n for each ordinal with the same subc dim [Range: <= DoF ordinal]
+   * subc_dof_ordinal: ordinal of the DoF relative to the subcell
+   * subc_num_dof: cardinality of the DoF set associated with this subcell.
+   * xi, eta, mu (ξ, η, ζ): Parametric coordinate location of the DoF
+   *      -- (Only first ndim values are valid)
+   *
+   clang-format on
+   */
+
+  char    name[EX_MAX_NAME + 1];
+  int     cardinality; /* number of `basis` points == dimension of non-null subc_*, xi, eta, mu */
+  int    *subc_dim;
+  int    *subc_ordinal;
+  int    *subc_dof_ordinal;
+  int    *subc_num_dof;
+  double *xi;
+  double *eta;
+  double *zeta;
+} ex_basis;
+
+typedef struct ex_quadrature
+{
+  char    name[EX_MAX_NAME + 1];
+  int     cardinality; /* Number of quadrature points */
+  int     dimension;   /* 1,2,3 -- spatial dimension of points */
+  double *xi;          /* xi  (x) coordinate of points; dimension = cardinality  or NULL */
+  double *
+      eta; /* eta (y) coordinate of points; dimension = cardinality if dimension = 2 or 3 or NULL */
+  double
+      *zeta; /* zeta (z) coordinate of points; dimension = cardinality if dimension == 3. or NULL */
+  double *weight; /* weights for each point; dimension = cardinality or NULL */
+} ex_quadrature;
+
 /*!
  * ex_opts() function codes - codes are OR'ed into exopts
  */
@@ -304,9 +404,6 @@ typedef enum ex_options ex_options;
  * constants that are used as netcdf dimensions must be of type long
  * @{
  */
-
-/** Maximum length of name permitted by NetCDF */
-#define EX_MAX_NAME NC_MAX_NAME
 
 /** Maximum length of QA record, element type name */
 #define MAX_STR_LENGTH 32L
@@ -368,10 +465,10 @@ typedef enum ex_type ex_type;
 typedef struct ex_attribute
 {
   ex_entity_type entity_type;
-  ex_entity_id   entity_id;
-  char           name[NC_MAX_NAME + 1];
+  int64_t        entity_id;
+  char           name[EX_MAX_NAME + 1];
   ex_type        type; /* int, double, text */
-  size_t         value_count;
+  int            value_count;
   void          *values; /* not accessed if NULL */
 } ex_attribute;
 
@@ -875,7 +972,7 @@ EXODUS_EXPORT int ex_get_block(int exoid, ex_entity_type blk_type, ex_entity_id 
 /*  Read Edge Face or Element Block Parameters */
 EXODUS_EXPORT int ex_get_block_param(int exoid, ex_block *block);
 
-EXODUS_EXPORT int ex_put_block_param(int exoid, const ex_block block);
+EXODUS_EXPORT int ex_put_block_param(int exoid, ex_block block);
 
 EXODUS_EXPORT int ex_get_block_params(int exoid, size_t block_count, struct ex_block **blocks);
 
@@ -941,20 +1038,35 @@ EXODUS_EXPORT int ex_put_attr_names(int exoid, ex_entity_type blk_type, ex_entit
 EXODUS_EXPORT int ex_get_attr_names(int exoid, ex_entity_type obj_type, ex_entity_id obj_id,
                                     char **names);
 
-EXODUS_EXPORT int ex_put_assembly(int exoid, const struct ex_assembly assembly);
+EXODUS_EXPORT int ex_put_assembly(int exoid, struct ex_assembly assembly);
 EXODUS_EXPORT int ex_get_assembly(int exoid, struct ex_assembly *assembly);
 
 EXODUS_EXPORT int ex_put_assemblies(int exoid, size_t count, const struct ex_assembly *assemblies);
 EXODUS_EXPORT int ex_get_assemblies(int exoid, struct ex_assembly *assemblies);
 
-EXODUS_EXPORT int ex_put_blob(int exoid, const struct ex_blob blob);
+EXODUS_EXPORT int ex_put_blob(int exoid, struct ex_blob blob);
 EXODUS_EXPORT int ex_get_blob(int exoid, struct ex_blob *blob);
 
 EXODUS_EXPORT int ex_put_blobs(int exoid, size_t count, const struct ex_blob *blobs);
 EXODUS_EXPORT int ex_get_blobs(int exoid, struct ex_blob *blobs);
 
+EXODUS_EXPORT int ex_put_multi_field_metadata(int exoid, const ex_field *field, int field_count);
+EXODUS_EXPORT int ex_put_field_metadata(int exoid, ex_field field);
+EXODUS_EXPORT int ex_put_field_suffices(int exoid, ex_field field, const char *suffices);
+EXODUS_EXPORT int ex_get_field_metadata(int exoid, ex_field *field);
+EXODUS_EXPORT int ex_get_field_metadata_count(int exoid, ex_entity_type obj_type, ex_entity_id id);
+EXODUS_EXPORT int ex_get_field_suffices(int exoid, ex_field field, char *suffices);
+
+EXODUS_EXPORT int ex_get_basis_count(int exoid);
+EXODUS_EXPORT int ex_get_basis(int exoid, ex_basis **pbasis, int *num_basis);
+EXODUS_EXPORT int ex_put_basis(int exoid, ex_basis basis);
+
+EXODUS_EXPORT int ex_get_quadrature_count(int exoid);
+EXODUS_EXPORT int ex_get_quadrature(int exoid, ex_quadrature **pquad, int *num_quad);
+EXODUS_EXPORT int ex_put_quadrature(int exoid, ex_quadrature quad);
+
 /*  Write arbitrary integer, double, or text attributes on an entity */
-EXODUS_EXPORT int ex_put_attribute(int exoid, const ex_attribute attributes);
+EXODUS_EXPORT int ex_put_attribute(int exoid, ex_attribute attributes);
 EXODUS_EXPORT int ex_put_attributes(int exoid, size_t attr_count, const ex_attribute *attributes);
 
 EXODUS_EXPORT int ex_put_double_attribute(int exoid, ex_entity_type obj_type, ex_entity_id id,
@@ -1201,6 +1313,17 @@ EXODUS_EXPORT int ex_put_elem_cmap(int             exoid,    /**< NetCDF/Exodus 
                                    const void_int *proc_ids, /**< Vector of processor IDs */
                                    int             processor /**< This processor ID */
 );
+
+EXODUS_EXPORT int ex_initialize_basis_struct(ex_basis *basis, size_t num_basis, int mode);
+EXODUS_EXPORT int ex_initialize_quadrature_struct(ex_quadrature *quad, size_t num_quad, int mode);
+
+EXODUS_EXPORT const char *ex_component_field_name(ex_field *field,
+                                                  int       component[EX_MAX_FIELD_NESTING]);
+EXODUS_EXPORT const char *ex_field_component_suffix(ex_field *field, int nest_level, int component);
+EXODUS_EXPORT int         ex_field_cardinality(ex_field_type field_type);
+EXODUS_EXPORT const char *ex_field_type_name(ex_field_type field_type);
+EXODUS_EXPORT ex_field_type ex_string_to_field_type_enum(const char *field_name);
+EXODUS_EXPORT const char   *ex_field_type_enum_to_string(ex_field_type field_type);
 
 /*! @} */
 
@@ -1830,6 +1953,7 @@ enum ex_error_return_code {
   EX_DUPLICATEID   = 1007,  /**< duplicate id found                       */
   EX_DUPLICATEOPEN = 1008,  /**< duplicate open                           */
   EX_BADFILENAME   = 1009,  /**< empty or null filename specified         */
+  EX_LONGFIELDNAME = 1010,  /**< field name is too long to generate attribute */
   EX_MSG           = -1000, /**< message print code - no error implied    */
   EX_PRTLASTMSG    = -1001, /**< print last error message msg code        */
   EX_NOTROOTID     = -1002, /**< file id is not the root id; it is a subgroup id */
@@ -1837,10 +1961,13 @@ enum ex_error_return_code {
   EX_NULLENTITY    = -1006, /**< null entity found                        */
   EX_NOENTITY      = -1007, /**< no entities of that type on database    */
   EX_NOTFOUND      = -1008, /**< could not find requested variable on database */
+  EX_INTSIZEMISMATCH =
+      -1009, /**< integer sizes do not match on input/output databases in ex_copy  */
 
-  EX_FATAL = -1, /**< fatal error flag def                     */
-  EX_NOERR = 0,  /**< no error flag def                        */
-  EX_WARN  = 1   /**< warning flag def                         */
+  EX_RANGE = -1010, /**< numeric conversion warning */
+  EX_FATAL = -1,    /**< fatal error flag def                     */
+  EX_NOERR = 0,     /**< no error flag def                        */
+  EX_WARN  = 1      /**< warning flag def                         */
 };
 typedef enum ex_error_return_code ex_error_return_code;
 

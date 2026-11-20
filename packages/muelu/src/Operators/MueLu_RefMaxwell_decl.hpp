@@ -1,53 +1,17 @@
 // @HEADER
-//
-// ***********************************************************************
-//
+// *****************************************************************************
 //        MueLu: A package for multigrid based preconditioning
-//                  Copyright 2012 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact
-//                    Jonathan Hu       (jhu@sandia.gov)
-//                    Andrey Prokopenko (aprokop@sandia.gov)
-//                    Ray Tuminaro      (rstumin@sandia.gov)
-//
-// ***********************************************************************
-//
+// Copyright 2012 NTESS and the MueLu contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
+
 #ifndef MUELU_REFMAXWELL_DECL_HPP
 #define MUELU_REFMAXWELL_DECL_HPP
 
 #include "MueLu_ConfigDefs.hpp"
-#include "MueLu_BaseClass.hpp"
+#include "MueLu_VerboseObject.hpp"
 
 #include "MueLu_CoalesceDropFactory_fwd.hpp"
 #include "MueLu_CoarseMapFactory_fwd.hpp"
@@ -258,9 +222,9 @@ class RefMaxwell : public VerboseObject, public Xpetra::Operator<Scalar, LocalOr
 #include "MueLu_UseShortNames.hpp"
 
  public:
-  typedef typename Teuchos::ScalarTraits<Scalar>::magnitudeType magnitudeType;
-  typedef typename Teuchos::ScalarTraits<Scalar>::coordinateType coordinateType;
-  typedef typename Xpetra::MultiVector<coordinateType, LO, GO, NO> RealValuedMultiVector;
+  using magnitudeType         = typename Teuchos::ScalarTraits<Scalar>::magnitudeType;
+  using coordinateType        = typename Teuchos::ScalarTraits<Scalar>::coordinateType;
+  using RealValuedMultiVector = typename Xpetra::MultiVector<coordinateType, LO, GO, NO>;
 
   //! Constructor
   RefMaxwell()
@@ -300,6 +264,36 @@ class RefMaxwell : public VerboseObject, public Xpetra::Operator<Scalar, LocalOr
                Mk_one, Mk_1_one,
                invMk_1_invBeta, invMk_2_invAlpha,
                Nullspace11, Nullspace22, NodalCoords,
+               Teuchos::null, Teuchos::null,
+               List);
+    resetMatrix(SM_Matrix, ComputePrec);
+  }
+
+  RefMaxwell(const Teuchos::RCP<Matrix> &SM_Matrix,
+             const Teuchos::RCP<Matrix> &Dk_1,
+             const Teuchos::RCP<Matrix> &Dk_2,
+             const Teuchos::RCP<Matrix> &D0,
+             const Teuchos::RCP<Matrix> &M1_beta,
+             const Teuchos::RCP<Matrix> &M1_alpha,
+             const Teuchos::RCP<Matrix> &Mk_one,
+             const Teuchos::RCP<Matrix> &Mk_1_one,
+             const Teuchos::RCP<Matrix> &invMk_1_invBeta,
+             const Teuchos::RCP<Matrix> &invMk_2_invAlpha,
+             const Teuchos::RCP<MultiVector> &Nullspace11,
+             const Teuchos::RCP<MultiVector> &Nullspace22,
+             const Teuchos::RCP<RealValuedMultiVector> &NodalCoords,
+             const Teuchos::RCP<MultiVector> &Material_beta,
+             const Teuchos::RCP<MultiVector> &Material_alpha,
+             Teuchos::ParameterList &List,
+             bool ComputePrec = true) {
+    int spaceNumber = List.get<int>("refmaxwell: space number", 1);
+    initialize(spaceNumber,
+               Dk_1, Dk_2, D0,
+               M1_beta, M1_alpha,
+               Mk_one, Mk_1_one,
+               invMk_1_invBeta, invMk_2_invAlpha,
+               Nullspace11, Nullspace22, NodalCoords,
+               Material_beta, Material_alpha,
                List);
     resetMatrix(SM_Matrix, ComputePrec);
   }
@@ -325,7 +319,21 @@ class RefMaxwell : public VerboseObject, public Xpetra::Operator<Scalar, LocalOr
              const Teuchos::RCP<RealValuedMultiVector> &NodalCoords,
              Teuchos::ParameterList &List,
              bool ComputePrec = true) {
-    initialize(D0_Matrix, Ms_Matrix, M0inv_Matrix, M1_Matrix, Nullspace11, NodalCoords, List);
+    initialize(D0_Matrix, Ms_Matrix, M0inv_Matrix, M1_Matrix, Nullspace11, NodalCoords, Teuchos::null, List);
+    resetMatrix(SM_Matrix, ComputePrec);
+  }
+
+  RefMaxwell(const Teuchos::RCP<Matrix> &SM_Matrix,
+             const Teuchos::RCP<Matrix> &D0_Matrix,
+             const Teuchos::RCP<Matrix> &Ms_Matrix,
+             const Teuchos::RCP<Matrix> &M0inv_Matrix,
+             const Teuchos::RCP<Matrix> &M1_Matrix,
+             const Teuchos::RCP<MultiVector> &Nullspace11,
+             const Teuchos::RCP<RealValuedMultiVector> &NodalCoords,
+             const Teuchos::RCP<MultiVector> &Material,
+             Teuchos::ParameterList &List,
+             bool ComputePrec = true) {
+    initialize(D0_Matrix, Ms_Matrix, M0inv_Matrix, M1_Matrix, Nullspace11, NodalCoords, Material, List);
     resetMatrix(SM_Matrix, ComputePrec);
   }
 
@@ -348,7 +356,7 @@ class RefMaxwell : public VerboseObject, public Xpetra::Operator<Scalar, LocalOr
              const Teuchos::RCP<RealValuedMultiVector> &NodalCoords,
              Teuchos::ParameterList &List,
              bool ComputePrec = true) {
-    initialize(D0_Matrix, M1_Matrix, M0inv_Matrix, M1_Matrix, Nullspace11, NodalCoords, List);
+    initialize(D0_Matrix, M1_Matrix, M0inv_Matrix, M1_Matrix, Nullspace11, NodalCoords, Teuchos::null, List);
     resetMatrix(SM_Matrix, ComputePrec);
   }
 
@@ -368,7 +376,7 @@ class RefMaxwell : public VerboseObject, public Xpetra::Operator<Scalar, LocalOr
              const Teuchos::RCP<RealValuedMultiVector> &NodalCoords,
              Teuchos::ParameterList &List)
     : SM_Matrix_(Teuchos::null) {
-    initialize(D0_Matrix, M1_Matrix, M0inv_Matrix, M1_Matrix, Nullspace11, NodalCoords, List);
+    initialize(D0_Matrix, M1_Matrix, M0inv_Matrix, M1_Matrix, Nullspace11, NodalCoords, Teuchos::null, List);
   }
 
   /** Constructor with Jacobian (no add on)
@@ -388,7 +396,7 @@ class RefMaxwell : public VerboseObject, public Xpetra::Operator<Scalar, LocalOr
              const Teuchos::RCP<RealValuedMultiVector> &NodalCoords,
              Teuchos::ParameterList &List,
              bool ComputePrec) {
-    initialize(D0_Matrix, M1_Matrix, Teuchos::null, M1_Matrix, Nullspace11, NodalCoords, List);
+    initialize(D0_Matrix, M1_Matrix, Teuchos::null, M1_Matrix, Nullspace11, NodalCoords, Teuchos::null, List);
     resetMatrix(SM_Matrix, ComputePrec);
   }
 
@@ -406,7 +414,7 @@ class RefMaxwell : public VerboseObject, public Xpetra::Operator<Scalar, LocalOr
              const Teuchos::RCP<RealValuedMultiVector> &NodalCoords,
              Teuchos::ParameterList &List)
     : SM_Matrix_(Teuchos::null) {
-    initialize(D0_Matrix, M1_Matrix, Teuchos::null, M1_Matrix, Nullspace11, NodalCoords, List);
+    initialize(D0_Matrix, M1_Matrix, Teuchos::null, M1_Matrix, Nullspace11, NodalCoords, Teuchos::null, List);
   }
 
   /** Constructor with parameter list
@@ -420,7 +428,7 @@ class RefMaxwell : public VerboseObject, public Xpetra::Operator<Scalar, LocalOr
              bool ComputePrec = true);
 
   //! Destructor.
-  virtual ~RefMaxwell() {}
+  virtual ~RefMaxwell() = default;
 
   //! Returns the Xpetra::Map object associated with the domain of this operator.
   const Teuchos::RCP<const Map> getDomainMap() const;
@@ -452,6 +460,8 @@ class RefMaxwell : public VerboseObject, public Xpetra::Operator<Scalar, LocalOr
 
   //! Indicates whether this operator supports applying the adjoint operator.
   bool hasTransposeApply() const;
+
+  static std::pair<std::set<std::string>, std::set<std::string>> requiredAndOptionalUserData(const Teuchos::ParameterList &params);
 
   void describe(Teuchos::FancyOStream &out, const Teuchos::EVerbosityLevel verbLevel = Teuchos::VERB_HIGH) const;
 
@@ -485,6 +495,7 @@ class RefMaxwell : public VerboseObject, public Xpetra::Operator<Scalar, LocalOr
                   const Teuchos::RCP<Matrix> &M1_Matrix,
                   const Teuchos::RCP<MultiVector> &Nullspace11,
                   const Teuchos::RCP<RealValuedMultiVector> &NodalCoords,
+                  const Teuchos::RCP<MultiVector> &Material,
                   Teuchos::ParameterList &List);
 
   /** Initialize with matrices except the Jacobian (don't compute the preconditioner)
@@ -517,6 +528,8 @@ class RefMaxwell : public VerboseObject, public Xpetra::Operator<Scalar, LocalOr
                   const Teuchos::RCP<MultiVector> &Nullspace11,
                   const Teuchos::RCP<MultiVector> &Nullspace22,
                   const Teuchos::RCP<RealValuedMultiVector> &NodalCoords,
+                  const Teuchos::RCP<MultiVector> &Material_beta,
+                  const Teuchos::RCP<MultiVector> &Material_alpha,
                   Teuchos::ParameterList &List);
 
   //! Determine how large the sub-communicators for the two hierarchies should be
@@ -585,6 +598,7 @@ class RefMaxwell : public VerboseObject, public Xpetra::Operator<Scalar, LocalOr
                      const Teuchos::RCP<Matrix> &A,
                      const Teuchos::RCP<MultiVector> &Nullspace,
                      const Teuchos::RCP<RealValuedMultiVector> &Coords,
+                     const Teuchos::RCP<MultiVector> &Material,
                      Teuchos::ParameterList &params,
                      std::string &label,
                      const bool reuse,
@@ -621,7 +635,7 @@ class RefMaxwell : public VerboseObject, public Xpetra::Operator<Scalar, LocalOr
   void dump(const Kokkos::View<bool *, typename Node::device_type> &v, std::string name) const;
 
   //! get a (synced) timer
-  Teuchos::RCP<Teuchos::TimeMonitor> getTimer(std::string name, RCP<const Teuchos::Comm<int> > comm = Teuchos::null) const;
+  Teuchos::RCP<Teuchos::TimeMonitor> getTimer(std::string name, RCP<const Teuchos::Comm<int>> comm = Teuchos::null) const;
 
   //! Two hierarchies: one for the coarse (1,1)-block, another for the (2,2)-block
   Teuchos::RCP<Hierarchy> HierarchyCoarse11_, Hierarchy22_;
@@ -648,6 +662,8 @@ class RefMaxwell : public VerboseObject, public Xpetra::Operator<Scalar, LocalOr
   Teuchos::RCP<Matrix> Mk_one_, Mk_1_one_;
   //! mass matrices on first space with weights beta and alpha respectively
   Teuchos::RCP<Matrix> M1_beta_, M1_alpha_;
+  //! material for first space
+  Teuchos::RCP<MultiVector> Material_beta_, Material_alpha_;
   //! special prolongator for 11 block and its transpose
   Teuchos::RCP<Matrix> P11_, R11_;
   //! special prolongator for 22 block and its transpose
@@ -673,7 +689,7 @@ class RefMaxwell : public VerboseObject, public Xpetra::Operator<Scalar, LocalOr
   Teuchos::RCP<MultiVector> CoarseNullspace22_;
   //! Importer to coarse (1,1) hierarchy
   Teuchos::RCP<const Import> ImporterCoarse11_, Importer22_;
-  bool Dk_1_T_R11_colMapsMatch_;
+  bool Dk_1_T_R11_colMapsMatch_, asyncTransfers_;
   bool onlyBoundary11_, onlyBoundary22_;
   //! Parameter lists
   Teuchos::ParameterList parameterList_, precList11_, precList22_;
@@ -686,7 +702,7 @@ class RefMaxwell : public VerboseObject, public Xpetra::Operator<Scalar, LocalOr
   std::string mode_;
 
   //! Temporary memory
-  mutable Teuchos::RCP<MultiVector> P11res_, P11x_, P11resSubComm_, P11xSubComm_, DresIntermediate_, Dres_, DxIntermediate_, Dx_, DresSubComm_, DxSubComm_, residual_, P11resTmp_, DresTmp_, DTR11Tmp_;
+  mutable Teuchos::RCP<MultiVector> P11res_, P11x_, P11resSubComm_, P11xSubComm_, DresIntermediate_, Dres_, DxIntermediate_, Dx_, DresSubComm_, DxSubComm_, residual_, P11resTmp_, DresTmp_, DTR11Tmp_, P11x_colmap_, Dx_colmap_;
 };
 
 }  // namespace MueLu

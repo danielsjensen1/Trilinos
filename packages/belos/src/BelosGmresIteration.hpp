@@ -1,43 +1,11 @@
-//@HEADER
-// ************************************************************************
-//
+// @HEADER
+// *****************************************************************************
 //                 Belos: Block Linear Solvers Package
-//                  Copyright 2004 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
-//
-// ************************************************************************
-//@HEADER
+// Copyright 2004-2016 NTESS and the Belos contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
 
 #ifndef BELOS_GMRES_ITERATION_HPP
 #define BELOS_GMRES_ITERATION_HPP
@@ -59,7 +27,7 @@ namespace Belos {
    *
    * This struct is utilized by GmresIteration::initialize() and GmresIteration::getState().
    */
-  template <class ScalarType, class MV>
+  template <class ScalarType, class MV, class DM = DefaultDenseMatrix<int,ScalarType>>
   struct GmresIterationState {
     /*! \brief The current dimension of the reduction.
      *
@@ -79,18 +47,58 @@ namespace Belos {
      * projection of problem->getOperator() by the first \c curDim vectors in V. 
      */
 
-    Teuchos::RCP<const Teuchos::SerialDenseMatrix<int,ScalarType> > H;
+    Teuchos::RCP<const DM> H;
     /*! \brief The current upper-triangular matrix from the QR reduction of H. */
 
-    Teuchos::RCP<const Teuchos::SerialDenseMatrix<int,ScalarType> > R;
+    Teuchos::RCP<const DM> R;
     /*! \brief The current right-hand side of the least squares system RY = Z. */
 
-    Teuchos::RCP<const Teuchos::SerialDenseMatrix<int,ScalarType> > z;
+    Teuchos::RCP<const DM> z;
     
 
     GmresIterationState() : curDim(0), V(Teuchos::null), Z(Teuchos::null),
 			    H(Teuchos::null), R(Teuchos::null), 
 			    z(Teuchos::null)
+    {}
+  };
+
+  //! @name PseudoBlockGmresIter Structures
+  //@{
+
+  /** \brief Structure to contain pointers to PseudoBlockGmresIter state variables.
+   *
+   * This struct is utilized by PseudoBlockGmresIter::initialize() and PseudoBlockGmresIter::getState().
+   */
+  template <class ScalarType, class MV, class DM = DefaultDenseMatrix<int,ScalarType>>
+  struct PseudoBlockGmresIterState {
+
+    typedef Teuchos::ScalarTraits<ScalarType> SCT;
+    typedef typename SCT::magnitudeType MagnitudeType;
+
+    /*! \brief The current dimension of the reduction.
+     *
+     * This should always be equal to PseudoBlockGmresIter::getCurSubspaceDim()
+     */
+    int curDim;
+    /*! \brief The current Krylov basis. */
+    std::vector<Teuchos::RCP<const MV> > V;
+    /*! \brief The current Hessenberg matrix.
+     *
+     * The \c curDim by \c curDim leading submatrix of H is the
+     * projection of problem->getOperator() by the first \c curDim vectors in V.
+     */
+    std::vector<Teuchos::RCP<const DM> > H;
+    /*! \brief The current upper-triangular matrix from the QR reduction of H. */
+    std::vector<Teuchos::RCP<const DM> > R;
+    /*! \brief The current right-hand side of the least squares system RY = Z. */
+    std::vector<Teuchos::RCP<const DM> > Z;
+    /*! \brief The current Given's rotation coefficients. */
+    std::vector<Teuchos::RCP<const std::vector<ScalarType> > > sn;
+    std::vector<Teuchos::RCP<const std::vector<MagnitudeType> > > cs;
+
+    PseudoBlockGmresIterState() : curDim(0), V(0),
+                                  H(0), R(0), Z(0),
+                                  sn(0), cs(0)
     {}
   };
 
@@ -136,9 +144,23 @@ namespace Belos {
   
   //@}
 
+  //! @name PseudoBlockGmresIter Exceptions
+  //@{
+ 
+  /** \brief PseudoBlockGmresIterOrthoFailure is thrown when the orthogonalization manager is
+   * unable to generate orthonormal columns from the new basis vectors.
+   *
+   * This std::exception is thrown from the PseudoBlockGmresIter::iterate() method.
+   *
+   */
+  class PseudoBlockGmresIterOrthoFailure : public BelosError {public:
+    PseudoBlockGmresIterOrthoFailure(const std::string& what_arg) : BelosError(what_arg)
+    {}};
 
-template<class ScalarType, class MV, class OP>
-class GmresIteration : virtual public Iteration<ScalarType,MV,OP> {
+  //@}
+
+template<class ScalarType, class MV, class OP, class DM = DefaultDenseMatrix<int,ScalarType>>
+class GmresIteration : virtual public Iteration<ScalarType,MV,OP,DM> {
 
   public:
 
@@ -158,7 +180,7 @@ class GmresIteration : virtual public Iteration<ScalarType,MV,OP> {
    * \note For any pointer in \c newstate which directly points to the multivectors in 
    * the solver, the data is not copied.
    */
-  virtual void initializeGmres(GmresIterationState<ScalarType,MV>& newstate) = 0;
+  virtual void initializeGmres(GmresIterationState<ScalarType,MV,DM>& newstate) = 0;
 
   /*! \brief Get the current state of the linear solver.
    *
@@ -166,7 +188,7 @@ class GmresIteration : virtual public Iteration<ScalarType,MV,OP> {
    *
    * \returns A GmresIterationState object containing const pointers to the current solver state.
    */
-  virtual GmresIterationState<ScalarType,MV> getState() const = 0;
+  virtual GmresIterationState<ScalarType,MV,DM> getState() const = 0;
   //@}
 
   //! @name Status methods

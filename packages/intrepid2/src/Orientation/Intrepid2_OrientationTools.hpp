@@ -1,43 +1,10 @@
 // @HEADER
-// ************************************************************************
-//
+// *****************************************************************************
 //                           Intrepid2 Package
-//                 Copyright (2007) Sandia Corporation
 //
-// Under terms of Contract DE-AC04-94AL85000, there is a non-exclusive
-// license for use of this work by or on behalf of the U.S. Government.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Kyungjoo Kim  (kyukim@sandia.gov), or
-//                    Mauro Perego  (mperego@sandia.gov)
-//
-// ************************************************************************
+// Copyright 2007 NTESS and the Intrepid2 contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 /** \file   Intrepid2_OrientationTools.hpp
@@ -55,6 +22,7 @@
 #include "Shards_CellTopology.hpp"
 #include "Shards_BasicTopologies.hpp"
 
+#include "Intrepid2_OrientationOperator.hpp"
 #include "Intrepid2_PointTools.hpp"
 
 #include "Intrepid2_Basis.hpp"
@@ -413,21 +381,58 @@ namespace Intrepid2 {
 
     /** \brief  subcell ordinal, orientation, matrix m x n
      */
-    typedef Kokkos::View<double****,DeviceType> CoeffMatrixDataViewType;
+    using CoeffMatrixDataViewType = Kokkos::View<double****,DeviceType>;
 
-    // 
+    /** \brief subcell ordinal, orientation, transpose (0 or 1)
+     */
+    using OperatorViewType = Kokkos::View<OrientationOperator<DeviceType>***,DeviceType>;
+    
+    //
     /** \brief  key :: basis name, order, value :: matrix data view type 
      */
-    static std::map<std::pair<std::string,ordinal_type>,CoeffMatrixDataViewType> ortCoeffData;
-    static std::map<std::pair<std::string,ordinal_type>,CoeffMatrixDataViewType> ortInvCoeffData;
+    using KeyType = std::pair<const std::string,ordinal_type>;
+    using OrtCoeffDataType = std::map<KeyType,Kokkos::View<double****,DeviceType> >;
+
+    static OrtCoeffDataType ortCoeffData;
+    static OrtCoeffDataType ortInvCoeffData;
     
+    //
+    /** \brief  key :: basis name, order, value :: matrix data view type, transpose (0 for no transpose, 1 for transpose)
+     */
+    using OrtOperatorDataType = std::map<KeyType,Kokkos::View<OrientationOperator<DeviceType>***,DeviceType> >;
+
+    static OrtOperatorDataType edgeOperatorData;
+    static OrtOperatorDataType invEdgeOperatorData;
+    static OrtOperatorDataType faceOperatorData;
+    static OrtOperatorDataType invFaceOperatorData;
+    
+    using OrtStaticDoubleAllocationType = std::vector< Kokkos::View<double*,DeviceType> >;
+    using OrtStaticOrdinalAllocationType = std::vector< Kokkos::View<ordinal_type*,DeviceType> >;
+    
+    static OrtStaticDoubleAllocationType  doubleViewAllocations;
+    static OrtStaticOrdinalAllocationType ordinalViewAllocations;
+
   private:
 
     template<typename BasisHostType>
     inline 
     static CoeffMatrixDataViewType createCoeffMatrixInternal(const BasisHostType* basis, const bool invTrans = false);
     
+    template<typename BasisHostType>
+    inline
+    static OperatorViewType createEdgeOperatorsInternal(const BasisHostType* basis, CoeffMatrixDataViewType matData);
+    
+    template<typename BasisHostType>
+    inline
+    static OperatorViewType createFaceOperatorsInternal(const BasisHostType* basis, CoeffMatrixDataViewType matData);
 
+    //! allocates managed static storage in doubleViewAllocations and ordinalViewAllocations; constructs OrientationOperator with unmanaged Views corresponding to these.
+    static OrientationOperator<DeviceType> constructOrientationOperatorInternal(const std::vector<ordinal_type> &nonIdentityDofs,
+                                                                                const std::vector<ordinal_type> &rowOffsets, // within the column storage
+                                                                                const std::vector<ordinal_type> &colIDs,
+                                                                                const std::vector<double> &weights,
+                                                                                const bool transpose);
+    
     /** \brief  Compute orientation matrix for HGRAD basis
      */
     template<typename BasisHostType>
@@ -480,6 +485,25 @@ namespace Intrepid2 {
      */
     inline 
     static void clearCoeffMatrix();
+    
+    /** \brief  Create orientation operators.
+        \param  basis      [in]  - basis type
+    */
+    template<typename BasisType>
+    inline 
+    static std::tuple<OperatorViewType, OperatorViewType> createOperators(const BasisType* basis);
+
+    /** \brief  Create inverse orientation operators.
+        \param  basis      [in]  - basis type
+    */
+    template<typename BasisType>
+    inline 
+    static std::tuple<OperatorViewType, OperatorViewType> createInvOperators(const BasisType* basis);
+
+    /** \brief  Clear coefficient matrix
+     */
+    inline 
+    static void clearOperators();
 
     /** \brief  Compute orientations of cells in a workset
         \param  elemOrts      [out]  - cell orientations
@@ -555,6 +579,9 @@ namespace Intrepid2 {
     
     
     /** \brief  Modify an assembled (C,F1,F2) matrix according to orientation of the cells.
+
+        If O_L and O_R are the operators applied by modifyBasisByOrientation() to the left and right bases, and M is the
+        matrix assembled from unoriented bases, the output is the matrix assembled from the oriented bases, O_L M O_R^T.
         \param  output           [out]  - output array, shape (C,F1,F2)
         \param  input             [in]  - input array, shape (C,F1,F2)
         \param  orts               [in]  - orientations, shape (C)
@@ -574,14 +601,33 @@ namespace Intrepid2 {
                               const BasisTypeLeft* basisLeft,
                               const BasisTypeRight* basisRight);
   };
-  
+
+  //Definition of static members
   template<typename T> 
-  std::map<std::pair<std::string,ordinal_type>, typename OrientationTools<T>::CoeffMatrixDataViewType>
-  OrientationTools<T>::ortCoeffData;
+  typename OrientationTools<T>::OrtCoeffDataType OrientationTools<T>::ortCoeffData;
 
   template<typename T> 
-  std::map<std::pair<std::string,ordinal_type>, typename OrientationTools<T>::CoeffMatrixDataViewType>
-  OrientationTools<T>::ortInvCoeffData;
+  typename OrientationTools<T>::OrtCoeffDataType OrientationTools<T>::ortInvCoeffData;
+
+  //Definition of static members
+  template<typename T>
+  typename OrientationTools<T>::OrtOperatorDataType OrientationTools<T>::edgeOperatorData;
+
+  template<typename T>
+  typename OrientationTools<T>::OrtOperatorDataType OrientationTools<T>::invEdgeOperatorData;
+
+  template<typename T>
+  typename OrientationTools<T>::OrtOperatorDataType OrientationTools<T>::faceOperatorData;
+
+  template<typename T>
+  typename OrientationTools<T>::OrtOperatorDataType OrientationTools<T>::invFaceOperatorData;
+
+  template<typename T>
+  typename OrientationTools<T>::OrtStaticDoubleAllocationType OrientationTools<T>::doubleViewAllocations;
+
+  template<typename T>
+  typename OrientationTools<T>::OrtStaticOrdinalAllocationType OrientationTools<T>::ordinalViewAllocations;
+
 }
 
 // include templated function definitions

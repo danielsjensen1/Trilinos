@@ -22,12 +22,15 @@ namespace Iocatalyst {
   public:
     inline static const std::string CATALYST_DATABASE_TYPE  = "catalyst";
     inline static const std::string CATALYST_DUMMY_DATABASE = "dummy.db";
+    inline static const std::string NODE_BLOCK_NAME         = "nodeblock";
 
     class IOSSparams
     {
     public:
-      IOSSparams(const std::string &fileName, const std::string &dbType)
-          : fileName(fileName), dbType(dbType), databaseIO(nullptr), isCatalyst(false)
+      IOSSparams(const std::string &fileName, const std::string &dbType,
+                 Ioss::PropertyManager dbProps = {})
+          : fileName(fileName), dbType(dbType), databaseIO(nullptr), isCatalyst(false),
+            dbProps(dbProps), nodeBlockName(NODE_BLOCK_NAME), writeConnectivityRaw(false)
       {
       }
       bool              isStructured() { return dbType == CGNS_DATABASE_TYPE; }
@@ -39,15 +42,25 @@ namespace Iocatalyst {
       bool              isCatalyst;
       std::unique_ptr<Ioss::Region> region;
       conduit_cpp::Node             conduitNode;
+      Ioss::PropertyManager         dbProps;
+      std::string                   nodeBlockName;
+      bool                          writeConnectivityRaw;
 
     private:
       IOSSparams();
     };
 
-    void addBlockMesh(const BlockMesh &blockMesh);
-    void writeIOSSFile(IOSSparams &iop);
-    void writeCatalystIOSSFile(IOSSparams &iop);
-    int  getNumLocalPointsInMeshSet();
+    void              addBlockMesh(const BlockMesh &blockMesh);
+    void              writeIOSSFile(IOSSparams &iop);
+    void              writeCatalystIOSSFile(IOSSparams &iop);
+    Ioss::DatabaseIO *getCatalystDatabase(IOSSparams &iop);
+
+    int getNumLocalPointsInMeshSet();
+
+    std::string getStructuredBlockName(int index);
+    std::string getStructuredNodeBlockName(int index);
+
+    std::string getUnstructuredBlockName(int index);
 
   private:
     std::vector<BlockMesh> bms;
@@ -68,14 +81,15 @@ namespace Iocatalyst {
     void writeUnstructuredBlockDefinitions(IOSSparams &iop);
     void writeUnstructuredBlockBulkData(IOSSparams &iop);
     void writeUnstructuredTransientFieldDefinitions(IOSSparams &iop);
+    void writeUnstructuredAddedTransientFields(BlockMesh bm, IOSSparams &iop);
+    void writeUnstructuredAddedCellTransientFields(BlockMesh bm, IOSSparams &iop);
+    void writeUnstructuredAddedPointTransientFields(BlockMesh bm, IOSSparams &iop);
     void writeUnstructuredTransientBulkData(IOSSparams &iop);
+    void writeUnstructuredAddedTransientFieldsBulkData(BlockMesh bm, IOSSparams &iop);
+    void writeUnstructuredAddedCellTransientFieldsBulkData(BlockMesh bm, IOSSparams &iop);
+    void writeUnstructuredAddedPointTransientFieldsBulkData(BlockMesh bm, IOSSparams &iop);
 
     void saveConduitNode(IOSSparams &iop);
-
-    std::string getStructuredBlockName(int index);
-    std::string getStructuredNodeBlockName(int index);
-
-    std::string getUnstructuredBlockName(int index);
 
     inline static const std::string CGNS_DATABASE_TYPE   = "cgns";
     inline static const std::string EXODUS_DATABASE_TYPE = "exodus";

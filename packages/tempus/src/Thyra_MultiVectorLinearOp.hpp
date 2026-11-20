@@ -1,10 +1,11 @@
-// @HEADER
-// ****************************************************************************
-//                Tempus: Copyright (2017) Sandia Corporation
+//@HEADER
+// *****************************************************************************
+//          Tempus: Time Integration and Sensitivity Analysis Package
 //
-// Distributed under BSD 3-clause license (See accompanying file Copyright.txt)
-// ****************************************************************************
-// @HEADER
+// Copyright 2017 NTESS and the Tempus contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+//@HEADER
 
 #ifndef Thyra_MultiVectorLinearOp_hpp
 #define Thyra_MultiVectorLinearOp_hpp
@@ -126,14 +127,16 @@ class MultiVectorLinearOp : virtual public RowStatLinearOpBase<Scalar>,
   /** @name Overridden from RowStatLinearOpBase */
   //@{
 
-  /** \brief Determine if a given row stat is supported. */
+  /** \brief Determine if a given row stat is supported (false if the
+   *  underlying operator is not a RowStatLinearOpBase). */
   bool rowStatIsSupportedImpl(
       const RowStatLinearOpBaseUtils::ERowStat rowStat) const
   {
     using Teuchos::rcp_dynamic_cast;
-    return rcp_dynamic_cast<const RowStatLinearOpBase<Scalar> >(
-               op_.getConstObj())
-        ->rowStatIsSupported(rowStat);
+    RCP<const RowStatLinearOpBase<Scalar> > row_stat_op =
+        rcp_dynamic_cast<const RowStatLinearOpBase<Scalar> >(
+            op_.getConstObj());
+    return nonnull(row_stat_op) && row_stat_op->rowStatIsSupported(rowStat);
   }
 
   /** \brief Get some statistics about a supported row.
@@ -170,20 +173,24 @@ class MultiVectorLinearOp : virtual public RowStatLinearOpBase<Scalar>,
   /** @name Overridden from ScaledLinearOpBase */
   //@{
 
+  /** \brief False if the underlying operator is not a ScaledLinearOpBase. */
   virtual bool supportsScaleLeftImpl() const
   {
     using Teuchos::rcp_dynamic_cast;
-    return rcp_dynamic_cast<const ScaledLinearOpBase<Scalar> >(
-               op_.getConstObj())
-        ->supportsScaleLeft();
+    RCP<const ScaledLinearOpBase<Scalar> > scaled_op =
+        rcp_dynamic_cast<const ScaledLinearOpBase<Scalar> >(
+            op_.getConstObj());
+    return nonnull(scaled_op) && scaled_op->supportsScaleLeft();
   }
 
+  /** \brief False if the underlying operator is not a ScaledLinearOpBase. */
   virtual bool supportsScaleRightImpl() const
   {
     using Teuchos::rcp_dynamic_cast;
-    return rcp_dynamic_cast<const ScaledLinearOpBase<Scalar> >(
-               op_.getConstObj())
-        ->supportsScaleRight();
+    RCP<const ScaledLinearOpBase<Scalar> > scaled_op =
+        rcp_dynamic_cast<const ScaledLinearOpBase<Scalar> >(
+            op_.getConstObj());
+    return nonnull(scaled_op) && scaled_op->supportsScaleRight();
   }
 
   virtual void scaleLeftImpl(const VectorBase<Scalar> &row_scaling)

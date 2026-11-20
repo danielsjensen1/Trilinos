@@ -9,7 +9,7 @@
 #include "stk_mesh/base/GetEntities.hpp"
 #include "stk_balance/setup/DefaultSettings.hpp"
 
-class BalanceCommandLine : public stk::unit_test_util::simple_fields::MeshFixture
+class BalanceCommandLine : public stk::unit_test_util::MeshFixture
 {
 protected:
   BalanceCommandLine()
@@ -46,11 +46,21 @@ protected:
     m_settings.setIncludeSearchResultsInGraph(false);
   }
 
+  std::string get_exec_name() const
+  {
+    return m_execName;
+  }
+
+  const stk::balance::BalanceSettings& parse_args(std::vector<const char*>& args)
+  {
+    m_parser.parse_command_line_options(args.size(), args.data(), m_settings);
+    return m_settings;
+  }
+
   const stk::balance::BalanceSettings& get_stk_balance_settings(const std::vector<std::string>& options)
   {
     std::vector<const char*> args = assemble_args(options);
-    m_parser.parse_command_line_options(args.size(), args.data(), m_settings);
-    return m_settings;
+    return parse_args(args);
   }
 
   std::vector<const char*> assemble_args(const std::vector<std::string>& options) const
@@ -104,6 +114,19 @@ protected:
     }
   }
 
+  void check_cohesive_elements(const stk::balance::BalanceSettings& balanceSettings,
+                               const std::vector<std::string> & expectedBlocks)
+  {
+    const std::vector<std::string> & blocksFromSettings = balanceSettings.getCohesiveElements();
+    EXPECT_EQ(blocksFromSettings.size(), expectedBlocks.size()) << "Unexpected number of block multipliers";
+    for (const auto & expectedBlock : expectedBlocks) {
+      const auto foundBlock = std::find(blocksFromSettings.begin(), blocksFromSettings.end(), expectedBlock);
+      ASSERT_TRUE(foundBlock != blocksFromSettings.end()) << "Block " << expectedBlock << " not found" ;
+    }
+
+    EXPECT_TRUE(balanceSettings.getDecompMethod() == "parmetis");
+  }
+
   std::string infile;
 
 private:
@@ -139,6 +162,7 @@ TEST_F(BalanceCommandLine, createBalanceSettings_default)
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::fixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::vertexWeightMethod);
@@ -147,6 +171,8 @@ TEST_F(BalanceCommandLine, createBalanceSettings_default)
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               DefaultSettings::graphEdgeWeightMultiplier);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 TEST_F(BalanceCommandLine, createBalanceSettings_outputDirectory)
@@ -165,12 +191,49 @@ TEST_F(BalanceCommandLine, createBalanceSettings_outputDirectory)
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::fixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightForSearch(),                DefaultSettings::faceSearchEdgeWeight);
   EXPECT_DOUBLE_EQ(balanceSettings.getVertexWeightMultiplierForVertexInSearch(), DefaultSettings::faceSearchVertexMultiplier);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
+}
+
+TEST_F(BalanceCommandLine, createBalanceSettings_flagInputFile_positionalOutputDir)
+{
+  std::string outputDir("outputDir");
+
+  const stk::balance::BalanceSettings& balanceSettings = get_stk_balance_settings({outputDir.c_str()});
+
+  EXPECT_EQ(balanceSettings.get_input_filename(), infile);
+  EXPECT_EQ(balanceSettings.get_output_filename(), outputDir+"/"+infile);
+}
+
+TEST_F(BalanceCommandLine, createBalanceSettings_flagOutputDir_positionalInputFile)
+{
+  std::string outputDir("outputDir");
+  std::string execName = get_exec_name();
+  std::vector<const char*> args = {execName.c_str(), "-o", outputDir.c_str(), infile.c_str()};
+
+  const stk::balance::BalanceSettings& balanceSettings = parse_args(args);
+
+  EXPECT_EQ(balanceSettings.get_input_filename(), infile);
+  EXPECT_EQ(balanceSettings.get_output_filename(), outputDir+"/"+infile);
+}
+
+TEST_F(BalanceCommandLine, createBalanceSettings_positionalInputFile_flagOutputDir)
+{
+  std::string outputDir("outputDir");
+  std::string execName = get_exec_name();
+  std::vector<const char*> args = {execName.c_str(), infile.c_str(), "-o", outputDir.c_str()};
+
+  const stk::balance::BalanceSettings& balanceSettings = parse_args(args);
+
+  EXPECT_EQ(balanceSettings.get_input_filename(), infile);
+  EXPECT_EQ(balanceSettings.get_output_filename(), outputDir+"/"+infile);
 }
 
 TEST_F(BalanceCommandLine, createBalanceSettings_outputDirectory_fullOptions)
@@ -191,12 +254,15 @@ TEST_F(BalanceCommandLine, createBalanceSettings_outputDirectory_fullOptions)
   EXPECT_TRUE(balanceSettings.includeSearchResultsInGraph());
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::fixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightForSearch(),                DefaultSettings::faceSearchEdgeWeight);
   EXPECT_DOUBLE_EQ(balanceSettings.getVertexWeightMultiplierForVertexInSearch(), DefaultSettings::faceSearchVertexMultiplier);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 TEST_F(BalanceCommandLine, createBalanceSettings_customLogfile)
@@ -211,12 +277,15 @@ TEST_F(BalanceCommandLine, createBalanceSettings_customLogfile)
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::fixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightForSearch(),                DefaultSettings::faceSearchEdgeWeight);
   EXPECT_DOUBLE_EQ(balanceSettings.getVertexWeightMultiplierForVertexInSearch(), DefaultSettings::faceSearchVertexMultiplier);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 TEST_F(BalanceCommandLine, createBalanceSettings_shortCustomLogfile)
@@ -231,12 +300,15 @@ TEST_F(BalanceCommandLine, createBalanceSettings_shortCustomLogfile)
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::fixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightForSearch(),                DefaultSettings::faceSearchEdgeWeight);
   EXPECT_DOUBLE_EQ(balanceSettings.getVertexWeightMultiplierForVertexInSearch(), DefaultSettings::faceSearchVertexMultiplier);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 TEST_F(BalanceCommandLine, createBalanceSettings_coutLogfile)
@@ -251,12 +323,15 @@ TEST_F(BalanceCommandLine, createBalanceSettings_coutLogfile)
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::fixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightForSearch(),                DefaultSettings::faceSearchEdgeWeight);
   EXPECT_DOUBLE_EQ(balanceSettings.getVertexWeightMultiplierForVertexInSearch(), DefaultSettings::faceSearchVertexMultiplier);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 TEST_F(BalanceCommandLine, createBalanceSettings_printDiagnostics)
@@ -267,12 +342,15 @@ TEST_F(BalanceCommandLine, createBalanceSettings_printDiagnostics)
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::fixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            true);
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightForSearch(),                DefaultSettings::faceSearchEdgeWeight);
   EXPECT_DOUBLE_EQ(balanceSettings.getVertexWeightMultiplierForVertexInSearch(), DefaultSettings::faceSearchVertexMultiplier);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 TEST_F(BalanceCommandLine, createBalanceSettings_shortPrintDiagnostics)
@@ -283,12 +361,15 @@ TEST_F(BalanceCommandLine, createBalanceSettings_shortPrintDiagnostics)
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::fixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            true);
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightForSearch(),                DefaultSettings::faceSearchEdgeWeight);
   EXPECT_DOUBLE_EQ(balanceSettings.getVertexWeightMultiplierForVertexInSearch(), DefaultSettings::faceSearchVertexMultiplier);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 TEST_F(BalanceCommandLine, createBalanceSettings_rebalanceTo)
@@ -305,12 +386,15 @@ TEST_F(BalanceCommandLine, createBalanceSettings_rebalanceTo)
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::fixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightForSearch(),                DefaultSettings::faceSearchEdgeWeight);
   EXPECT_DOUBLE_EQ(balanceSettings.getVertexWeightMultiplierForVertexInSearch(), DefaultSettings::faceSearchVertexMultiplier);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 TEST_F(BalanceCommandLine, createBalanceSettings_useNestedDecomp)
@@ -327,12 +411,16 @@ TEST_F(BalanceCommandLine, createBalanceSettings_useNestedDecomp)
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             true);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::fixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightForSearch(),                DefaultSettings::faceSearchEdgeWeight);
   EXPECT_DOUBLE_EQ(balanceSettings.getVertexWeightMultiplierForVertexInSearch(), DefaultSettings::faceSearchVertexMultiplier);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
+
 }
 
 TEST_F(BalanceCommandLine, createBalanceSettings_smDefaults)
@@ -343,6 +431,7 @@ TEST_F(BalanceCommandLine, createBalanceSettings_smDefaults)
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::smFixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::smVertexWeightMethod);
@@ -351,6 +440,8 @@ TEST_F(BalanceCommandLine, createBalanceSettings_smDefaults)
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               DefaultSettings::smGraphEdgeWeightMultiplier);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 TEST_F(BalanceCommandLine, createBalanceSettings_sdDefaults)
@@ -361,6 +452,7 @@ TEST_F(BalanceCommandLine, createBalanceSettings_sdDefaults)
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::sdFixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::sdVertexWeightMethod);
@@ -369,6 +461,8 @@ TEST_F(BalanceCommandLine, createBalanceSettings_sdDefaults)
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               DefaultSettings::sdGraphEdgeWeightMultiplier);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 TEST_F(BalanceCommandLine, createBalanceSettings_smDefaultsOverrideSpider)
@@ -379,6 +473,7 @@ TEST_F(BalanceCommandLine, createBalanceSettings_smDefaultsOverrideSpider)
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  true);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::smVertexWeightMethod);
@@ -387,6 +482,8 @@ TEST_F(BalanceCommandLine, createBalanceSettings_smDefaultsOverrideSpider)
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               DefaultSettings::smGraphEdgeWeightMultiplier);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 TEST_F(BalanceCommandLine, createBalanceSettings_smDefaultsOverrideMechanism)
@@ -397,6 +494,7 @@ TEST_F(BalanceCommandLine, createBalanceSettings_smDefaultsOverrideMechanism)
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::smFixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::smVertexWeightMethod);
@@ -405,6 +503,8 @@ TEST_F(BalanceCommandLine, createBalanceSettings_smDefaultsOverrideMechanism)
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               DefaultSettings::smGraphEdgeWeightMultiplier);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 TEST_F(BalanceCommandLine, createBalanceSettings_sdDefaultsOverrideSpiders)
@@ -415,6 +515,7 @@ TEST_F(BalanceCommandLine, createBalanceSettings_sdDefaultsOverrideSpiders)
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  false);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::sdVertexWeightMethod);
@@ -423,6 +524,29 @@ TEST_F(BalanceCommandLine, createBalanceSettings_sdDefaultsOverrideSpiders)
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               DefaultSettings::sdGraphEdgeWeightMultiplier);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
+}
+
+TEST_F(BalanceCommandLine, createBalanceSettings_sdDefaultsGroupSpiderLegs)
+{
+  const stk::balance::BalanceSettings& balanceSettings = get_stk_balance_settings({"--sd", "--group-spider-legs=on"});
+
+  EXPECT_EQ(balanceSettings.getDecompMethod(),                                   DefaultSettings::decompMethod);
+  EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
+  EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
+  EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  true);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             true);
+  EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
+  EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
+  EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::sdVertexWeightMethod);
+  EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightForSearch(),                DefaultSettings::sdFaceSearchEdgeWeight);
+  EXPECT_DOUBLE_EQ(balanceSettings.getVertexWeightMultiplierForVertexInSearch(), DefaultSettings::sdFaceSearchVertexMultiplier);
+  EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               DefaultSettings::sdGraphEdgeWeightMultiplier);
+  check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
+  check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 TEST_F(BalanceCommandLine, createBalanceSettings_sdDefaultsOverrideMechanisms)
@@ -433,6 +557,7 @@ TEST_F(BalanceCommandLine, createBalanceSettings_sdDefaultsOverrideMechanisms)
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::sdFixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::sdVertexWeightMethod);
@@ -441,6 +566,8 @@ TEST_F(BalanceCommandLine, createBalanceSettings_sdDefaultsOverrideMechanisms)
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               DefaultSettings::sdGraphEdgeWeightMultiplier);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 TEST_F(BalanceCommandLine, createBalanceSettings_bothDefaults)
@@ -457,6 +584,7 @@ TEST_F(BalanceCommandLine, createBalanceSettings_defaultAbsoluteTolerance)
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::fixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::vertexWeightMethod);
@@ -465,6 +593,8 @@ TEST_F(BalanceCommandLine, createBalanceSettings_defaultAbsoluteTolerance)
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               DefaultSettings::graphEdgeWeightMultiplier);
   check_absolute_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchAbsTol);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 TEST_F(BalanceCommandLine, createBalanceSettings_defaultRelativeTolerance)
@@ -475,6 +605,7 @@ TEST_F(BalanceCommandLine, createBalanceSettings_defaultRelativeTolerance)
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::fixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::vertexWeightMethod);
@@ -483,6 +614,8 @@ TEST_F(BalanceCommandLine, createBalanceSettings_defaultRelativeTolerance)
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               DefaultSettings::graphEdgeWeightMultiplier);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 TEST_F(BalanceCommandLine, createBalanceSettings_bothTolerances)
@@ -499,6 +632,7 @@ TEST_F(BalanceCommandLine, createBalanceSettings_faceSearchAbsoluteTolerance)
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::fixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::vertexWeightMethod);
@@ -507,6 +641,8 @@ TEST_F(BalanceCommandLine, createBalanceSettings_faceSearchAbsoluteTolerance)
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               DefaultSettings::graphEdgeWeightMultiplier);
   check_absolute_tolerance_for_face_search(balanceSettings,                      0.001);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 TEST_F(BalanceCommandLine, createBalanceSettings_faceSearchRelativeTolerance)
@@ -517,6 +653,7 @@ TEST_F(BalanceCommandLine, createBalanceSettings_faceSearchRelativeTolerance)
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::fixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::vertexWeightMethod);
@@ -525,6 +662,8 @@ TEST_F(BalanceCommandLine, createBalanceSettings_faceSearchRelativeTolerance)
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               DefaultSettings::graphEdgeWeightMultiplier);
   check_relative_tolerance_for_face_search(balanceSettings,                      0.123);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 
@@ -536,6 +675,7 @@ TEST_F(BalanceCommandLine, createBalanceSettings_smDefaults_defaultAbsoluteToler
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::smFixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::smVertexWeightMethod);
@@ -544,6 +684,8 @@ TEST_F(BalanceCommandLine, createBalanceSettings_smDefaults_defaultAbsoluteToler
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               DefaultSettings::smGraphEdgeWeightMultiplier);
   check_absolute_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchAbsTol);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 TEST_F(BalanceCommandLine, createBalanceSettings_smDefaults_defaultRelativeTolerance)
@@ -554,6 +696,7 @@ TEST_F(BalanceCommandLine, createBalanceSettings_smDefaults_defaultRelativeToler
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::smFixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::smVertexWeightMethod);
@@ -562,6 +705,8 @@ TEST_F(BalanceCommandLine, createBalanceSettings_smDefaults_defaultRelativeToler
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               DefaultSettings::smGraphEdgeWeightMultiplier);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 TEST_F(BalanceCommandLine, createBalanceSettings_smDefaults_faceSearchAbsoluteTolerance)
@@ -572,6 +717,7 @@ TEST_F(BalanceCommandLine, createBalanceSettings_smDefaults_faceSearchAbsoluteTo
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::smFixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::smVertexWeightMethod);
@@ -580,6 +726,8 @@ TEST_F(BalanceCommandLine, createBalanceSettings_smDefaults_faceSearchAbsoluteTo
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               DefaultSettings::smGraphEdgeWeightMultiplier);
   check_absolute_tolerance_for_face_search(balanceSettings,                      0.005);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 TEST_F(BalanceCommandLine, createBalanceSettings_smDefaults_faceSearchRelativeTolerance)
@@ -590,6 +738,7 @@ TEST_F(BalanceCommandLine, createBalanceSettings_smDefaults_faceSearchRelativeTo
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::smFixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::smVertexWeightMethod);
@@ -598,6 +747,8 @@ TEST_F(BalanceCommandLine, createBalanceSettings_smDefaults_faceSearchRelativeTo
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               DefaultSettings::smGraphEdgeWeightMultiplier);
   check_relative_tolerance_for_face_search(balanceSettings,                      0.123);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 
@@ -609,6 +760,7 @@ TEST_F(BalanceCommandLine, createBalanceSettings_sdDefaults_defaultAbsoluteToler
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::sdFixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::sdVertexWeightMethod);
@@ -617,6 +769,8 @@ TEST_F(BalanceCommandLine, createBalanceSettings_sdDefaults_defaultAbsoluteToler
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               DefaultSettings::sdGraphEdgeWeightMultiplier);
   check_absolute_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchAbsTol);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 TEST_F(BalanceCommandLine, createBalanceSettings_sdDefaults_defaultRelativeTolerance)
@@ -627,6 +781,7 @@ TEST_F(BalanceCommandLine, createBalanceSettings_sdDefaults_defaultRelativeToler
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::sdFixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::sdVertexWeightMethod);
@@ -635,6 +790,8 @@ TEST_F(BalanceCommandLine, createBalanceSettings_sdDefaults_defaultRelativeToler
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               DefaultSettings::sdGraphEdgeWeightMultiplier);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 TEST_F(BalanceCommandLine, createBalanceSettings_sdDefaults_faceSearchAbsoluteTolerance)
@@ -645,6 +802,7 @@ TEST_F(BalanceCommandLine, createBalanceSettings_sdDefaults_faceSearchAbsoluteTo
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::sdFixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::sdVertexWeightMethod);
@@ -653,6 +811,8 @@ TEST_F(BalanceCommandLine, createBalanceSettings_sdDefaults_faceSearchAbsoluteTo
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               DefaultSettings::sdGraphEdgeWeightMultiplier);
   check_absolute_tolerance_for_face_search(balanceSettings,                      0.0005);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 TEST_F(BalanceCommandLine, createBalanceSettings_sdDefaults_faceSearchRelativeTolerance)
@@ -663,6 +823,7 @@ TEST_F(BalanceCommandLine, createBalanceSettings_sdDefaults_faceSearchRelativeTo
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::sdFixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::sdVertexWeightMethod);
@@ -671,6 +832,8 @@ TEST_F(BalanceCommandLine, createBalanceSettings_sdDefaults_faceSearchRelativeTo
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               DefaultSettings::sdGraphEdgeWeightMultiplier);
   check_relative_tolerance_for_face_search(balanceSettings,                      0.123);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 
@@ -688,6 +851,7 @@ TEST_F(BalanceCommandLine, createBalanceSettings_contactSearchEdgeWeight)
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::fixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::vertexWeightMethod);
@@ -696,6 +860,8 @@ TEST_F(BalanceCommandLine, createBalanceSettings_contactSearchEdgeWeight)
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               DefaultSettings::graphEdgeWeightMultiplier);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 TEST_F(BalanceCommandLine, createBalanceSettings_smDefaults_contactSearchEdgeWeight)
@@ -707,6 +873,7 @@ TEST_F(BalanceCommandLine, createBalanceSettings_smDefaults_contactSearchEdgeWei
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::smFixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::smVertexWeightMethod);
@@ -715,6 +882,8 @@ TEST_F(BalanceCommandLine, createBalanceSettings_smDefaults_contactSearchEdgeWei
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               DefaultSettings::smGraphEdgeWeightMultiplier);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 TEST_F(BalanceCommandLine, createBalanceSettings_sdDefaults_contactSearchEdgeWeight)
@@ -726,6 +895,7 @@ TEST_F(BalanceCommandLine, createBalanceSettings_sdDefaults_contactSearchEdgeWei
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::sdFixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::sdVertexWeightMethod);
@@ -733,6 +903,8 @@ TEST_F(BalanceCommandLine, createBalanceSettings_sdDefaults_contactSearchEdgeWei
   EXPECT_DOUBLE_EQ(balanceSettings.getVertexWeightMultiplierForVertexInSearch(), DefaultSettings::sdFaceSearchVertexMultiplier);
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               DefaultSettings::sdGraphEdgeWeightMultiplier);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
+  check_cohesive_elements(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
   check_vertex_weight_block_multiplier(balanceSettings, {});
 }
 
@@ -751,6 +923,7 @@ TEST_F(BalanceCommandLine, createBalanceSettings_contactSearchVertexWeightMultip
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::fixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::vertexWeightMethod);
@@ -759,6 +932,8 @@ TEST_F(BalanceCommandLine, createBalanceSettings_contactSearchVertexWeightMultip
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               DefaultSettings::graphEdgeWeightMultiplier);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 TEST_F(BalanceCommandLine, createBalanceSettings_smDefaults_contactSearchVertexWeightMultiplier)
@@ -770,6 +945,7 @@ TEST_F(BalanceCommandLine, createBalanceSettings_smDefaults_contactSearchVertexW
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::smFixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::smVertexWeightMethod);
@@ -778,6 +954,8 @@ TEST_F(BalanceCommandLine, createBalanceSettings_smDefaults_contactSearchVertexW
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               DefaultSettings::smGraphEdgeWeightMultiplier);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 TEST_F(BalanceCommandLine, createBalanceSettings_sdDefaults_contactSearchVertexWeightMultiplier)
@@ -789,6 +967,7 @@ TEST_F(BalanceCommandLine, createBalanceSettings_sdDefaults_contactSearchVertexW
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::sdFixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::sdVertexWeightMethod);
@@ -797,6 +976,8 @@ TEST_F(BalanceCommandLine, createBalanceSettings_sdDefaults_contactSearchVertexW
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               DefaultSettings::sdGraphEdgeWeightMultiplier);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 
@@ -814,6 +995,7 @@ TEST_F(BalanceCommandLine, createBalanceSettings_edgeWeightMultiplier)
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::fixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::vertexWeightMethod);
@@ -822,6 +1004,8 @@ TEST_F(BalanceCommandLine, createBalanceSettings_edgeWeightMultiplier)
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               3);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 TEST_F(BalanceCommandLine, createBalanceSettings_smDefaults_edgeWeightMultiplier)
@@ -833,6 +1017,7 @@ TEST_F(BalanceCommandLine, createBalanceSettings_smDefaults_edgeWeightMultiplier
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::smFixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::smVertexWeightMethod);
@@ -841,6 +1026,8 @@ TEST_F(BalanceCommandLine, createBalanceSettings_smDefaults_edgeWeightMultiplier
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               3);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 TEST_F(BalanceCommandLine, createBalanceSettings_sdDefaults_edgeWeightMultiplier)
@@ -852,6 +1039,7 @@ TEST_F(BalanceCommandLine, createBalanceSettings_sdDefaults_edgeWeightMultiplier
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::sdFixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::sdVertexWeightMethod);
@@ -860,6 +1048,8 @@ TEST_F(BalanceCommandLine, createBalanceSettings_sdDefaults_edgeWeightMultiplier
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               3);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 
@@ -892,6 +1082,7 @@ TEST_F(BalanceCommandLine, disableSearch_default_caseInsensitive)
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       false);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::fixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::vertexWeightMethod);
@@ -900,6 +1091,8 @@ TEST_F(BalanceCommandLine, disableSearch_default_caseInsensitive)
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               DefaultSettings::graphEdgeWeightMultiplier);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 TEST_F(BalanceCommandLine, disableSearch_smDefaults)
@@ -910,6 +1103,7 @@ TEST_F(BalanceCommandLine, disableSearch_smDefaults)
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       false);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::smFixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::smVertexWeightMethod);
@@ -918,6 +1112,8 @@ TEST_F(BalanceCommandLine, disableSearch_smDefaults)
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               DefaultSettings::smGraphEdgeWeightMultiplier);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 TEST_F(BalanceCommandLine, disableSearch_sdDefaults)
@@ -928,6 +1124,7 @@ TEST_F(BalanceCommandLine, disableSearch_sdDefaults)
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       false);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::sdFixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::sdVertexWeightMethod);
@@ -936,6 +1133,8 @@ TEST_F(BalanceCommandLine, disableSearch_sdDefaults)
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               DefaultSettings::sdGraphEdgeWeightMultiplier);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 
@@ -947,6 +1146,7 @@ TEST_F(BalanceCommandLine, enableSearch_default_caseInsensitive)
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::fixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::vertexWeightMethod);
@@ -955,6 +1155,8 @@ TEST_F(BalanceCommandLine, enableSearch_default_caseInsensitive)
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               DefaultSettings::graphEdgeWeightMultiplier);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 TEST_F(BalanceCommandLine, enableSearch_whenDisabledByDefault)
@@ -973,6 +1175,7 @@ TEST_F(BalanceCommandLine, enableSearch_smDefaults)
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::smFixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::smVertexWeightMethod);
@@ -981,6 +1184,8 @@ TEST_F(BalanceCommandLine, enableSearch_smDefaults)
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               DefaultSettings::smGraphEdgeWeightMultiplier);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 TEST_F(BalanceCommandLine, enableSearch_sdDefaults)
@@ -991,6 +1196,7 @@ TEST_F(BalanceCommandLine, enableSearch_sdDefaults)
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::sdFixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::sdVertexWeightMethod);
@@ -999,6 +1205,8 @@ TEST_F(BalanceCommandLine, enableSearch_sdDefaults)
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               DefaultSettings::sdGraphEdgeWeightMultiplier);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 
@@ -1045,6 +1253,7 @@ TEST_F(BalanceCommandLine, decompMethodParmetis)
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::fixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::vertexWeightMethod);
@@ -1053,6 +1262,8 @@ TEST_F(BalanceCommandLine, decompMethodParmetis)
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               DefaultSettings::graphEdgeWeightMultiplier);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 TEST_F(BalanceCommandLine, vertexWeightMethodConnectivity)
@@ -1063,6 +1274,7 @@ TEST_F(BalanceCommandLine, vertexWeightMethodConnectivity)
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::fixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             VertexWeightMethod::CONNECTIVITY);
@@ -1071,6 +1283,8 @@ TEST_F(BalanceCommandLine, vertexWeightMethodConnectivity)
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               10.);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 TEST_F(BalanceCommandLine, vertexWeightMethodField)
@@ -1081,6 +1295,7 @@ TEST_F(BalanceCommandLine, vertexWeightMethodField)
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::fixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             VertexWeightMethod::FIELD);
@@ -1090,6 +1305,8 @@ TEST_F(BalanceCommandLine, vertexWeightMethodField)
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               1.);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 TEST_F(BalanceCommandLine, vertexWeightMethodFieldAndFieldName)
@@ -1101,6 +1318,7 @@ TEST_F(BalanceCommandLine, vertexWeightMethodFieldAndFieldName)
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::fixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             VertexWeightMethod::FIELD);
@@ -1110,6 +1328,8 @@ TEST_F(BalanceCommandLine, vertexWeightMethodFieldAndFieldName)
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               1.);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 TEST_F(BalanceCommandLine, vertexWeightFieldName)
@@ -1120,6 +1340,7 @@ TEST_F(BalanceCommandLine, vertexWeightFieldName)
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::fixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             VertexWeightMethod::FIELD);  // Auto-set
@@ -1129,6 +1350,8 @@ TEST_F(BalanceCommandLine, vertexWeightFieldName)
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               1.);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 TEST_F(BalanceCommandLine, vertexWeightFieldName_conflictingVertexWeightMethod)
@@ -1140,6 +1363,7 @@ TEST_F(BalanceCommandLine, vertexWeightFieldName_conflictingVertexWeightMethod)
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::fixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             VertexWeightMethod::FIELD);  // Overridden
@@ -1149,6 +1373,8 @@ TEST_F(BalanceCommandLine, vertexWeightFieldName_conflictingVertexWeightMethod)
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               1.);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 TEST_F(BalanceCommandLine, userSpecifiedBlockMultiplier_default)
@@ -1160,6 +1386,7 @@ TEST_F(BalanceCommandLine, userSpecifiedBlockMultiplier_default)
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::fixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::vertexWeightMethod);
@@ -1168,6 +1395,8 @@ TEST_F(BalanceCommandLine, userSpecifiedBlockMultiplier_default)
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               DefaultSettings::graphEdgeWeightMultiplier);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {{"block_1", 2.0}});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 TEST_F(BalanceCommandLine, userSpecifiedBlockMultiplier_smDefaults)
@@ -1179,6 +1408,7 @@ TEST_F(BalanceCommandLine, userSpecifiedBlockMultiplier_smDefaults)
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::smFixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::smVertexWeightMethod);
@@ -1187,6 +1417,8 @@ TEST_F(BalanceCommandLine, userSpecifiedBlockMultiplier_smDefaults)
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               DefaultSettings::smGraphEdgeWeightMultiplier);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {{"block_2", 10.0}, {"block_5", 2.5}});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 TEST_F(BalanceCommandLine, userSpecifiedWeights_sdDefaults)
@@ -1198,6 +1430,7 @@ TEST_F(BalanceCommandLine, userSpecifiedWeights_sdDefaults)
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::sdFixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::sdVertexWeightMethod);
@@ -1206,6 +1439,8 @@ TEST_F(BalanceCommandLine, userSpecifiedWeights_sdDefaults)
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               DefaultSettings::sdGraphEdgeWeightMultiplier);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {{"block_1", 1.5}, {"block_2", 5.0}});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
 TEST_F(BalanceCommandLine, userSpecifiedBlockMultiplier_badFormatting)
@@ -1217,6 +1452,7 @@ TEST_F(BalanceCommandLine, userSpecifiedBlockMultiplier_badFormatting)
   EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
   EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
   EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::fixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
   EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
   EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
   EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::vertexWeightMethod);
@@ -1225,6 +1461,85 @@ TEST_F(BalanceCommandLine, userSpecifiedBlockMultiplier_badFormatting)
   EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               DefaultSettings::graphEdgeWeightMultiplier);
   check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
   check_vertex_weight_block_multiplier(balanceSettings, {{"block_1", 1.5}, {"block_2", 3.0}, {"block_3", 1.1}});
+  EXPECT_FALSE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {});
 }
 
+TEST_F(BalanceCommandLine, userSpecifiedCohesiveElements_smDefaults)
+{
+  const stk::balance::BalanceSettings& balanceSettings = get_stk_balance_settings({"--sm",
+                                                         "--cohesive-elements=block_2,block_5"});
+
+  EXPECT_EQ(balanceSettings.getDecompMethod(),                                   DefaultSettings::decompMethod);
+  EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
+  EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
+  EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::smFixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
+  EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
+  EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
+  EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::smVertexWeightMethod);
+  EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightForSearch(),                DefaultSettings::smFaceSearchEdgeWeight);
+  EXPECT_DOUBLE_EQ(balanceSettings.getVertexWeightMultiplierForVertexInSearch(), DefaultSettings::smFaceSearchVertexMultiplier);
+  EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               DefaultSettings::smGraphEdgeWeightMultiplier);
+  check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
+  check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_TRUE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {"block_2","block_5"});
+}
+
+TEST_F(BalanceCommandLine, userCohesiveElements_sdDefaults)
+{
+  const stk::balance::BalanceSettings& balanceSettings = get_stk_balance_settings({"--sd",
+                                                         "--cohesive-elements=block_1,block_2"});
+
+  EXPECT_EQ(balanceSettings.getDecompMethod(),                                   DefaultSettings::decompMethod);
+  EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
+  EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
+  EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::sdFixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
+  EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
+  EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
+  EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::sdVertexWeightMethod);
+  EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightForSearch(),                DefaultSettings::sdFaceSearchEdgeWeight);
+  EXPECT_DOUBLE_EQ(balanceSettings.getVertexWeightMultiplierForVertexInSearch(), DefaultSettings::sdFaceSearchVertexMultiplier);
+  EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               DefaultSettings::sdGraphEdgeWeightMultiplier);
+  check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
+  check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_TRUE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {"block_1","block_2"});
+}
+
+TEST_F(BalanceCommandLine, userSpecifiedCohesiveElements_badFormatting)
+{
+  const stk::balance::BalanceSettings& balanceSettings = get_stk_balance_settings(
+                                                         {"--cohesive-elements= block_1 ,block_2 , block_3 "});
+
+  EXPECT_EQ(balanceSettings.getDecompMethod(),                                   DefaultSettings::decompMethod);
+  EXPECT_EQ(balanceSettings.get_use_nested_decomp(),                             false);
+  EXPECT_EQ(balanceSettings.includeSearchResultsInGraph(),                       DefaultSettings::useContactSearch);
+  EXPECT_EQ(balanceSettings.shouldFixSpiders(),                                  DefaultSettings::fixSpiders);
+  EXPECT_EQ(balanceSettings.shouldGroupSpiderLegs(),                             DefaultSettings::groupSpiderLegs);
+  EXPECT_EQ(balanceSettings.shouldFixMechanisms(),                               false);
+  EXPECT_EQ(balanceSettings.shouldPrintDiagnostics(),                            false);
+  EXPECT_EQ(balanceSettings.getVertexWeightMethod(),                             (VertexWeightMethod)DefaultSettings::vertexWeightMethod);
+  EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightForSearch(),                DefaultSettings::faceSearchEdgeWeight);
+  EXPECT_DOUBLE_EQ(balanceSettings.getVertexWeightMultiplierForVertexInSearch(), DefaultSettings::faceSearchVertexMultiplier);
+  EXPECT_DOUBLE_EQ(balanceSettings.getGraphEdgeWeightMultiplier(),               DefaultSettings::graphEdgeWeightMultiplier);
+  check_relative_tolerance_for_face_search(balanceSettings,                      DefaultSettings::faceSearchRelTol);
+  check_vertex_weight_block_multiplier(balanceSettings, {});
+  EXPECT_TRUE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {"block_1","block_2","block_3"});
+}
+
+TEST_F(BalanceCommandLine, userSpecifiedCohesiveElements_withGoodDecompMethod)
+{
+  const stk::balance::BalanceSettings& balanceSettings = get_stk_balance_settings({"--decomp-method=parmetis", "--cohesive-elements=block_1"});
+  EXPECT_TRUE(balanceSettings.hasCohesiveElements());
+  check_cohesive_elements(balanceSettings, {"block_1"});
+}
+
+TEST_F(BalanceCommandLine, userSpecifiedCohesiveElements_withBadDecompMethod)
+{
+  EXPECT_ANY_THROW(get_stk_balance_settings({"--decomp-method=rcb", "--cohesive-elements=block_1"}));
+}
 

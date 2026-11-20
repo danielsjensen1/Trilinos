@@ -1,4 +1,4 @@
-// Copyright(C) 1999-2023 National Technology & Engineering Solutions
+// Copyright(C) 1999-2025 National Technology & Engineering Solutions
 // of Sandia, LLC (NTESS).  Under the terms of Contract DE-NA0003525 with
 // NTESS, the U.S. Government retains certain rights in this software.
 //
@@ -9,10 +9,8 @@
 #include <cmath>
 #include <cstdlib>
 #include <exception>
-#include <fmt/core.h>
 #include <fmt/format.h>
 #include <fmt/ostream.h>
-#include <iostream>
 #include <limits>
 #include <map>
 #include <numeric>
@@ -41,17 +39,16 @@
 #include "Ioss_ScopeGuard.h"
 #include "Ioss_State.h"
 #include "Ioss_Utils.h"
-#include "robin_hash.h"
 #include "skinner_interface.h"
 
 // ========================================================================
 namespace {
   template <typename INT> void skinner(Skinner::Interface &interFace, INT /*dummy*/);
   std::string                  codename;
-  std::string                  version = "1.02";
+  std::string                  version = "1.03 (2025-04-18)";
 
   void transfer_field_data(Ioss::GroupingEntity *ige, Ioss::GroupingEntity *oge,
-                           Ioss::Field::RoleType role, const std::vector<int> &ref_nodes);
+                           Ioss::Field::RoleType role, const Ioss::IntVector &ref_nodes);
 
   void transfer_field_data(Ioss::EntityBlock *ige, Ioss::EntityBlock *oge,
                            Ioss::Field::RoleType          role,
@@ -65,11 +62,9 @@ namespace {
     size_t max_face = std::string("Face Count").length();
     for (auto &eb : ebs) {
       const std::string &name = eb->name();
-      if (name.length() > max_name) {
-        max_name = name.length();
-      }
-      size_t face_width = Ioss::Utils::number_width(boundary_faces[name].size());
-      max_face          = face_width > max_face ? face_width : max_face;
+      max_name                = std::max(max_name, name.length());
+      size_t face_width       = Ioss::Utils::number_width(boundary_faces[name].size());
+      max_face                = std::max(max_face, face_width);
     }
     max_name += 4; // Padding
     max_face += 4;
@@ -85,13 +80,13 @@ namespace {
     fmt::print("\t+{2:-^{0}}+{2:-^{1}}+\n", max_name, max_face, "");
   }
 
-  std::vector<int> get_selected_steps(Ioss::Region &region, const Skinner::Interface &options)
+  Ioss::IntVector get_selected_steps(Ioss::Region &region, const Skinner::Interface &options)
   {
     // This routine checks all steps of the input database and selects those which
     // meet the requirements specified in `options`.  The returned (1-based) vector will have a
     // value of `1` if the step is to be output and `0` if skipped.
-    int              step_count = (int)region.get_property("state_count").get_int();
-    std::vector<int> selected_steps(step_count + 1);
+    int             step_count = (int)region.get_property("state_count").get_int();
+    Ioss::IntVector selected_steps(step_count + 1);
 
     // If user specified a list of times to transfer to output database,
     // process the list and find the times on the input database that are
@@ -146,7 +141,7 @@ int main(int argc, char *argv[])
 
   codename = Ioss::FileInfo(argv[0]).basename();
 
-  Skinner::Interface interFace;
+  Skinner::Interface interFace(version);
   bool               success = interFace.parse_options(argc, argv);
   if (!success) {
     return EXIT_FAILURE;
@@ -209,6 +204,8 @@ namespace {
       dbi->set_int_byte_size_api(Ioss::USE_INT64_API);
     }
 
+    dbi->set_lowercase_database_names(false);
+
     // NOTE: 'region' owns 'db' pointer at this time...
     Ioss::Region region(dbi, "region_1");
     int          my_rank = region.get_database()->util().parallel_rank();
@@ -230,7 +227,7 @@ namespace {
       auto              &boundary = boundary_faces[name];
       auto              &faces    = face_generator.faces(name);
       for (auto &face : faces) {
-        if (face.elementCount_ == 1) {
+        if (face.element_count() == 1) {
           boundary.push_back(face);
         }
       }
@@ -242,8 +239,8 @@ namespace {
     }
 
     // Iterate the boundary faces and determine which nodes are referenced...
-    size_t           my_node_count = region.get_property("node_count").get_int();
-    std::vector<int> ref_nodes(my_node_count);
+    size_t          my_node_count = region.get_property("node_count").get_int();
+    Ioss::IntVector ref_nodes(my_node_count);
     for (const auto &boundaries : boundary_faces) {
       for (const auto &face : boundaries.second) {
         for (auto &gnode : face.connectivity_) {
@@ -263,15 +260,15 @@ namespace {
     Ioss::NodeBlock    *nb = region.get_node_blocks()[0];
     nb->get_field_data("mesh_model_coordinates", coord_in);
 
-    std::vector<INT> ids;
+    Ioss::IntVector ids;
     nb->get_field_data("ids", ids);
 
-    std::vector<int> owner;
+    Ioss::IntVector owner;
     nb->get_field_data("owning_processor", owner);
 
-    std::vector<INT>    ref_ids(ref_count);
+    Ioss::IntVector     ref_ids(ref_count);
     std::vector<double> coord_out(3 * ref_count);
-    std::vector<int>    owner_out(ref_count);
+    Ioss::IntVector     owner_out(ref_count);
 
     size_t j = 0;
     for (size_t i = 0; i < ref_nodes.size(); i++) {
@@ -325,12 +322,9 @@ namespace {
       auto               face_topo = eb->topology()->face_type(0);
       std::string        topo      = "shell";
       if (face_topo == nullptr) {
-        std::ostringstream errmsg;
-        fmt::print(errmsg,
-                   "ERROR: Block '{}' with topology '{}' does not have"
-                   " a unique face topology.\nThis is not supported at this time.\n",
-                   name, eb->topology()->name());
-        IOSS_ERROR(errmsg);
+        IOSS_ERROR(fmt::format("ERROR: Block '{}' with topology '{}' does not have"
+                               " a unique face topology.\nThis is not supported at this time.\n",
+                               name, eb->topology()->name()));
       }
       if (face_topo->name() == "tri3") {
         topo = "trishell";
@@ -357,8 +351,8 @@ namespace {
       auto              *block      = output_region.get_element_block(name);
       size_t             node_count = block->topology()->number_corner_nodes();
 
-      std::vector<INT> conn;
-      std::vector<INT> elids;
+      Ioss::IntVector conn;
+      Ioss::IntVector elids;
       conn.reserve(node_count * boundary.size());
       elids.reserve(boundary.size());
 
@@ -493,8 +487,7 @@ namespace {
   }
 
   void transfer_field_data_internal(Ioss::GroupingEntity *ige, Ioss::GroupingEntity *oge,
-                                    const std::string      &field_name,
-                                    const std::vector<int> &ref_nodes)
+                                    const std::string &field_name, const Ioss::IntVector &ref_nodes)
   {
     if (oge->field_exists(field_name)) {
       std::vector<double> in;
@@ -520,7 +513,7 @@ namespace {
   }
 
   void transfer_field_data(Ioss::GroupingEntity *ige, Ioss::GroupingEntity *oge,
-                           Ioss::Field::RoleType role, const std::vector<int> &ref_nodes)
+                           Ioss::Field::RoleType role, const Ioss::IntVector &ref_nodes)
   {
     // Iterate through the TRANSIENT-role fields of the input
     // database and transfer to output database.

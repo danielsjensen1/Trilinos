@@ -64,10 +64,6 @@ if( NOT DEFINED skip_clean_build_dir )
     set( skip_clean_build_dir ON )
 endif()
 
-if( NOT DEFINED skip_single_submit )
-    set( skip_single_submit ON )
-endif()
-
 if( NOT DEFINED skip_update_step )
     set( skip_update_step OFF )
 endif()
@@ -76,6 +72,13 @@ if( NOT DEFINED skip_upload_config_files )
     set( skip_upload_config_files OFF )
 endif()
 
+if( NOT DEFINED SKIP_RUN_TESTS )
+    set ( SKIP_RUN_TESTS OFF )
+endif()
+
+if( NOT DEFINED ENABLE_ASAN )
+    set ( ENABLE_ASAN OFF )
+endif()
 
 # -----------------------------------------------------------
 # -- Miscellaneous Settings
@@ -169,7 +172,11 @@ endif()
 # Set CTEST_SITE to the name of the system.
 cmake_host_system_information(RESULT HOSTNAME QUERY HOSTNAME)
 
-set(CTEST_SITE "${HOSTNAME}")
+set(CTEST_CUSTOM_MAXIMUM_NUMBER_OF_WARNINGS 500)
+
+if( NOT DEFINED CTEST_SITE )
+    set(CTEST_SITE "${HOSTNAME}")
+endif()
 
 # See: https://cmake.org/cmake/help/latest/command/site_name.html#command:site_name
 site_name(${CTEST_SITE})

@@ -1,3 +1,12 @@
+// @HEADER
+// *****************************************************************************
+//        MueLu: A package for multigrid based preconditioning
+//
+// Copyright 2012 NTESS and the MueLu contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
+
 #ifndef MUELU_PARAMETERLISTACCEPTOR_HPP
 #define MUELU_PARAMETERLISTACCEPTOR_HPP
 
@@ -73,6 +82,8 @@ class ParameterListAcceptor {
   // No need for RCP, it's just a view
   virtual const Teuchos::ParameterList &GetParameterList() const = 0;
 
+  virtual const Teuchos::ParameterList &GetParameterListWithoutValidation() const = 0;
+
   //! @brief Set a parameter directly as a ParameterEntry.
   virtual void SetParameter(const std::string &name, const ParameterEntry &entry) = 0;
 
@@ -97,6 +108,8 @@ class ParameterListAcceptorImpl : public ParameterListAcceptor {
   // The returned list always has an entry for each valid parameter.
   // Therefore, there is not need to test if a parameter is present before getting it.
   virtual const Teuchos::ParameterList &GetParameterList() const;
+
+  virtual const Teuchos::ParameterList &GetParameterListWithoutValidation() const;
 
   void SetParameter(const std::string &name, const ParameterEntry &entry);
 

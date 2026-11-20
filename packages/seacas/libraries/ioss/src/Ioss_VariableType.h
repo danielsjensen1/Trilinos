@@ -1,4 +1,4 @@
-// Copyright(C) 1999-2024 National Technology & Engineering Solutions
+// Copyright(C) 1999-2025 National Technology & Engineering Solutions
 // of Sandia, LLC (NTESS).  Under the terms of Contract DE-NA0003525 with
 // NTESS, the U.S. Government retains certain rights in this software.
 //
@@ -17,6 +17,8 @@
 #include "ioss_export.h"
 
 namespace Ioss {
+  struct Basis;
+  struct QuadraturePoint;
   class VariableType;
 } // namespace Ioss
 
@@ -26,6 +28,8 @@ namespace Ioss {
 
   class IOSS_EXPORT Registry
   {
+    friend class VariableType;
+
   public:
     void           insert(const Ioss::VTM_ValuePair &value, bool delete_me);
     IOSS_NODISCARD VariableTypeMap::iterator begin() { return m_registry.begin(); }
@@ -36,11 +40,11 @@ namespace Ioss {
     }
 
     ~Registry();
-    std::map<std::string, std::string> customFieldTypes;
 
   private:
-    Ioss::VariableTypeMap             m_registry;
-    std::vector<Ioss::VariableType *> m_deleteThese;
+    std::map<std::string, std::string> customFieldTypes;
+    Ioss::VariableTypeMap              m_registry;
+    std::vector<Ioss::VariableType *>  m_deleteThese;
   };
 
   struct IOSS_EXPORT Suffix
@@ -65,17 +69,52 @@ namespace Ioss {
   class IOSS_EXPORT VariableType
   {
   public:
+    enum class Type {
+      UNKNOWN,
+      SCALAR,
+      STANDARD,
+      COMPOSED,
+      COMPOSITE,
+      CONSTRUCTED,
+      ELEMENT,
+      NAMED_SUFFIX,
+      BASIS,
+      QUADRATURE
+    };
+
     static void                    alias(const std::string &base, const std::string &syn);
     static int                     describe(NameList *names);
     IOSS_NODISCARD static NameList describe();
-    static bool                    create_named_suffix_field_type(const std::string              &type_name,
-                                                                  const std::vector<std::string> &suffices);
+
+    // Return a list of types that have been defined
+    // externally... Basically a subset of the types in the
+    // `Registry::m_deleteThese` list...
+    IOSS_NODISCARD static std::vector<Ioss::VariableType *>
+    external_types(Ioss::VariableType::Type type);
+
+    static bool create_named_suffix_type(const std::string    &type_name,
+                                         const Ioss::NameList &suffices);
+
+    // Backward compatibility...
+    [[deprecated("Use create_named_suffix_type")]] static bool
+    create_named_suffix_field_type(const std::string &type_name, const Ioss::NameList &suffices)
+    {
+      return create_named_suffix_type(type_name, suffices);
+    }
+
+    static bool create_basis_type(const std::string &type_name, const Ioss::Basis &basis);
+    static bool create_quadrature_type(const std::string                        &type_name,
+                                       const std::vector<Ioss::QuadraturePoint> &quad_points);
     static bool get_field_type_mapping(const std::string &field, std::string *type);
     static bool add_field_type_mapping(const std::string &raw_field, const std::string &raw_type);
 
     VariableType(const VariableType &)            = delete;
     VariableType &operator=(const VariableType &) = delete;
+    VariableType(VariableType &&)                 = delete;
+    VariableType &operator=(VariableType &&)      = delete;
     virtual ~VariableType()                       = default;
+
+    virtual void print() const;
 
     IOSS_NODISCARD int component_count() const;
 
@@ -83,26 +122,31 @@ namespace Ioss {
     // For example, a 'vector_2d' has suffices "x" and "y"
     // A 'quad4' has no suffices...
     IOSS_NODISCARD virtual int suffix_count() const;
-    IOSS_NODISCARD std::string name() const;
+    IOSS_NODISCARD std::string         name() const;
+    IOSS_NODISCARD virtual Type        type() const        = 0;
+    IOSS_NODISCARD virtual std::string type_string() const = 0;
 
     IOSS_NODISCARD static std::string  numeric_label(int which, int ncomp, const std::string &name);
     IOSS_NODISCARD virtual std::string label(int which, char suffix_sep = '_') const = 0;
     IOSS_NODISCARD virtual std::string label_name(const std::string &base, int which,
-                                                  char suffix_sep         = '_',
+                                                  char suffix_sep1 = '_', char suffix_sep2 = '_',
                                                   bool suffices_uppercase = false) const;
     IOSS_NODISCARD virtual bool        match(const std::vector<Suffix> &suffices) const;
 
     IOSS_NODISCARD static const VariableType *factory(const std::string &raw_name, int copies = 1);
+    IOSS_NODISCARD static const VariableType *factory(const std::string &raw_name,
+                                                      const std::string &secondary);
     IOSS_NODISCARD static const VariableType *factory(const std::vector<Suffix> &suffices,
                                                       bool ignore_realn_fields = false);
 
-  protected:
-    VariableType(const std::string &type, int comp_count, bool delete_me = false);
     static Registry &registry();
 
+  protected:
+    VariableType(const std::string &type, int comp_count, bool delete_me = false);
+
   private:
-    const std::string name_;
-    int               componentCount;
+    const std::string name_{};
+    int               componentCount{};
 
     static bool build_variable_type(const std::string &raw_type);
   };

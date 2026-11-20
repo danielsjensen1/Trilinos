@@ -1,12 +1,22 @@
-//@HEADER
-//@HEADER
+// @HEADER
+// *****************************************************************************
+//        Phalanx: A Partial Differential Equation Field Evaluation 
+//       Kernel for Flexible Management of Complex Dependency Chains
+//
+// Copyright 2008 NTESS and the Phalanx contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
+
 #ifndef PHALANX_COMMAND_LINE_PARSER_HPP
 #define PHALANX_COMMAND_LINE_PARSER_HPP
 
 #include <cstdlib>
 #include <cstring>
+#include <type_traits>
 #include "Teuchos_Assert.hpp"
 #include "Kokkos_Core.hpp"
+#include "Phalanx_KokkosDeviceTypes.hpp"
 
 namespace phx_example {
 
@@ -48,10 +58,15 @@ namespace phx_example {
       vector_size_(1),
       do_graph_analysis_(true)
     {
-      // Set better defaults for team/vector size based on arcitecture
+      // Set better defaults for team/vector size based on architecture.  Ask
+      // where PHALANX runs, not which backends were compiled in: a CUDA build
+      // can still put Phalanx on a host space, where the maximum team size is
+      // 1 and these values are rejected by Kokkos at run time.
 #if defined(KOKKOS_ENABLE_CUDA)
-      vector_size_ = 32;
-      team_size_ = 256 / vector_size_;
+      if constexpr (std::is_same_v<PHX::ExecutionSpace,Kokkos::Cuda>) {
+        vector_size_ = 32;
+        team_size_ = 256 / vector_size_;
+      }
 #endif
 
       for (int i=1; i < argc; ++i) {

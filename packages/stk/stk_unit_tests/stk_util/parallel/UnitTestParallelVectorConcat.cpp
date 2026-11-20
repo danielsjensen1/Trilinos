@@ -33,10 +33,10 @@
 // 
 
 #include "gtest/gtest.h"
-#include "stk_util/diag/String.hpp"                    // for String
 #include "stk_util/parallel/Parallel.hpp"              // for MPI_COMM_WORLD, MPI_SUCCESS, paral...
 #include "stk_util/parallel/ParallelVectorConcat.hpp"  // for parallel_vector_concat
 #include <iostream>                                    // for operator<<, ostringstream, basic_o...
+#include <limits>                                      // for numeric_limits
 #include <memory>                                      // for allocator_traits<>::value_type
 #include <string>                                      // for string, basic_string, char_traits
 #include <vector>                                      // for vector
@@ -151,41 +151,6 @@ TEST(UnitTestParallel, testParallelVectorConcat)
       EXPECT_EQ(globalStringList[i], expectedStringList[i]);
     }
   }
-  //
-  //  Test 5, test sierra::String specialization.  Net string should have form:
-  //  0: "PROC |1|"
-  //  1: "PROC |2|"
-  //  2: "PROC |2|"
-  //  3: "PROC |3|"
-  //  4: "PROC |3|"
-  //  5: "PROC |3|"
-  //
-  {
-    std::vector<sierra::String> localStringList;
-    std::vector<sierra::String> globalStringList;
-    std::vector<sierra::String> expectedStringList;
-    for(int iproc=0; iproc<mpi_size; ++iproc) {
-      for(int i=0; i<iproc; ++i) {
-        std::ostringstream os;
-        os <<"PROC |"<<iproc<<"|";
-        if(iproc == mpi_rank) {
-          localStringList.push_back(os.str().c_str());
-        }
-        expectedStringList.push_back(os.str().c_str());
-      }
-    }
-
-    int status = stk::parallel_vector_concat(MPI_COMM_WORLD, localStringList, globalStringList);
-
-    EXPECT_EQ(status, MPI_SUCCESS);
-  
-    EXPECT_EQ(globalStringList.size(), expectedStringList.size()); 
-
-
-    for(unsigned int i=0; i<expectedStringList.size(); ++i) {
-      EXPECT_EQ(globalStringList[i], expectedStringList[i]);
-    }
-  }
 }
 
 TEST(UnitTestParallel, test_bool_ParallelVectorConcat)
@@ -215,5 +180,37 @@ TEST(UnitTestParallel, test_bool_ParallelVectorConcat)
       EXPECT_EQ(globalVec[i], expectedVec[i]);
     }
   }
+}
+
+TEST(UnitTestParallel, testParallelVectorConcat_largeByteVector)
+{
+  const int mpi_size = stk::parallel_machine_size(MPI_COMM_WORLD);
+  const int mpi_rank = stk::parallel_machine_rank(MPI_COMM_WORLD);
+  if (mpi_size != 2) { GTEST_SKIP(); }  // needs ~3 GB/rank; sum must exceed INT_MAX
+
+  //
+  //  Each rank contributes a byte vector below the per-rank INT_MAX limit, but the
+  //  concatenated total across the 2 ranks exceeds the 32-bit (~2.1 billion) limit.
+  //
+  const size_t intMax    = static_cast<size_t>(std::numeric_limits<int>::max());
+  const size_t localSize = intMax/2 + 1000000;   // 2 * localSize > INT_MAX, localSize < INT_MAX
+
+  std::vector<unsigned char> localVec(localSize, static_cast<unsigned char>(mpi_rank + 1));
+  std::vector<unsigned char> globalVec;
+
+  int status = stk::parallel_vector_concat(MPI_COMM_WORLD, localVec, globalVec);
+  EXPECT_EQ(status, MPI_SUCCESS);
+
+  const size_t expectedTotal = 2 * localSize;
+  ASSERT_EQ(globalVec.size(), expectedTotal);
+  EXPECT_GT(globalVec.size(), intMax);           // confirm we exceeded the 32-bit limit
+
+  //
+  //  Spot-check the rank boundaries (avoid touching all ~2 billion bytes).
+  //
+  EXPECT_EQ(globalVec.front(),          static_cast<unsigned char>(1)); // rank 0 data
+  EXPECT_EQ(globalVec[localSize - 1],   static_cast<unsigned char>(1));
+  EXPECT_EQ(globalVec[localSize],       static_cast<unsigned char>(2)); // rank 1 data
+  EXPECT_EQ(globalVec.back(),           static_cast<unsigned char>(2));
 }
 

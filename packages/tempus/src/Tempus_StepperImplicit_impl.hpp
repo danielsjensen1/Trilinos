@@ -1,10 +1,11 @@
-// @HEADER
-// ****************************************************************************
-//                Tempus: Copyright (2017) Sandia Corporation
+//@HEADER
+// *****************************************************************************
+//          Tempus: Time Integration and Sensitivity Analysis Package
 //
-// Distributed under BSD 3-clause license (See accompanying file Copyright.txt)
-// ****************************************************************************
-// @HEADER
+// Copyright 2017 NTESS and the Tempus contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+//@HEADER
 
 #ifndef Tempus_StepperImplicit_impl_hpp
 #define Tempus_StepperImplicit_impl_hpp
@@ -304,7 +305,7 @@ void StepperImplicit<Scalar>::evaluateImplicitODE(
 
 template <class Scalar>
 void StepperImplicit<Scalar>::describe(
-    Teuchos::FancyOStream& out, const Teuchos::EVerbosityLevel verbLevel) const
+    Teuchos::FancyOStream& out, const Teuchos::EVerbosityLevel /*verbLevel*/) const
 {
   out.setOutputToRootOnly(0);
   out << "--- StepperImplicit ---\n";

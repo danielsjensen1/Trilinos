@@ -1,43 +1,10 @@
 // @HEADER
-// ************************************************************************
-//
+// *****************************************************************************
 //        Piro: Strategy package for embedded analysis capabilitites
-//                  Copyright (2010) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Andy Salinger (agsalin@sandia.gov), Sandia
-// National Laboratories.
-//
-// ************************************************************************
+// Copyright 2010 NTESS and the Piro contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #include <iostream>
@@ -46,7 +13,6 @@
 #include "MockModelEval_A_Tpetra.hpp"
 #include "MockModelEval_B_Tpetra.hpp"
 #include "MockModelEval_B_Tpetra_2_parameters.hpp"
-//#include "ObserveSolution_Epetra.hpp"
 
 #include "Piro_SolverFactory.hpp"
 #include "Piro_ProviderHelpers.hpp"
@@ -94,7 +60,12 @@ int main(int argc, char *argv[]) {
 
   Piro::SolverFactory solverFactory;
 
-  for (int iTest=0; iTest<8; iTest++) {
+  for (int iTest=0; iTest<10; iTest++) {
+
+    status = 0;
+
+    // Whether Piro::PerformAnalysis is expected to throw a Teuchos::Exceptions::InvalidParameter exception
+    bool expectInvalidParameter = false;
 
     if (doAll) {
       switch (iTest) {
@@ -106,6 +77,9 @@ int main(int argc, char *argv[]) {
        case 5: inputFile="input_Analysis_ROL_ReducedSpace_TrustRegion_BoundConstrained_ExplicitAdjointME_NOXSolver.xml"; break;
        case 6: inputFile="input_Analysis_ROL_FullSpace_AugmentedLagrangian_BoundConstrained.xml"; break;
        case 7: inputFile="input_Analysis_ROL_ReducedSpace_TrustRegion_HessianBasedDotProduct_2_parameters.xml"; break;
+       case 8: inputFile="input_Analysis_ROL_FullSpace_AugmentedLagrangian.xml"; break;
+       case 9: inputFile="input_Analysis_ROL_ReducedSpace_LineSearch_BoundConstrained_HessianBasedDotProduct_Invalid.xml";
+               expectInvalidParameter = true; break;
        default : std::cout << "iTest logic error " << std::endl; exit(-1);
       }
     }
@@ -116,13 +90,16 @@ int main(int argc, char *argv[]) {
 
     try {
 
+      // Test 7 (and a test given on the command line) uses the model with 2 parameters, the other tests use the other models
+      const bool twoParametersTest = (iTest == 7) || (iTest == 999);
+
       std::vector<std::string> mockModels = {"MockModelEval_A_Tpetra", "MockModelEval_B_Tpetra", "MockModelEval_B_Tpetra_2_parameters"};
       for (auto mockModel : mockModels) {
 
-        if (mockModel=="MockModelEval_B_Tpetra_2_parameters" && iTest < 7) {
+        if (mockModel=="MockModelEval_B_Tpetra_2_parameters" && !twoParametersTest) {
           continue;
         }
-        if (mockModel!="MockModelEval_B_Tpetra_2_parameters" && iTest > 6) {
+        if (mockModel!="MockModelEval_B_Tpetra_2_parameters" && twoParametersTest) {
           continue;
         }
 
@@ -151,10 +128,10 @@ int main(int argc, char *argv[]) {
 
         if (mockModel=="MockModelEval_A_Tpetra") {
           if(boundConstrained) {
-            RCP<Thyra::ModelEvaluator<double>> model_tmp = rcp(new MockModelEval_A_Tpetra(appComm,false,probParams,true));
+            RCP<Thyra::ModelEvaluator<double>> model_tmp = rcp(new MockModelEval_A_Tpetra(appComm,2,false,probParams,true));
             model = rcp(new Piro::ProductModelEvaluator<double>(model_tmp,p_indices));
             if(explicitAdjointME) {
-              RCP<Thyra::ModelEvaluator<double>> adjointModel_tmp = rcp(new MockModelEval_A_Tpetra(appComm,true));
+              RCP<Thyra::ModelEvaluator<double>> adjointModel_tmp = rcp(new MockModelEval_A_Tpetra(appComm,2,true));
               adjointModel = rcp(new Piro::ProductModelEvaluator<double>(adjointModel_tmp,p_indices));
             }
             modelName = "A";
@@ -213,7 +190,38 @@ int main(int argc, char *argv[]) {
 
         // Call the analysis routine
         RCP<Thyra::VectorBase<double>> p;
-        status = Piro::PerformAnalysis(*piro, *piroParams, p);
+
+        if (expectInvalidParameter) {
+          bool thrown = false;
+          try {
+            Piro::PerformAnalysis(*piro, *piroParams, p);
+          }
+          catch (const Teuchos::Exceptions::InvalidParameter& e) {
+            thrown = true;
+            if (Proc==0)
+              std::cout << "\nPiro_AnalysisDriver: Piro::PerformAnalysis threw the expected exception:\n" << e.what() << std::endl;
+          }
+          if (!thrown) {
+            status+=10;
+            if (Proc==0)
+              std::cout << "\nPiro_AnalysisDriver: Piro::PerformAnalysis did not throw the expected exception" << std::endl;
+          }
+          continue;
+        }
+
+        // accumulate the status of the models of the test
+        status += Piro::PerformAnalysis(*piro, *piroParams, p);
+
+        // The analysis must reset the flags that the NOX solver uses during the optimization
+        if (piroParams->isSublist("Optimization Status")) {
+          const Teuchos::ParameterList& optStatus = piroParams->sublist("Optimization Status");
+          if (optStatus.isParameter("Optimizer Iteration Number") ||
+              (optStatus.isParameter("Compute State") && !optStatus.get<bool>("Compute State"))) {
+            status+=1;
+            if (Proc==0)
+              std::cout << "\nPiro_AnalysisDriver: the \"Optimization Status\" flags have not been reset" << std::endl;
+          }
+        }
 
         if (Teuchos::nonnull(p)) { //p might be null if the package ROL is not enabled
           Thyra::DetachedVectorView<double> p_view(p);
@@ -222,13 +230,16 @@ int main(int argc, char *argv[]) {
             p_exact[0] = 1;
             p_exact[1] = 3;
           }
-          if (mockModel=="MockModelEval_B_Tpetra") {
+          else if (mockModel=="MockModelEval_B_Tpetra") {
             p_exact[0] = 6;
             p_exact[1] = 4;
           }
-          if (mockModel=="MockModelEval_B_Tpetra_2_parameters") {
+          else if (mockModel=="MockModelEval_B_Tpetra_2_parameters") {
             p_exact[0] = 4;
             p_exact[1] = 6;
+          }
+          else {
+            TEUCHOS_ASSERT(false);
           }
           double tol = 1e-5;
 
@@ -258,5 +269,5 @@ int main(int argc, char *argv[]) {
       std::cout << "\nTEST Failed: " << overall_status << "\n" << std::endl;
   }
 
-  return status;
+  return overall_status;
 }

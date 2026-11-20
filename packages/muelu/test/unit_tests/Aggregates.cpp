@@ -1,48 +1,12 @@
 // @HEADER
-//
-// ***********************************************************************
-//
+// *****************************************************************************
 //        MueLu: A package for multigrid based preconditioning
-//                  Copyright 2012 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact
-//                    Jonathan Hu       (jhu@sandia.gov)
-//                    Andrey Prokopenko (aprokop@sandia.gov)
-//                    Ray Tuminaro      (rstumin@sandia.gov)
-//
-// ***********************************************************************
-//
+// Copyright 2012 NTESS and the MueLu contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
+
 #include <Teuchos_UnitTestHarness.hpp>
 #include <Teuchos_TestingHelpers.hpp>
 #include <Teuchos_ScalarTraits.hpp>
@@ -53,7 +17,6 @@
 #include <MueLu_CoalesceDropFactory.hpp>
 #include <MueLu_UncoupledAggregationFactory.hpp>
 #include <MueLu_StructuredAggregationFactory.hpp>
-#include <MueLu_UncoupledAggregationFactory.hpp>
 #include <MueLu_HybridAggregationFactory.hpp>
 #include <MueLu_AmalgamationFactory.hpp>
 #include <MueLu_AmalgamationInfo.hpp>
@@ -111,6 +74,7 @@ class AggregateGenerator {
     aggFact->SetParameter("aggregation: max selected neighbors", Teuchos::ParameterEntry(0));
     aggFact->SetParameter("aggregation: ordering", Teuchos::ParameterEntry(std::string("natural")));
     aggFact->SetParameter("aggregation: allow user-specified singletons", Teuchos::ParameterEntry(true));
+    aggFact->SetParameter("aggregation: deterministic", Teuchos::ParameterEntry(true));
 
     aggFact->SetParameter("aggregation: enable phase 1", Teuchos::ParameterEntry(bPhase1));
     aggFact->SetParameter("aggregation: enable phase 2a", Teuchos::ParameterEntry(bPhase2a));
@@ -174,7 +138,7 @@ class AggregateGenerator {
 
   // Little utility to generate uncoupled aggregates with some specified root nodes on interface.
   static RCP<Aggregates>
-  gimmeInterfaceAggregates(const RCP<Matrix>& A, RCP<AmalgamationInfo>& amalgInfo, Teuchos::Array<LO>& nodeOnInterface) {
+  gimmeInterfaceAggregates(const RCP<Matrix>& A, RCP<AmalgamationInfo>& /*amalgInfo*/, Teuchos::Array<LO>& nodeOnInterface) {
     Level level;
     TestHelpers::TestFactory<SC, LO, GO, NO>::createSingleLevelHierarchy(level);
     level.Set("A", A);
@@ -191,6 +155,7 @@ class AggregateGenerator {
     aggFact->SetParameter("aggregation: min agg size", Teuchos::ParameterEntry(3));
     aggFact->SetParameter("aggregation: max selected neighbors", Teuchos::ParameterEntry(0));
     aggFact->SetParameter("aggregation: ordering", Teuchos::ParameterEntry(std::string("natural")));
+    aggFact->SetParameter("aggregation: deterministic", Teuchos::ParameterEntry(true));
     aggFact->SetParameter("aggregation: enable phase 1", Teuchos::ParameterEntry(true));
     aggFact->SetParameter("aggregation: enable phase 2a", Teuchos::ParameterEntry(true));
     aggFact->SetParameter("aggregation: enable phase 2b", Teuchos::ParameterEntry(true));
@@ -211,9 +176,9 @@ class AggregateGenerator {
 
   // Little utility to generate hybrid structured and uncoupled aggregates
   static RCP<Aggregates>
-  gimmeHybridAggregates(const RCP<Matrix>& A, RCP<AmalgamationInfo>& amalgInfo,
+  gimmeHybridAggregates(const RCP<Matrix>& A, RCP<AmalgamationInfo>& /*amalgInfo*/,
                         const std::string regionType,
-                        Array<GO> gNodesPerDir, Array<LO> lNodesPerDir,
+                        Array<GO> /*gNodesPerDir*/, Array<LO> lNodesPerDir,
                         const LO numDimensions) {
     Level level;
     TestHelpers::TestFactory<SC, LO, GO, NO>::createSingleLevelHierarchy(level);
@@ -712,7 +677,7 @@ TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Aggregates, JustStructuredAggregationGlobal, S
                                                                     lNodesPerDir, meshData);
 
   Teuchos::ParameterList matrixList;
-  matrixList.set("nx", gNodesPerDir[0]);
+  matrixList.set("nx", (GlobalOrdinal)Coordinates->getMap()->getGlobalNumElements());
   matrixList.set("matrixType", "Laplace1D");
   RCP<Galeri::Xpetra::Problem<Map, CrsMatrixWrap, MultiVector>> Pr = Galeri::Xpetra::
       BuildProblem<SC, LO, GO, Map, CrsMatrixWrap, MultiVector>("Laplace1D", Coordinates->getMap(),
@@ -762,7 +727,7 @@ TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Aggregates, JustStructuredAggregationLocal, Sc
                                                                     meshLayout);
 
   Teuchos::ParameterList matrixList;
-  matrixList.set("nx", gNodesPerDir[0]);
+  matrixList.set("nx", (GlobalOrdinal)Coordinates->getMap()->getGlobalNumElements());
   matrixList.set("matrixType", "Laplace1D");
   RCP<Galeri::Xpetra::Problem<Map, CrsMatrixWrap, MultiVector>> Pr = Galeri::Xpetra::
       BuildProblem<SC, LO, GO, Map, CrsMatrixWrap, MultiVector>("Laplace1D", Coordinates->getMap(),
@@ -846,20 +811,7 @@ TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Aggregates, GreedyDirichlet, Scalar, LocalOrdi
   //    RCP<Matrix> A = TestHelpers::TestFactory<SC, LO, GO, NO>::Build1DPoisson(30);
   // Make a Matrix with multiple degrees of freedom per node
   GlobalOrdinal nx = 20, ny = 20;
-
-  // Describes the initial layout of matrix rows across processors.
-  Teuchos::ParameterList galeriList;
-  galeriList.set("nx", nx);
-  galeriList.set("ny", ny);
-  RCP<const Teuchos::Comm<int>> comm = TestHelpers::Parameters::getDefaultComm();
-  RCP<const Map> map                 = Galeri::Xpetra::CreateMap<LocalOrdinal, GlobalOrdinal, Node>(TestHelpers::Parameters::getLib(), "Cartesian2D", comm, galeriList);
-
-  map = Xpetra::MapFactory<LocalOrdinal, GlobalOrdinal, Node>::Build(map, 2);  // expand map for 2 DOFs per node
-
-  RCP<Galeri::Xpetra::Problem<Map, CrsMatrixWrap, MultiVector>> Pr =
-      Galeri::Xpetra::BuildProblem<Scalar, LocalOrdinal, GlobalOrdinal, Map, CrsMatrixWrap, MultiVector>("Elasticity2D", map, galeriList);
-  RCP<Matrix> A = Pr->BuildMatrix();
-  A->SetFixedBlockSize(2);
+  auto A = TestHelpers::TestFactory<SC, LO, GO, NO>::Build2DElasticity(nx, ny);
 
   Teuchos::ArrayView<const LocalOrdinal> indices;
   Teuchos::ArrayView<const Scalar> values;
@@ -911,7 +863,7 @@ TEUCHOS_UNIT_TEST_TEMPLATE_4_DECL(Aggregates, GreedyDirichlet, Scalar, LocalOrdi
 
   aggregates->ComputeNodesInAggregate(aggPtr, aggNodes, unaggregated);
 
-  typename Aggregates::LO_view::HostMirror unaggregated_h = Kokkos::create_mirror_view(unaggregated);
+  typename Aggregates::LO_view::host_mirror_type unaggregated_h = Kokkos::create_mirror_view(unaggregated);
   Kokkos::deep_copy(unaggregated_h, unaggregated);
 
   //     Test to check that the dirichlet node is aggregated:

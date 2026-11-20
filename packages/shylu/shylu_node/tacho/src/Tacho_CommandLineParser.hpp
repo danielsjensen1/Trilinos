@@ -1,20 +1,12 @@
 // clang-format off
-/* =====================================================================================
-Copyright 2022 National Technology & Engineering Solutions of Sandia, LLC (NTESS).
-Under the terms of Contract DE-NA0003525 with NTESS, the U.S. Government retains
-certain rights in this software.
-
-SCR#:2790.0
-
-This file is part of Tacho. Tacho is open source software: you can redistribute it
-and/or modify it under the terms of BSD 2-Clause License
-(https://opensource.org/licenses/BSD-2-Clause). A copy of the licese is also
-provided under the main directory
-
-Questions? Kyungjoo Kim at <kyukim@sandia.gov,https://github.com/kyungjoo-kim>
-
-Sandia National Laboratories, Albuquerque, NM, USA
-===================================================================================== */
+// @HEADER
+// *****************************************************************************
+//                            Tacho package
+//
+// Copyright 2022 NTESS and the Tacho contributors.
+// SPDX-License-Identifier: BSD-2-Clause
+// *****************************************************************************
+// @HEADER
 // clang-format on
 #ifndef __TACHO_COMMAND_LINE_PARSER_HPP__
 #define __TACHO_COMMAND_LINE_PARSER_HPP__
@@ -101,6 +93,7 @@ public:
       // parse
       for (int i = 1; i < argc; ++i) {
         std::string s = argv[i];
+        bool used = false;
         for (auto it = _map.begin(); it != _map.end(); ++it) {
           const auto t = it->second;
           // find option starting with --
@@ -123,9 +116,12 @@ public:
                   } else if (type == "bool") {
                     *((bool *)tval) = (sval == "true");
                   } else {
-                    std::cout << " int somethng wrong\n";
+                    std::cout << "\n somethng wrong with command-line argument " << it->first
+                              << " missing/wrong argument\n\n";
+                    return true;
                   }
                   _map[it->first] = std::make_tuple(desc, type, sval, (void *)NULL);
+                  used = true;
                 }
               }
             } else {
@@ -137,13 +133,23 @@ public:
                   if (type == "bool") {
                     *((bool *)tval) = true;
                   } else {
-                    std::cout << " bool somethng wrong\n";
+                    std::cout << "\n somethng wrong with bool command-line argument for " << it->first
+                              << " (" << desc << ", " << type << ")\n\n";
+                    return true;
                   }
                   _map[it->first] = std::make_tuple(desc, type, "1", (void *)NULL);
+                  used = true;
                 }
               }
             }
+          } else {
+            std::cout << "\n invaild command-line argument : " << s << std::endl << std::endl;
+            return true;
           }
+        }
+        if (!used) {
+          std::cout << "\n invaild command-line argument : " << s << std::endl << std::endl;
+          return true;
         }
       }
 

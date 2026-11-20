@@ -1,5 +1,5 @@
 /*
- * Copyright(C) 1999-2023 National Technology & Engineering Solutions
+ * Copyright(C) 1999-2025 National Technology & Engineering Solutions
  * of Sandia, LLC (NTESS).  Under the terms of Contract DE-NA0003525 with
  * NTESS, the U.S. Government retains certain rights in this software.
  *
@@ -73,18 +73,12 @@ int token_compare(char *token, const char *key)
 /*****************************************************************************/
 void strip_string(char inp_str[], const char *tokens)
 {
-  int i;
-  int j;
-  int itok;
-  int ntokes;
-  int bval;
-
-  i      = 0;
-  ntokes = strlen(tokens);
+  int i      = 0;
+  int ntokes = strlen(tokens);
 
   while (inp_str[i] != '\0') {
-    bval = 0;
-    for (itok = 0; itok < ntokes; itok++) {
+    int bval = 0;
+    for (int itok = 0; itok < ntokes; itok++) {
       if (inp_str[i] == tokens[itok]) {
         i++;
         bval = 1;
@@ -97,7 +91,7 @@ void strip_string(char inp_str[], const char *tokens)
   }
 
   /* Move real part of string to the front */
-  j = 0;
+  int j = 0;
   while (inp_str[j + i] != '\0') {
     inp_str[j] = inp_str[j + i];
     j++;
@@ -107,8 +101,8 @@ void strip_string(char inp_str[], const char *tokens)
 
   /* Remove trailing tokens */
   while (j != -1) {
-    bval = 0;
-    for (itok = 0; itok < ntokes; itok++) {
+    int bval = 0;
+    for (int itok = 0; itok < ntokes; itok++) {
       if (inp_str[j] == tokens[itok]) {
         bval = 1;
         j--;
@@ -128,11 +122,8 @@ void strip_string(char inp_str[], const char *tokens)
 /*****************************************************************************/
 void string_to_lower(char in_string[], char cval)
 {
-  int len;
-  int cnt;
-
-  len = strlen(in_string);
-  for (cnt = 0; cnt < len; cnt++) {
+  int len = strlen(in_string);
+  for (int cnt = 0; cnt < len; cnt++) {
     if (in_string[cnt] == cval) {
       return;
     }
@@ -148,26 +139,19 @@ void string_to_lower(char in_string[], char cval)
 /*****************************************************************************/
 void clean_string(char inp_str[], const char *tokens)
 {
-  int i;
-  int j;
-  int itok;
-  int ntokes;
-  int bval;
-  int inplen;
+  int ntokes = strlen(tokens);
+  int inplen = strlen(inp_str);
 
-  ntokes = strlen(tokens);
-  inplen = strlen(inp_str);
-
-  i    = 0;
-  bval = 0;
+  int i    = 0;
+  int bval = 0;
   while (inp_str[i] != '\0') {
-    for (itok = 0; itok < ntokes; itok++) {
+    for (int itok = 0; itok < ntokes; itok++) {
       if (i < 0) {
         i = 0;
       }
       if (inp_str[i] == tokens[itok]) {
         /* Find out if the next character is also a token */
-        for (j = 0; j < ntokes; j++) {
+        for (int j = 0; j < ntokes; j++) {
           if (inp_str[i + 1] == tokens[j]) {
             bval = 1;
             break;
@@ -175,7 +159,7 @@ void clean_string(char inp_str[], const char *tokens)
         }
 
         if (bval == 1) {
-          for (j = i + 1; j < inplen; j++) {
+          for (int j = i + 1; j < inplen; j++) {
             inp_str[j] = inp_str[j + 1];
           }
 
@@ -282,6 +266,7 @@ namespace {
     for (size_t i = 1; i < N; i++) {
       INT tmp = v[i];
       for (j = i; tmp < v[j - 1]; j--) {
+        assert(j >= 1);
         v[j] = v[j - 1];
       }
       v[j] = tmp;
@@ -649,6 +634,7 @@ namespace {
       for (j = i; is_less_than4(small_val1, small_val2, small_val3, small_val4, v1[j - 1],
                                 v2[j - 1], v3[j - 1], v4[j - 1]);
            j--) {
+        assert(j >= 1);
         v1[j] = v1[j - 1];
         v2[j] = v2[j - 1];
         v3[j] = v3[j - 1];
@@ -764,6 +750,7 @@ namespace {
       INT    small_val2 = v2[i];
       size_t j;
       for (j = i; is_less_than2(small_val1, small_val2, v1[j - 1], v2[j - 1]); j--) {
+        assert(j >= 1);
         v1[j] = v1[j - 1];
         v2[j] = v2[j - 1];
       }

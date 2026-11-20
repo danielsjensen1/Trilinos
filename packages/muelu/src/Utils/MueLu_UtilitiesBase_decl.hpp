@@ -1,48 +1,12 @@
 // @HEADER
-//
-// ***********************************************************************
-//
+// *****************************************************************************
 //        MueLu: A package for multigrid based preconditioning
-//                  Copyright 2012 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact
-//                    Jonathan Hu       (jhu@sandia.gov)
-//                    Andrey Prokopenko (aprokop@sandia.gov)
-//                    Ray Tuminaro      (rstumin@sandia.gov)
-//
-// ***********************************************************************
-//
+// Copyright 2012 NTESS and the MueLu contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
+
 #ifndef MUELU_UTILITIESBASE_DECL_HPP
 #define MUELU_UTILITIESBASE_DECL_HPP
 
@@ -50,11 +14,15 @@
 
 #include "MueLu_ConfigDefs.hpp"
 
+#include "MueLu_BaseClass.hpp"
+#include "MueLu_Level_fwd.hpp"
+#include "MueLu_PerfUtils_fwd.hpp"
+
 #include <Teuchos_DefaultComm.hpp>
 #include <Teuchos_ScalarTraits.hpp>
 #include <Teuchos_ParameterList.hpp>
 
-#include "Kokkos_ArithTraits.hpp"
+#include "KokkosKernels_ArithTraits.hpp"
 
 #include <Xpetra_BlockedCrsMatrix_fwd.hpp>
 #include <Xpetra_BlockedMap_fwd.hpp>
@@ -68,11 +36,15 @@
 #include <Xpetra_Map_fwd.hpp>
 #include <Xpetra_MapFactory_fwd.hpp>
 #include <Xpetra_Matrix_fwd.hpp>
+#include <Xpetra_MatrixFactory_fwd.hpp>
+#include <Xpetra_MatrixUtils_fwd.hpp>
 #include <Xpetra_MultiVector_fwd.hpp>
 #include <Xpetra_MultiVectorFactory_fwd.hpp>
 #include <Xpetra_Operator_fwd.hpp>
 #include <Xpetra_Vector_fwd.hpp>
 #include <Xpetra_VectorFactory_fwd.hpp>
+
+#include <MueLu_InverseApproximationFactory_fwd.hpp>
 
 namespace MueLu {
 
@@ -110,7 +82,8 @@ class UtilitiesBase {
 
     NOTE -- it's assumed that A has been fillComplete'd.
   */
-  static RCP<CrsMatrixWrap> GetThresholdedMatrix(const RCP<Matrix>& Ain, const Scalar threshold, const bool keepDiagonal = true, const GlobalOrdinal expectedNNZperRow = -1);
+
+  static RCP<Matrix> GetThresholdedMatrix(const RCP<Matrix>& Ain, const Magnitude threshold, const bool keepDiagonal = true);
 
   /*! @brief Threshold a graph
 
@@ -118,7 +91,15 @@ class UtilitiesBase {
 
     NOTE -- it's assumed that A has been fillComplete'd.
   */
-  static RCP<Xpetra::CrsGraph<LocalOrdinal, GlobalOrdinal, Node>> GetThresholdedGraph(const RCP<Matrix>& A, const Magnitude threshold, const GlobalOrdinal expectedNNZperRow = -1);
+  static RCP<Xpetra::CrsGraph<LocalOrdinal, GlobalOrdinal, Node>> GetThresholdedGraph(const RCP<Matrix>& A, const Magnitude threshold, const bool symScaled = false);
+
+  /*! @brief Remove strickly upper triangular matrix and remove entries via Threshold
+
+    Returns graph associated with lower triangular matrix that is also filtered with a threshold value.
+
+    NOTE -- it's assumed that A has been fillComplete'd.
+  */
+  static RCP<Xpetra::CrsGraph<LocalOrdinal, GlobalOrdinal, Node>> GetThresholdedLowerTriangularGraph(const RCP<Matrix>& A, const Magnitude threshold, const bool symScaled = false);
 
   /*! @brief Extract Matrix Diagonal
 
@@ -163,9 +144,9 @@ class UtilitiesBase {
    * @ret: vector containing max_{i\not=k}(-a_ik)
    */
 
-  static Teuchos::ArrayRCP<Magnitude> GetMatrixMaxMinusOffDiagonal(const Xpetra::Matrix<Scalar, LocalOrdinal, GlobalOrdinal, Node>& A);
+  static Teuchos::RCP<Vector> GetMatrixMaxMinusOffDiagonal(const Xpetra::Matrix<Scalar, LocalOrdinal, GlobalOrdinal, Node>& A);
 
-  static Teuchos::ArrayRCP<Magnitude> GetMatrixMaxMinusOffDiagonal(const Xpetra::Matrix<Scalar, LocalOrdinal, GlobalOrdinal, Node>& A, const Xpetra::Vector<LocalOrdinal, LocalOrdinal, GlobalOrdinal, Node>& BlockNumber);
+  static Teuchos::RCP<Vector> GetMatrixMaxMinusOffDiagonal(const Xpetra::Matrix<Scalar, LocalOrdinal, GlobalOrdinal, Node>& A, const Xpetra::Vector<LocalOrdinal, LocalOrdinal, GlobalOrdinal, Node>& BlockNumber);
 
   /*! @brief Return vector containing inverse of input vector
    *
@@ -198,6 +179,15 @@ class UtilitiesBase {
   static RCP<Xpetra::Vector<Magnitude, LocalOrdinal, GlobalOrdinal, Node>>
   GetMatrixOverlappedAbsDeletedRowsum(const Matrix& A);
 
+  /*! @brief Counts the number of negative diagonal entries
+
+    Returns a GlobalOrdinal with the number of negative diagonal entries
+    This generally will involve MPI communication and this must be called
+    on all ranks in A's communicator.
+    NOTE: This only works on matrices locally fitted column maps.
+   */
+  static GlobalOrdinal CountNegativeDiagonalEntries(const Matrix& A);
+
   // TODO: should NOT return an Array. Definition must be changed to:
   // - ArrayRCP<> ResidualNorm(Matrix const &Op, MultiVector const &X, MultiVector const &RHS)
   // or
@@ -216,13 +206,14 @@ class UtilitiesBase {
     @param scaleByDiag if true, estimate the largest eigenvalue of \f$ D^; A \f$.
     @param niters maximum number of iterations
     @param tolerance stopping tolerance
+    @param diagonalReplacementTolernace tolernace for assuming the diagonal is zero
     @verbose if true, print iteration information
     @seed  seed for randomizing initial guess
 
     (Shamelessly grabbed from tpetra/examples.)
   */
   static Scalar PowerMethod(const Matrix& A, bool scaleByDiag = true,
-                            LocalOrdinal niters = 10, Magnitude tolerance = 1e-2, bool verbose = false, unsigned int seed = 123);
+                            LocalOrdinal niters = 10, Magnitude tolerance = 1e-2, Magnitude diagonalReplacementTol = Teuchos::ScalarTraits<Scalar>::eps() * 100, bool verbose = false, unsigned int seed = 123);
 
   /*! @brief Power method.
 
@@ -289,6 +280,13 @@ class UtilitiesBase {
     @return boolean array.  The ith entry is true iff row i is a Dirichlet row.
   */
   static Teuchos::ArrayRCP<const bool> DetectDirichletRowsExt(const Xpetra::Matrix<Scalar, LocalOrdinal, GlobalOrdinal, Node>& A, bool& bHasZeroDiagonal, const Magnitude& tol = Teuchos::ScalarTraits<Scalar>::zero());
+
+  /*! @brief Detect Dirichlet rows and copy values from RHS multivector to InitialGuess for Dirichlet rows.
+
+    This can be used to assure that the InitialGuess satisfies the boundary conditions enforced on A.
+    Useful in particular for using CG when boundary conditions have only been enforce by one-and-zeroing rows of A, but not columns.
+   */
+  static void EnforceInitialCondition(const Xpetra::Matrix<Scalar, LocalOrdinal, GlobalOrdinal, Node>& A, const Xpetra::MultiVector<Scalar, LocalOrdinal, GlobalOrdinal, Node>& RHS, Xpetra::MultiVector<Scalar, LocalOrdinal, GlobalOrdinal, Node>& InitialGuess, const Magnitude& tol = Teuchos::ScalarTraits<Magnitude>::zero(), const bool count_twos_as_dirichlet = false);
 
   /*! @brief Find non-zero values in an ArrayRCP
     Compares the value to 2 * machine epsilon
@@ -455,7 +453,7 @@ class UtilitiesBase {
                                 const Teuchos::ArrayRCP<const bool>& dirichletCols,
                                 Scalar replaceWith = Teuchos::ScalarTraits<Scalar>::zero());
 
-  static void ZeroDirichletCols(RCP<Matrix>& A, const Kokkos::View<const bool*, typename NO::device_type>& dirichletCols, SC replaceWith = Teuchos::ScalarTraits<SC>::zero());
+  static void ZeroDirichletCols(RCP<Matrix>& A, const Kokkos::View<const bool*, typename NO::device_type>& dirichletCols, SC replaceWith = Teuchos::ScalarTraits<SC>::zero(), const bool DontZeroDiagEntries = false);
 
   // Finds the OAZ Dirichlet rows for this matrix
   static void FindDirichletRowsAndPropagateToCols(Teuchos::RCP<Xpetra::Matrix<Scalar, LocalOrdinal, GlobalOrdinal, Node>>& A,
@@ -465,6 +463,9 @@ class UtilitiesBase {
   //! Creates a copy of a matrix where the non-zero entries are replaced by ones.
   // You can use this to de-normalize a tenative prolongator, for instance
   static RCP<Xpetra::Matrix<Scalar, LocalOrdinal, GlobalOrdinal, Node>> ReplaceNonZerosWithOnes(const RCP<Matrix>& original);
+
+  //! Creates a sparse approximate inverse of a matrix with the same nonzero pattern as the input matrix
+  static RCP<Xpetra::Matrix<Scalar, LocalOrdinal, GlobalOrdinal, Node>> SPAI(const RCP<Matrix>& original, const std::string& MinvScheme);
 
   // This routine takes a BlockedMap and an Importer (assuming that the BlockedMap matches the source of the importer) and generates a BlockedMap corresponding
   // to the Importer's target map.  We assume that the targetMap is unique (which, is not a strict requirement of an Importer, but is here and no, we don't check)
@@ -484,6 +485,16 @@ class UtilitiesBase {
   /*! Perform a Reverse Cuthill-McKee (RCM) ordering of the local component of the matrix.
    */
   static RCP<Xpetra::Vector<LocalOrdinal, LocalOrdinal, GlobalOrdinal, Node>> ReverseCuthillMcKee(const Matrix& Op);
+
+  static void TripleMatrixProduct(const Teuchos::RCP<Xpetra::Matrix<Scalar, LocalOrdinal, GlobalOrdinal, Node>>& R,
+                                  const Teuchos::RCP<Xpetra::Matrix<Scalar, LocalOrdinal, GlobalOrdinal, Node>>& A,
+                                  const Teuchos::RCP<Xpetra::Matrix<Scalar, LocalOrdinal, GlobalOrdinal, Node>>& P,
+                                  Teuchos::RCP<Xpetra::Matrix<Scalar, LocalOrdinal, GlobalOrdinal, Node>>& Ac,
+                                  const Teuchos::ParameterList& pL,
+                                  const MueLu::BaseClass& verbObj,
+                                  Teuchos::RCP<Teuchos::ParameterList>& APparams,
+                                  Teuchos::RCP<Teuchos::ParameterList>& RAPparams,
+                                  Level* coarseLevel = nullptr);
 
 };  // class UtilitiesBase
 

@@ -1,3 +1,13 @@
+// @HEADER
+// *****************************************************************************
+//           Panzer: A partial differential equation assembly
+//       engine for strongly coupled complex multiphysics systems
+//
+// Copyright 2011 NTESS and the Panzer contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
+
 #include "Teuchos_ConfigDefs.hpp"
 #include "Teuchos_UnitTestHarness.hpp"
 #include "Teuchos_GlobalMPISession.hpp"
@@ -42,7 +52,7 @@ TEUCHOS_UNIT_TEST(periodic_bcs, 32_bit_int_limit)
   Teuchos::RCP<Teuchos::MpiComm<int>> Comm = Teuchos::rcp( new Teuchos::MpiComm<int>(MPI_COMM_WORLD) );
 
   using topo_RCP = Teuchos::RCP<const shards::CellTopology>;
-  using basis_RCP = Teuchos::RCP<Intrepid2::Basis<PHX::Device::execution_space,double,double>>;
+  using basis_RCP = Teuchos::RCP<Intrepid2::Basis<PHX::Device,double,double>>;
 
   {
     // ==========================================================
@@ -102,7 +112,7 @@ TEUCHOS_UNIT_TEST(periodic_bcs, 32_bit_int_limit)
 
       for (size_t b=0; b<blocknames.size(); b++) {
         topo_RCP cellTopo = mesh->getCellTopology(blocknames[b]);
-        basis_RCP basis = Teuchos::rcp(new Intrepid2::Basis_HGRAD_HEX_C1_FEM<PHX::Device::execution_space,double,double>() );
+        basis_RCP basis = Teuchos::rcp(new Intrepid2::Basis_HGRAD_HEX_C1_FEM<PHX::Device,double,double>() );
         Teuchos::RCP<const panzer::Intrepid2FieldPattern> Pattern = Teuchos::rcp(new panzer::Intrepid2FieldPattern(basis));
         DOF->addField(blocknames[b], "T", Pattern, panzer::FieldType::CG);
       }
@@ -125,7 +135,7 @@ TEUCHOS_UNIT_TEST(periodic_bcs, 32_bit_int_limit)
 
       for (size_t b=0; b<blocknames.size(); b++) {
         topo_RCP cellTopo = mesh->getCellTopology(blocknames[b]);
-        basis_RCP basis = Teuchos::rcp(new Intrepid2::Basis_HCURL_HEX_I1_FEM<PHX::Device::execution_space,double,double>() );
+        basis_RCP basis = Teuchos::rcp(new Intrepid2::Basis_HCURL_HEX_I1_FEM<PHX::Device,double,double>() );
         Teuchos::RCP<const panzer::Intrepid2FieldPattern> Pattern = Teuchos::rcp(new panzer::Intrepid2FieldPattern(basis));
         DOF->addField(blocknames[b], "E", Pattern, panzer::FieldType::CG);
       }
@@ -148,7 +158,7 @@ TEUCHOS_UNIT_TEST(periodic_bcs, 32_bit_int_limit)
 
       for (size_t b=0; b<blocknames.size(); b++) {
         topo_RCP cellTopo = mesh->getCellTopology(blocknames[b]);
-        basis_RCP basis = Teuchos::rcp(new Intrepid2::Basis_HDIV_HEX_I1_FEM<PHX::Device::execution_space,double,double>() );
+        basis_RCP basis = Teuchos::rcp(new Intrepid2::Basis_HDIV_HEX_I1_FEM<PHX::Device,double,double>() );
         Teuchos::RCP<const panzer::Intrepid2FieldPattern> Pattern = Teuchos::rcp(new panzer::Intrepid2FieldPattern(basis));
         DOF->addField(blocknames[b], "B", Pattern, panzer::FieldType::CG);
       }
@@ -171,7 +181,7 @@ TEUCHOS_UNIT_TEST(periodic_bcs, 32_bit_int_limit)
 
       for (size_t b=0; b<blocknames.size(); b++) {
         topo_RCP cellTopo = mesh->getCellTopology(blocknames[b]);
-        basis_RCP basis = Teuchos::rcp(new Intrepid2::Basis_HVOL_C0_FEM<PHX::Device::execution_space,double,double>(*cellTopo) );
+        basis_RCP basis = Teuchos::rcp(new Intrepid2::Basis_HVOL_C0_FEM<PHX::Device,double,double>(*cellTopo) );
         Teuchos::RCP<const panzer::Intrepid2FieldPattern> Pattern = Teuchos::rcp(new panzer::Intrepid2FieldPattern(basis));
         DOF->addField(blocknames[b], "p", Pattern, panzer::FieldType::CG);
       }

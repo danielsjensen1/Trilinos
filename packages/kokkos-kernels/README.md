@@ -1,11 +1,13 @@
-[![Generic badge](https://readthedocs.org/projects/kokkos-kernels/badge/?version=latest)](https://kokkos-kernels.readthedocs.io/en/latest/)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/kokkos/kokkos-kernels/badge)](https://securityscorecards.dev/viewer/?uri=github.com/kokkos/kokkos-kernels)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/9534/badge)](https://www.bestpractices.dev/projects/9534)
+[![kokkos-kernels/docs](https://github.com/kokkos/kokkos-kernels/actions/workflows/docs.yml/badge.svg)](https://kokkos.org/kokkos-kernels/docs)
 
 ![KokkosKernels](https://avatars2.githubusercontent.com/u/10199860?s=200&v=4)
 
 # Kokkos Kernels
 
 Kokkos C++ Performance Portability Programming EcoSystem: Math Kernels -
-Provides BLAS, Sparse BLAS and Graph Kernels 
+Provides BLAS, Sparse BLAS and Graph Kernels
 
 KokkosKernels implements local computational kernels for linear
 algebra and graph operations, using the Kokkos shared-memory parallel
@@ -76,7 +78,7 @@ KokkosKernels_ENABLE_OPTION
 with options capitalized at the end. Almost all Kokkos Kernels options determine
 whether ETI is used with a particular datatype, e.g.
 ````
--DKokkosKernels_INST_DOUBLE=On 
+-DKokkosKernels_INST_DOUBLE=On
 ````
 which does explicit instantation of all kernels for double type.
 Kokkos Kernels derives most of its CXXFLAGS, C++ standard, architecture flags,
@@ -155,27 +157,28 @@ CMAKE_CXX_USE_RESPONSE_FILE_FOR_OBJECTS:BOOL=ON when building with CUDA and
 complex double enabled."
 
 
-## Using Kokkoskernels Test Drivers 
+## Using Kokkoskernels Test Drivers
 
 In `perf_test` there are test drivers.
 
-* `KokkosGraph_triangle.exe` : Triangle counting driver. 
-* `KokkosSparse_spgemm.exe` : Sparse Matrix Sparse Matrix Multiply: 
+* `KokkosGraph_triangle.exe` : Triangle counting driver.
+* `KokkosSparse_spgemm.exe` : Sparse Matrix Sparse Matrix Multiply:
 * *****NOTE: KKMEM is outdated. Use default algorithm: KKSPGEMM = KKDEFAULT = DEFAULT****
 * Or within the code:
 *     kh.create_spgemm_handle(KokkosSparse::SPGEMM_KK);
 * `KokkosSparse_spmv.exe` : Sparse matvec.
 * `KokkosSparse_pcg.exe`  : CG method with Gauss Seidel as preconditioner.
-* `KokkosGraph_color.exe` : Distance-1 Graph coloring 
+* `KokkosGraph_color.exe` : Distance-1 Graph coloring
 * `KokkosKernels_MatrixConverter.exe` : given a matrix market format, converts it ".bin"
    binary format for fast input output readings, which can be read by other test drivers.
-   
+
 Please report bugs or performance issues to: https://github.com/kokkos/kokkos-kernels/issues
 
 ##### [LICENSE](https://github.com/kokkos/kokkos-kernels/blob/devel/LICENSE)
-[![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
+[![License](https://img.shields.io/badge/License-Apache--2.0_WITH_LLVM--exception-blue)](https://spdx.org/licenses/LLVM-exception.html)
 
-KokkosKernels is licensed under standard 3-clause BSD terms of use.  For
-specifics, please refer to the LICENSE file contained in the
-repository or distribution.  Under the terms of Contract DE-NA0003525 with NTESS,
+Under the terms of Contract DE-NA0003525 with NTESS,
 the U.S. Government retains certain rights in this software.
+
+The full license statement used in all headers is available [here](https://kokkos.org/kokkos-core-wiki/license.html) or
+[here](https://github.com/kokkos/kokkos-kernels/blob/develop/LICENSE).

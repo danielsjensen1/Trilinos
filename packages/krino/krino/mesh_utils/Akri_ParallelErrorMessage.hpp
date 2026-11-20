@@ -19,7 +19,7 @@ namespace krino
 class ParallelErrorMessage
 {
 public:
-  ParallelErrorMessage(const stk::Parallel & c);
+  ParallelErrorMessage(const stk::Parallel & c, const unsigned precision=16);
 
   template <typename T> ParallelErrorMessage & operator<<(const T & t)
   {
@@ -31,6 +31,10 @@ public:
   // and additionally return a parallel-consistent bool for whether or not any errors
   // were logged.
   std::pair<bool, std::string> gather_message() const;
+
+  // Gather messages across ranks and throw (parallel-consistently) if any rank
+  // logged an error, prefixing the gathered detail with context.
+  void require_empty(const std::string & context) const;
 
   bool have_local_error() const { return !local_message.str().empty(); }
 

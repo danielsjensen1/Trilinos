@@ -1,44 +1,10 @@
 // @HEADER
+// *****************************************************************************
+//           Amesos2: Templated Direct Sparse Solver Package
 //
-// ***********************************************************************
-//
-//           Amesos2: Templated Direct Sparse Solver Package 
-//                  Copyright 2011 Sandia Corporation
-//
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
-//
-// ***********************************************************************
-//
+// Copyright 2011 NTESS and the Amesos2 contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 
@@ -76,7 +42,7 @@ namespace Amesos2 {
    * \ingroup amesos2_solver_interfaces 
    */
   template <class Matrix,
-	    class Vector>
+            class Vector>
   class Lapack : public SolverCore<Amesos2::Lapack, Matrix, Vector> 
   {
     friend class SolverCore<Amesos2::Lapack,Matrix,Vector>; // Give our base access
@@ -85,7 +51,7 @@ namespace Amesos2 {
   public:
 
     /// The name of this solver interface
-    static const char* name;	// declaration. Initialization outside.
+    static const char* name;        // declaration. Initialization outside.
 
     typedef Lapack<Matrix,Vector>                                                type;
     typedef SolverCore<Amesos2::Lapack,Matrix,Vector>                      super_type;
@@ -116,8 +82,8 @@ namespace Amesos2 {
      * Amesos2::create() to initialize a Lapack interface.
      */
     Lapack(Teuchos::RCP<const Matrix> A,
-	   Teuchos::RCP<Vector>       X,
-	   Teuchos::RCP<const Vector> B);
+           Teuchos::RCP<Vector>       X,
+           Teuchos::RCP<const Vector> B);
     
 
     /// Destructor
@@ -158,7 +124,7 @@ namespace Amesos2 {
      * \throw std::runtime_error Lapack is not able to solve the system.
      */
     int solve_impl(const Teuchos::Ptr<MultiVecAdapter<Vector> >       X,
-		   const Teuchos::Ptr<const MultiVecAdapter<Vector> > B) const;
+                   const Teuchos::Ptr<const MultiVecAdapter<Vector> > B) const;
 
 
     /**
@@ -194,6 +160,14 @@ namespace Amesos2 {
      * \return \c true if the matrix was loaded, \c false if not
      */
     bool loadA_impl(EPhase current_phase);
+
+
+    /** 
+     * \brief Prints the status information about the current solver with some level
+     * of verbosity
+     */
+    void describe_impl(Teuchos::FancyOStream &out,
+                       const Teuchos::EVerbosityLevel verbLevel) const;
 
 
     // We keep some `temporary' storage for when we retrive values
@@ -247,9 +221,9 @@ namespace Amesos2 {
   struct solver_traits<Lapack> {
 // #ifdef HAVE_TEUCHOS_COMPLEX
 //     typedef Meta::make_list4<float,
-// 			     double,
-// 			     std::complex<float>,
-// 			     std::complex<double> >supported_scalars;
+//                              double,
+//                              std::complex<float>,
+//                              std::complex<double> >supported_scalars;
 // #else
     typedef Meta::make_list2<float, double> supported_scalars;
 // #endif
@@ -257,4 +231,4 @@ namespace Amesos2 {
   
 } // end namespace Amesos2
 
-#endif	// AMESOS2_NEWSOLVER_DECL_HPP
+#endif        // AMESOS2_NEWSOLVER_DECL_HPP

@@ -1,48 +1,12 @@
 // @HEADER
-//
-// ***********************************************************************
-//
+// *****************************************************************************
 //        MueLu: A package for multigrid based preconditioning
-//                  Copyright 2012 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact
-//                    Jonathan Hu       (jhu@sandia.gov)
-//                    Andrey Prokopenko (aprokop@sandia.gov)
-//                    Ray Tuminaro      (rstumin@sandia.gov)
-//
-// ***********************************************************************
-//
+// Copyright 2012 NTESS and the MueLu contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
+
 #ifndef MUELU_COORDINATESTRANSFER_FACTORY_DEF_HPP
 #define MUELU_COORDINATESTRANSFER_FACTORY_DEF_HPP
 
@@ -52,6 +16,7 @@
 #include "Xpetra_IO.hpp"
 
 #include "MueLu_Aggregates.hpp"
+#include "MueLu_AmalgamationFactory.hpp"
 #include "MueLu_CoordinatesTransferFactory_decl.hpp"
 #include "MueLu_Utilities.hpp"
 
@@ -59,6 +24,12 @@
 #include "MueLu_Monitor.hpp"
 
 namespace MueLu {
+
+template <class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
+CoordinatesTransferFactory<Scalar, LocalOrdinal, GlobalOrdinal, Node>::CoordinatesTransferFactory() = default;
+
+template <class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
+CoordinatesTransferFactory<Scalar, LocalOrdinal, GlobalOrdinal, Node>::~CoordinatesTransferFactory() = default;
 
 template <class Scalar, class LocalOrdinal, class GlobalOrdinal, class Node>
 RCP<const ParameterList> CoordinatesTransferFactory<Scalar, LocalOrdinal, GlobalOrdinal, Node>::GetValidParameterList() const {
@@ -179,6 +150,9 @@ void CoordinatesTransferFactory<Scalar, LocalOrdinal, GlobalOrdinal, Node>::Buil
     fineCoords               = Get<RCP<xdMV> >(fineLevel, "Coordinates");
     RCP<const Map> coarseMap = Get<RCP<const Map> >(fineLevel, "CoarseMap");
 
+    RCP<const Map> coarseCoordMap;
+    RCP<const Map> uniqueMap = fineCoords->getMap();
+
     // coarseMap is being used to set up the domain map of tentative P, and therefore, the row map of Ac
     // Therefore, if we amalgamate coarseMap, logical nodes in the coordinates vector would correspond to
     // logical blocks in the matrix
@@ -186,31 +160,20 @@ void CoordinatesTransferFactory<Scalar, LocalOrdinal, GlobalOrdinal, Node>::Buil
     if (rcp_dynamic_cast<const StridedMap>(coarseMap) != Teuchos::null)
       blkSize = rcp_dynamic_cast<const StridedMap>(coarseMap)->getFixedBlockSize();
 
-    RCP<const Map> coarseCoordMap;
-    RCP<const Map> uniqueMap = fineCoords->getMap();
-    if (blkSize > 1) {
-      // If the block size is greater than one, we need to create a coarse coordinate map
-      // FIXME: The amalgamation should really be done on device.
-      GO indexBase                     = coarseMap->getIndexBase();
-      ArrayView<const GO> elementAList = coarseMap->getLocalElementList();
-      size_t numElements               = elementAList.size() / blkSize;
-      Array<GO> elementList(numElements);
+    if (rcp_dynamic_cast<const StridedMap>(coarseMap) != Teuchos::null)
+      blkSize = rcp_dynamic_cast<const StridedMap>(coarseMap)->getFixedBlockSize();
 
-      // Amalgamate the map
-      for (LO i = 0; i < Teuchos::as<LO>(numElements); i++)
-        elementList[i] = (elementAList[i * blkSize] - indexBase) / blkSize + indexBase;
-
-      {
-        SubFactoryMonitor sfm(*this, "MapFactory: coarseCoordMap", fineLevel);
-        coarseCoordMap = MapFactory ::Build(coarseMap->lib(), Teuchos::OrdinalTraits<Xpetra::global_size_t>::invalid(), elementList, indexBase, coarseMap->getComm());
-      }
-    } else {
-      // If the block size is one, we can just use the coarse map for coordinates
+    if (blkSize == 1) {
+      // Scalar system
+      // No amalgamation required, we can use the coarseMap
       coarseCoordMap = coarseMap;
+    } else {
+      // Vector system
+      AmalgamationFactory::AmalgamateMap(rcp_dynamic_cast<const StridedMap>(coarseMap), coarseCoordMap);
     }
 
     // Build the coarseCoords MultiVector
-    coarseCoords = Xpetra::MultiVectorFactory<typename Teuchos::ScalarTraits<Scalar>::magnitudeType, LO, GO, NO>::Build(coarseCoordMap, fineCoords->getNumVectors());
+    coarseCoords = Xpetra::MultiVectorFactory<typename Teuchos::ScalarTraits<Scalar>::magnitudeType, LO, GO, NO>::Build(coarseCoordMap, fineCoords->getNumVectors(), false);
 
     RCP<Aggregates> aggregates;
     bool aggregatesCrossProcessors;
@@ -223,7 +186,7 @@ void CoordinatesTransferFactory<Scalar, LocalOrdinal, GlobalOrdinal, Node>::Buil
       RCP<const Map> nonUniqueMap = aggregates->GetMap();
       RCP<const Import> importer  = ImportFactory::Build(uniqueMap, nonUniqueMap);
 
-      ghostedCoords = Xpetra::MultiVectorFactory<typename Teuchos::ScalarTraits<Scalar>::magnitudeType, LO, GO, NO>::Build(nonUniqueMap, fineCoords->getNumVectors());
+      ghostedCoords = Xpetra::MultiVectorFactory<typename Teuchos::ScalarTraits<Scalar>::magnitudeType, LO, GO, NO>::Build(nonUniqueMap, fineCoords->getNumVectors(), false);
       ghostedCoords->doImport(*fineCoords, *importer, Xpetra::INSERT);
     }
 
@@ -232,8 +195,8 @@ void CoordinatesTransferFactory<Scalar, LocalOrdinal, GlobalOrdinal, Node>::Buil
     auto aggGraph = aggregates->GetGraph();
     auto numAggs  = aggGraph.numRows();
 
-    auto fineCoordsView   = ghostedCoords->getDeviceLocalView(Xpetra::Access::ReadOnly);
-    auto coarseCoordsView = coarseCoords->getDeviceLocalView(Xpetra::Access::OverwriteAll);
+    auto fineCoordsView   = ghostedCoords->getLocalViewDevice(Tpetra::Access::ReadOnly);
+    auto coarseCoordsView = coarseCoords->getLocalViewDevice(Tpetra::Access::OverwriteAll);
 
     // Fill in coarse coordinates
     {

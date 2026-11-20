@@ -1,48 +1,11 @@
-/*
 // @HEADER
-//
-// ***********************************************************************
-//
+// *****************************************************************************
 //      Teko: A package for block and physics based preconditioning
-//                  Copyright 2010 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Eric C. Cyr (eccyr@sandia.gov)
-//
-// ***********************************************************************
-//
+// Copyright 2010 NTESS and the Teko contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
-
-*/
 
 #ifndef __Teko_LSCPreconditionerFactory_hpp__
 #define __Teko_LSCPreconditionerFactory_hpp__
@@ -98,6 +61,23 @@ class LSCPrecondState : public BlockPreconditionerState {
   double alpha_;
 };
 
+/** \brief Least-Squares Commutator (LSC) block preconditioner factory for
+ *        incompressible Navier-Stokes saddle-point systems.
+ *
+ * Builds a block preconditioner for a 2x2 velocity/pressure system whose Schur
+ * complement is approximated by the least-squares commutator construction of
+ * Elman, Howle, Shadid, Silvester and Tuminaro (SISC 2007). The details of how
+ * the required operators (\f$F^{-1}\f$, the \f$BQ_u^{-1}B^T\f$ Schur-complement
+ * approximation, the velocity mass inverse, and any stabilization) are formed are
+ * delegated to a pluggable LSCStrategy — the built-in strategies are the basic
+ * inverse, pressure-Laplace, and SIMPLEC variants (see buildStrategy /
+ * addStrategy). Per-instance operators are cached in an LSCPrecondState so they
+ * can be reused across rebuilds.
+ *
+ * This is the factory behind the <tt>"NS LSC"</tt> type; see the
+ * \ref teko_navier_stokes "Navier-Stokes Preconditioners" guide page for the
+ * strategies and their parameters.
+ */
 class LSCPreconditionerFactory : public BlockPreconditionerFactory {
  public:
   //! \name Constructors

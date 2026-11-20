@@ -1,43 +1,11 @@
-//@HEADER
-// ************************************************************************
-//
+// @HEADER
+// *****************************************************************************
 //                 Belos: Block Linear Solvers Package
-//                  Copyright 2004 Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Michael A. Heroux (maherou@sandia.gov)
-//
-// ************************************************************************
-//@HEADER
+// Copyright 2004-2016 NTESS and the Belos contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
+// @HEADER
 //
 #ifndef BELOS_KOKKOS_MVOPTESTER_HPP
 #define BELOS_KOKKOS_MVOPTESTER_HPP
@@ -89,9 +57,10 @@ namespace Belos {
   TestKokkosMultiVecTraits (const Teuchos::RCP<OutputManager<ScalarType> > &om,
                       const Teuchos::RCP<const MV> &A)
   {
-    using Teuchos::SetScientific;
     using std::endl;
-    typedef MultiVecTraits<ScalarType, MV>    MVT;
+    using Teuchos::SetScientific;
+    using DM = Teuchos::SerialDenseMatrix<int, ScalarType>;
+    typedef MultiVecTraits<ScalarType, MV, DM>    MVT;
     typedef Teuchos::ScalarTraits<ScalarType> STS;
     typedef typename STS::magnitudeType       MagType;
 
@@ -820,7 +789,7 @@ namespace Belos {
       const int q = 9;
       Teuchos::RCP<MV> B, C;
       std::vector<MagType> normsB(p), normsC(q);
-      Teuchos::SerialDenseMatrix<int,ScalarType> SDM(p,q);
+      DM SDM(p,q);
 
       B = MVT::Clone(*A,p);
       C = MVT::Clone(*A,q);
@@ -974,7 +943,7 @@ namespace Belos {
                            normsC1(p), normsC2(p),
                            normsD1(p), normsD2(p);
 
-      Teuchos::SerialDenseMatrix<int,ScalarType> Alpha(1,1), Beta(1,1);
+      DM Alpha(1,1), Beta(1,1);
       Teuchos::randomSyncedMatrix( Alpha );
       Teuchos::randomSyncedMatrix( Beta );
       ScalarType alpha = Alpha(0,0),
@@ -1165,7 +1134,7 @@ namespace Belos {
     {
       const int p = 7, q = 5;
       Teuchos::RCP<MV> B, C;
-      Teuchos::SerialDenseMatrix<int,ScalarType> SDM(p,q);
+      DM SDM(p,q);
       std::vector<MagType> normsC1(q), normsC2(q),
                            normsB1(p), normsB2(p);
 
@@ -1301,7 +1270,7 @@ namespace Belos {
     {
       const int p = 5, q = 7;
       Teuchos::RCP<MV> B, C;
-      Teuchos::SerialDenseMatrix<int,ScalarType> SDM(p,q);
+      DM SDM(p,q);
       std::vector<MagType> normsC1(q), normsC2(q),
                            normsB1(p), normsB2(p);
 
@@ -1461,9 +1430,10 @@ namespace Belos {
                       const Teuchos::RCP<const MV> &A,
                       const Teuchos::RCP<const OP> &M)
   {
-    using Teuchos::SetScientific;
     using std::endl;
-    typedef MultiVecTraits<ScalarType, MV>    MVT;
+    using Teuchos::SetScientific;
+    using DM = Teuchos::SerialDenseMatrix<int, ScalarType>;
+    typedef MultiVecTraits<ScalarType, MV, DM> MVT;
     typedef Teuchos::ScalarTraits<ScalarType> STS;
     typedef typename STS::magnitudeType       MagType;
 
@@ -1483,7 +1453,7 @@ namespace Belos {
              Does not modify input arguments
     *********************************************************************/
 
-    typedef MultiVecTraits<ScalarType, MV>     MVT;
+    typedef MultiVecTraits<ScalarType, MV, DM> MVT;
     typedef Teuchos::ScalarTraits<ScalarType>  STS;
     typedef OperatorTraits<ScalarType, MV, OP> OPT;
     typedef typename STS::magnitudeType        MagType;

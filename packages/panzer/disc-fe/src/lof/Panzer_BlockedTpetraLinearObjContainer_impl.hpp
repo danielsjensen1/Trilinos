@@ -1,43 +1,11 @@
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //           Panzer: A partial differential equation assembly
 //       engine for strongly coupled complex multiphysics systems
-//                 Copyright (2011) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-// 1. Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//
-// 2. Redistributions in binary form must reproduce the above copyright
-// notice, this list of conditions and the following disclaimer in the
-// documentation and/or other materials provided with the distribution.
-//
-// 3. Neither the name of the Corporation nor the names of the
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL SANDIA CORPORATION OR THE
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Questions? Contact Roger P. Pawlowski (rppawlo@sandia.gov) and
-// Eric C. Cyr (eccyr@sandia.gov)
-// ***********************************************************************
+// Copyright 2011 NTESS and the Panzer contributors.
+// SPDX-License-Identifier: BSD-3-Clause
+// *****************************************************************************
 // @HEADER
 
 #include "Thyra_VectorStdOps.hpp"
@@ -45,6 +13,7 @@
 #include "Thyra_TpetraLinearOp.hpp"
 
 #include "Tpetra_CrsMatrix.hpp"
+#include "Tpetra_FECrsMatrix.hpp"
 
 namespace panzer {
 
@@ -123,9 +92,17 @@ initialize()
                RCP<Tpetra::CrsMatrix<ScalarT,LocalOrdinalT,GlobalOrdinalT,NodeT> > mat =
                    rcp_dynamic_cast<Tpetra::CrsMatrix<ScalarT,LocalOrdinalT,GlobalOrdinalT,NodeT> >(t_block,true);
 
-               mat->resumeFill();
+               // An FECrsMatrix block must not be wrapped in resumeFill/fillComplete: those
+               // are the plain inherited CrsMatrix calls and would corrupt its owned /
+               // owned+shared fill state. setAllToScalar alone is safe and does exactly what
+               // is wanted here (see also the ghost-row clearing in the factory's
+               // beginFill(), which covers the rows this cannot reach).
+               const bool isFE = Teuchos::nonnull(
+                   rcp_dynamic_cast<Tpetra::FECrsMatrix<ScalarT,LocalOrdinalT,GlobalOrdinalT,NodeT> >(mat));
+
+               if(!isFE) mat->resumeFill();
                mat->setAllToScalar(0.0);
-               mat->fillComplete(map_j,map_i);
+               if(!isFE) mat->fillComplete(map_j,map_i);
             }
          }
       }
@@ -163,9 +140,13 @@ initializeMatrix(ScalarT value)
                RCP<Tpetra::CrsMatrix<ScalarT,LocalOrdinalT,GlobalOrdinalT,NodeT> > mat =
                    rcp_dynamic_cast<Tpetra::CrsMatrix<ScalarT,LocalOrdinalT,GlobalOrdinalT,NodeT> >(t_block,true);
 
-               mat->resumeFill();
+               // See initialize(): never resumeFill/fillComplete an FECrsMatrix block.
+               const bool isFE = Teuchos::nonnull(
+                   rcp_dynamic_cast<Tpetra::FECrsMatrix<ScalarT,LocalOrdinalT,GlobalOrdinalT,NodeT> >(mat));
+
+               if(!isFE) mat->resumeFill();
                mat->setAllToScalar(value);
-               mat->fillComplete(map_j,map_i);
+               if(!isFE) mat->fillComplete(map_j,map_i);
             }
          }
       }
@@ -209,6 +190,11 @@ beginFill()
                RCP<Tpetra::CrsMatrix<ScalarT,LocalOrdinalT,GlobalOrdinalT,NodeT> > mat =
                    rcp_dynamic_cast<Tpetra::CrsMatrix<ScalarT,LocalOrdinalT,GlobalOrdinalT,NodeT> >(t_block,true);
 
+               // FE blocks are driven by BlockedTpetraLinearObjFactory::beginFill(), which
+               // calls beginAssembly(). resumeFill() here would bypass that state machine.
+               if(Teuchos::nonnull(rcp_dynamic_cast<Tpetra::FECrsMatrix<ScalarT,LocalOrdinalT,GlobalOrdinalT,NodeT> >(mat)))
+                  continue;
+
                mat->resumeFill();
             }
          }
@@ -245,6 +231,10 @@ endFill()
 
                RCP<Tpetra::CrsMatrix<ScalarT,LocalOrdinalT,GlobalOrdinalT,NodeT> > mat =
                    rcp_dynamic_cast<Tpetra::CrsMatrix<ScalarT,LocalOrdinalT,GlobalOrdinalT,NodeT> >(t_block,true);
+
+               // See beginFill(): FE blocks are closed by the factory via endAssembly().
+               if(Teuchos::nonnull(rcp_dynamic_cast<Tpetra::FECrsMatrix<ScalarT,LocalOrdinalT,GlobalOrdinalT,NodeT> >(mat)))
+                  continue;
 
                mat->fillComplete(map_j,map_i);
             }

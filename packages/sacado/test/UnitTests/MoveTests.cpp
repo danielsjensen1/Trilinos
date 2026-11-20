@@ -1,30 +1,10 @@
 // @HEADER
-// ***********************************************************************
-//
+// *****************************************************************************
 //                           Sacado Package
-//                 Copyright (2006) Sandia Corporation
 //
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
-//
-// This library is free software; you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as
-// published by the Free Software Foundation; either version 2.1 of the
-// License, or (at your option) any later version.
-//
-// This library is distributed in the hope that it will be useful, but
-// WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-// Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public
-// License along with this library; if not, write to the Free Software
-// Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301
-// USA
-// Questions? Contact David M. Gay (dmgay@sandia.gov) or Eric T. Phipps
-// (etphipp@sandia.gov).
-//
-// ***********************************************************************
+// Copyright 2006 NTESS and the Sacado contributors.
+// SPDX-License-Identifier: LGPL-2.1-or-later
+// *****************************************************************************
 // @HEADER
 
 #include "Teuchos_UnitTestHarness.hpp"
@@ -34,9 +14,8 @@
 
 #include "Sacado_No_Kokkos.hpp"
 
-#if SACADO_ENABLE_NEW_DESIGN
-#include "Sacado_Fad_Exp_DVFad.hpp"
-#include "Sacado_Fad_Exp_ViewFad.hpp"
+#include "Sacado_Fad_DVFad.hpp"
+#include "Sacado_Fad_ViewFad.hpp"
 
 // Size used for all Fad types
 const int global_fad_size = 10;
@@ -48,7 +27,7 @@ const int global_fad_size = 10;
 TEUCHOS_UNIT_TEST( MoveConstructorTests, SFad )
 {
   typedef double value_type;
-  typedef Sacado::Fad::Exp::SFad<value_type,global_fad_size> ad_type;
+  typedef Sacado::Fad::SFad<value_type,global_fad_size> ad_type;
   success = true;
 
   // Initialize AD type
@@ -78,7 +57,7 @@ TEUCHOS_UNIT_TEST( MoveConstructorTests, SFad )
 TEUCHOS_UNIT_TEST( MoveConstructorTests, SLFad )
 {
   typedef double value_type;
-  typedef Sacado::Fad::Exp::SLFad<value_type,global_fad_size> ad_type;
+  typedef Sacado::Fad::SLFad<value_type,global_fad_size> ad_type;
   success = true;
 
   // Initialize AD type
@@ -108,7 +87,7 @@ TEUCHOS_UNIT_TEST( MoveConstructorTests, SLFad )
 TEUCHOS_UNIT_TEST( MoveConstructorTests, DFad )
 {
   typedef double value_type;
-  typedef Sacado::Fad::Exp::DFad<value_type> ad_type;
+  typedef Sacado::Fad::DFad<value_type> ad_type;
   success = true;
 
   // Initialize AD type
@@ -136,7 +115,7 @@ TEUCHOS_UNIT_TEST( MoveConstructorTests, DFad )
 TEUCHOS_UNIT_TEST( MoveConstructorTests, DVFad_Owned )
 {
   typedef double value_type;
-  typedef Sacado::Fad::Exp::DVFad<value_type> ad_type;
+  typedef Sacado::Fad::DVFad<value_type> ad_type;
   success = true;
 
   // Initialize AD type
@@ -166,7 +145,7 @@ TEUCHOS_UNIT_TEST( MoveConstructorTests, DVFad_Owned )
 TEUCHOS_UNIT_TEST( MoveConstructorTests, DVFad_Unowned )
 {
   typedef double value_type;
-  typedef Sacado::Fad::Exp::DVFad<value_type> ad_type;
+  typedef Sacado::Fad::DVFad<value_type> ad_type;
   success = true;
 
   // Initialize AD type
@@ -198,8 +177,8 @@ TEUCHOS_UNIT_TEST( MoveConstructorTests, DVFad_Unowned )
 TEUCHOS_UNIT_TEST( MoveConstructorTests, ViewFad )
 {
   typedef double value_type;
-  typedef Sacado::Fad::Exp::DFad<value_type> dfad_type;
-  typedef Sacado::Fad::Exp::ViewFad<value_type,0,1,dfad_type> ad_type;
+  typedef Sacado::Fad::DFad<value_type> dfad_type;
+  typedef Sacado::Fad::ViewFad<value_type,0,1,dfad_type> ad_type;
   success = true;
 
   // Initialize AD type
@@ -236,7 +215,7 @@ TEUCHOS_UNIT_TEST( MoveConstructorTests, ViewFad )
 TEUCHOS_UNIT_TEST( MoveAssignmentTests, SFad )
 {
   typedef double value_type;
-  typedef Sacado::Fad::Exp::SFad<value_type,global_fad_size> ad_type;
+  typedef Sacado::Fad::SFad<value_type,global_fad_size> ad_type;
   success = true;
 
   // Initialize AD type
@@ -267,7 +246,7 @@ TEUCHOS_UNIT_TEST( MoveAssignmentTests, SFad )
 TEUCHOS_UNIT_TEST( MoveAssignmentTests, SLFad )
 {
   typedef double value_type;
-  typedef Sacado::Fad::Exp::SLFad<value_type,global_fad_size> ad_type;
+  typedef Sacado::Fad::SLFad<value_type,global_fad_size> ad_type;
   success = true;
 
   // Initialize AD type
@@ -298,7 +277,7 @@ TEUCHOS_UNIT_TEST( MoveAssignmentTests, SLFad )
 TEUCHOS_UNIT_TEST( MoveAssignmentTests, DFad )
 {
   typedef double value_type;
-  typedef Sacado::Fad::Exp::DFad<value_type> ad_type;
+  typedef Sacado::Fad::DFad<value_type> ad_type;
   success = true;
 
   // Initialize AD type
@@ -327,7 +306,7 @@ TEUCHOS_UNIT_TEST( MoveAssignmentTests, DFad )
 TEUCHOS_UNIT_TEST( MoveAssignmentTests, DVFad_Owned )
 {
   typedef double value_type;
-  typedef Sacado::Fad::Exp::DVFad<value_type> ad_type;
+  typedef Sacado::Fad::DVFad<value_type> ad_type;
   success = true;
 
   // Initialize AD type
@@ -358,7 +337,7 @@ TEUCHOS_UNIT_TEST( MoveAssignmentTests, DVFad_Owned )
 TEUCHOS_UNIT_TEST( MoveAssignmentTests, DVFad_Unowned )
 {
   typedef double value_type;
-  typedef Sacado::Fad::Exp::DVFad<value_type> ad_type;
+  typedef Sacado::Fad::DVFad<value_type> ad_type;
   success = true;
 
   // Initialize AD type
@@ -391,8 +370,8 @@ TEUCHOS_UNIT_TEST( MoveAssignmentTests, DVFad_Unowned )
 TEUCHOS_UNIT_TEST( MoveAssignmentTests, ViewFad )
 {
   typedef double value_type;
-  typedef Sacado::Fad::Exp::DFad<value_type> dfad_type;
-  typedef Sacado::Fad::Exp::ViewFad<value_type,0,1,dfad_type> ad_type;
+  typedef Sacado::Fad::DFad<value_type> dfad_type;
+  typedef Sacado::Fad::ViewFad<value_type,0,1,dfad_type> ad_type;
   success = true;
 
   // Initialize AD type
@@ -426,8 +405,6 @@ TEUCHOS_UNIT_TEST( MoveAssignmentTests, ViewFad )
     TEST_EQUALITY_CONST( x.dx(i), value_type(2.0+i) );
   }
 }
-
-#endif
 
 int main( int argc, char* argv[] ) {
   Teuchos::GlobalMPISession mpiSession(&argc, &argv);
